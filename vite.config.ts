@@ -4,12 +4,18 @@
 //     nitro (build-only using cloudflare as a default target), VITE_* env injection, @ path alias,
 //     React/TanStack dedupe, error logger plugins, and sandbox detection (port/host/strictPort).
 // You can pass additional config via defineConfig({ vite: { ... }, etc... }) if needed.
-import { fileURLToPath } from "node:url";
 import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 
-// Some Solana deps only export "browser"/"node" conditions (no "default"), which the Worker
-// build can't resolve. Point them at their browser (fetch/WebSocket-standard) builds.
-const nm = (p: string) => fileURLToPath(new URL(`./node_modules/${p}`, import.meta.url));
+// Some Solana deps export only "browser"/"node" conditions (no "default"), which the Worker
+// build can't resolve. Let server environments fall back to their browser (fetch-based) builds.
+const workerBrowserFallback = {
+  name: "studio-loco:worker-browser-condition",
+  configEnvironment(name: string, config: { resolve?: { conditions?: string[] } }) {
+    if (name === "client") return;
+    const c = config.resolve?.conditions;
+    if (c && !c.includes("browser")) return { resolve: { conditions: [...c, "browser"] } };
+  },
+};
 
 export default defineConfig({
   tanstackStart: {
@@ -17,12 +23,5 @@ export default defineConfig({
     // nitro/vite builds from this
     server: { entry: "server" },
   },
-  vite: {
-    resolve: {
-      alias: [
-        { find: /^rpc-websockets$/, replacement: nm("rpc-websockets/dist/index.browser.mjs") },
-        { find: /^@solana\/codecs$/, replacement: nm("@solana/codecs/dist/index.browser.mjs") },
-      ],
-    },
-  },
+  vite: { plugins: [workerBrowserFallback] },
 });
