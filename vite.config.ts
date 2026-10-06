@@ -54,8 +54,8 @@ export default defineConfig({
     server: { entry: "server" },
   },
   vite: {
-    plugins: [workerBrowserFallback, anchorBrowserEntry],
-    // Resolve Anchor before the final server bundling stage; never externalize it.
-    ssr: { noExternal: [/^@meteora-ag\/dlmm$/, /^@coral-xyz\/anchor$/] },
+    plugins: [workerBrowserFallback, anchorBrowserEntry, mobileWalletServerStub],
+    // Resolve these before the final server bundling stage; never externalize them.
+    ssr: { noExternal: [/^@solana\/wallet-adapter-react$/, /^@meteora-ag\/dlmm$/, /^@coral-xyz\/anchor$/] },
   },
 });
