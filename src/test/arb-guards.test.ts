@@ -95,9 +95,9 @@ function mockPool(id: PublicKey, xMint: string, yMint: string) {
     binArrayBitmapExtension: null,
     getPotentialToken2022IxDataAndAccounts: () => ({ slices: [], accounts: [] }),
     program: { methods: { swap2: (inAmt: BN, minOut: BN) => {
-      let acc: Record<string, PublicKey | null> = {};
-      const chain = { accountsPartial: (a: Record<string, PublicKey | null>) => { acc = a; return chain; }, remainingAccounts: () => chain,
-        instruction: async () => new TransactionInstruction({ programId: new PublicKey(DLMM_PROGRAM_ID), keys: [acc["userTokenIn"]!, acc["userTokenOut"]!].map((pubkey) => ({ pubkey, isSigner: false, isWritable: true })),
+      let acc: Record<string, PublicKey | null> = {}; let rem: { pubkey: PublicKey; isSigner: boolean; isWritable: boolean }[] = [];
+      const chain = { accountsPartial: (a: Record<string, PublicKey | null>) => { acc = a; return chain; }, remainingAccounts: (r: typeof rem) => { rem = r; return chain; },
+        instruction: async () => new TransactionInstruction({ programId: new PublicKey(DLMM_PROGRAM_ID), keys: [acc["userTokenIn"]!, acc["userTokenOut"]!].map((pubkey) => ({ pubkey, isSigner: false, isWritable: true })).concat(rem),
           data: Buffer.concat([inAmt.toArrayLike(Buffer, "le", 8), minOut.toArrayLike(Buffer, "le", 8)]) }) };
       return chain;
     } } },
