@@ -21,3 +21,4 @@
 - Client builds resolve `buffer`/`node:buffer` to the npm buffer package via the first plugin in vite.config.ts — otherwise Vite substitutes an empty stub and hydration crashes. The plugin is build-only (`apply: "build"`): in dev it must stay off or Vite serves the raw CJS entry and `import { Buffer } from "buffer"` fails to hydrate.
 - Browser globals (Buffer/global/process) are installed by calling `installNodeGlobals()` explicitly, never by side-effect import — `"sideEffects": false` lets the bundler drop bare imports.
 - The relay splits default-mainnet `getMultipleAccounts` calls into ≤10-key chunks — PublicNode blocks larger ones.
+- Arbitrage math lives in `src/lib/arb-math.ts` (pure, exact BN) and chain composition in `src/lib/arb.ts`; round trips are one atomic tx built from raw `swap2` instructions, never the SDK `swap()` helper, because that helper unwraps/closes the WSOL account between legs.

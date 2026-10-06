@@ -41,3 +41,11 @@ Not production-ready: no funded wallet has signed any transaction built by this 
 - Root cause 1: `package.json` has `"sideEffects": false`, so the production bundler dropped the side-effect-only `import "./polyfills"`; the SDK then hit `Buffer is not defined`. Fix: exported `installNodeGlobals()` called explicitly before the lazy SDK import; a failed SDK import resets so Retry re-evaluates it.
 - Root cause 2 (exposed once the SDK ran): PublicNode answers 403 "Request blocked" to `getMultipleAccounts` with >10 keys (10 → 200, 11 → 403, verified). The relay splits those into ≤10-key requests (max 100 keys), merged in order; any failed chunk fails the whole call. Default mainnet upstream only.
 - Verified on the built Worker (wrangler dev) in a browser, SOL-USDC 5rCf…HAS6: 80 real bins, active bin −5292 at 120.467 USDC/SOL, bin step 4 bps, SOL 9 decimals / USDC 6, reserves, mode Undetermined; read-only quote 0.1 SOL → 12.036704 USDC, minimum 11.97652, fee 0.000038944 SOL, impact 0.00%. All relay calls 200, no page errors. Not yet verified on the live site.
+
+## Dispatch (SOL/USDC round-trip agent) — 6 Oct 2026
+- [x] Unit tests: src/test/arb.test.ts (9) — precision/u64, orientation, duplicate pool, partial fills, leg-B funding bound, floor, unknown-fee block, no fee double-count, realized deltas.
+- [x] Live read-only scan (mainnet, server RPC): 4 exact WSOL/USDC pools verified on chain, 12 ordered routes quoted; best expected net -0.001966518 SOL on 0.1 SOL -> correctly "no profitable route".
+- [x] Composed atomic tx: 984 B (existing token accounts) / 1043 B (both created) <= 1232; programs limited to ComputeBudget, System, Token, ATA, DLMM; exact-message simulation err=null, 67,687 CU (third-party funded fee payer, sigVerify off; nothing signed).
+- [x] Production build in the Worker engine: /app/dispatch 200, nav link, Scan once -> 12 routes, monitor start/pause, input validation, no page errors.
+- [ ] Funded mainnet signature with a real wallet - not performed.
+- [ ] Approval-time identity change / rejection / simulation-failure paths are covered by shared runner tests, not exercised with a real wallet on this page.
