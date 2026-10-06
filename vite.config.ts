@@ -47,6 +47,20 @@ const mobileWalletServerStub = {
   },
 };
 
+// In the production client build every `buffer` import arrives as `node:buffer` and Vite resolves
+// it to its empty "__vite-browser-external" stub, so safe-buffer/bs58/web3.js crashed with
+// "Cannot read properties of undefined (reading 'from')" and the page never hydrated.
+// Resolve it to the real npm `buffer` package for the browser. Must run before other plugins.
+const browserBufferPackage = {
+  name: "studio-loco:browser-buffer-package",
+  enforce: "pre" as const,
+  resolveId(this: { environment?: { name: string } }, source: string) {
+    if (this.environment?.name !== "client") return;
+    if (!/^(node:)?buffer\/?$/.test(source)) return;
+    return createRequire(import.meta.url).resolve("buffer/index.js");
+  },
+};
+
 export default defineConfig({
   tanstackStart: {
     // Redirect TanStack Start's bundled server entry to src/server.ts (our SSR error wrapper).
@@ -54,7 +68,7 @@ export default defineConfig({
     server: { entry: "server" },
   },
   vite: {
-    plugins: [workerBrowserFallback, anchorBrowserEntry, mobileWalletServerStub],
+    plugins: [browserBufferPackage, workerBrowserFallback, anchorBrowserEntry, mobileWalletServerStub],
     // Resolve these before the final server bundling stage; never externalize them.
     ssr: { noExternal: [/^@solana\/wallet-adapter-react$/, /^@meteora-ag\/dlmm$/, /^@coral-xyz\/anchor$/] },
   },
