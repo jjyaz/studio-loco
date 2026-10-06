@@ -60,7 +60,7 @@ export function PriceHistory({ address, symX, symY, currentPrice }: { address: s
 }
 
 function Chart({ candles, long, symX, symY, currentPrice }: { candles: Candle[]; long: boolean; symX: string; symY: string; currentPrice?: number }) {
-  const W = 720, H = 260, P = { l: 8, r: 64, t: 12, b: 24 };
+  const W = 560, H = 260, P = { l: 8, r: 78, t: 14, b: 30 };
   const [hover, setHover] = useState<number | null>(null);
   const titleId = useId();
   const { lo, hi, x, y, step } = useMemo(() => {
@@ -103,7 +103,7 @@ function Chart({ candles, long, symX, symY, currentPrice }: { candles: Candle[];
         {ticks.map((v, i) => (
           <g key={i}>
             <line x1={P.l} x2={W - P.r} y1={y(v)} y2={y(v)} stroke="var(--cream)" strokeOpacity={0.12} strokeDasharray="2 4" />
-            <text x={W - P.r + 6} y={y(v) + 4} fontSize={11} fill="var(--cream)" fillOpacity={0.7} fontFamily="Space Mono, monospace">{fmtP(v)}</text>
+            <text x={W - P.r + 6} y={y(v) + 4} fontSize={15} fill="var(--cream)" fillOpacity={0.7} fontFamily="Space Mono, monospace">{fmtP(v)}</text>
           </g>
         ))}
         {candles.map((c, i) => {
@@ -118,7 +118,7 @@ function Chart({ candles, long, symX, symY, currentPrice }: { candles: Candle[];
         })}
         {hover !== null && <line x1={x(hover)} x2={x(hover)} y1={P.t} y2={H - P.b} stroke="var(--amber)" strokeOpacity={0.6} />}
         {[0, Math.floor(candles.length / 2), candles.length - 1].map((i) => (
-          <text key={i} x={x(i)} y={H - 6} fontSize={11} textAnchor="middle" fill="var(--cream)" fillOpacity={0.65} fontFamily="Space Mono, monospace">{fmtT(candles[i]!.t, long)}</text>
+          <text key={i} x={x(i)} y={H - 6} fontSize={15} textAnchor="middle" fill="var(--cream)" fillOpacity={0.65} fontFamily="Space Mono, monospace">{fmtT(candles[i]!.t, long)}</text>
         ))}
       </svg>
       <figcaption className="mt-2 text-xs text-cream/60">
