@@ -65,8 +65,11 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     });
   const endpoint = useMemo(() => {
     const custom = settings.rpc[settings.cluster];
-    return custom && !validateRpc(custom) ? custom : DEFAULT_RPC[settings.cluster];
-  }, [settings]);
+    if (custom && !validateRpc(custom)) return custom;
+    // Public RPCs reject browser origins; use the app's narrow relay to the public endpoint.
+    if (hydrated && typeof window !== "undefined") return `${window.location.origin}/api/public/rpc/${settings.cluster === "devnet" ? "devnet" : "mainnet"}`;
+    return DEFAULT_RPC[settings.cluster];
+  }, [settings, hydrated]);
   return <SettingsCtx.Provider value={{ settings, update, endpoint, hydrated }}>{children}</SettingsCtx.Provider>;
 }
 

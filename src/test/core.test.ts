@@ -92,7 +92,8 @@ function mockConn(opts: { simErr?: unknown; confErr?: unknown } = {}) {
   return {
     getLatestBlockhash: vi.fn().mockResolvedValue({ blockhash: "BH", lastValidBlockHeight: 100 }),
     simulateTransaction: vi.fn().mockResolvedValue({ value: { err: opts.simErr ?? null, logs: ["log1"] } }),
-    confirmTransaction: vi.fn().mockResolvedValue({ context: { slot: 5 }, value: { err: opts.confErr ?? null } }),
+    getSignatureStatuses: vi.fn().mockResolvedValue({ value: [{ slot: 5, confirmationStatus: "confirmed", err: opts.confErr ?? null }] }),
+    getBlockHeight: vi.fn().mockResolvedValue(50),
   };
 }
 const wallet = (send: () => Promise<string>) => ({ publicKey: { toBase58: () => "W" }, sendTransaction: vi.fn(send) });
@@ -107,7 +108,7 @@ describe("transaction runner", () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const r = await runTransaction({ connection: c as any, wallet: w as any, tx: tx(), onPhase: (p) => phases.push(p) });
     expect(r.signature).toBe("SIG");
-    expect(c.confirmTransaction).toHaveBeenCalledWith({ signature: "SIG", blockhash: "BH", lastValidBlockHeight: 100 }, "confirmed");
+    expect(c.getSignatureStatuses).toHaveBeenCalledWith(["SIG"], { searchTransactionHistory: false });
     expect(phases).toEqual(["preparing", "simulating", "awaiting-signature", "confirming", "confirmed"]);
   });
   it("never asks the wallet when simulation fails", async () => {
@@ -123,6 +124,11 @@ describe("transaction runner", () => {
     const e = await runTransaction({ connection: c as any, wallet: wallet(async () => "S2") as any, tx: tx() }).catch((x) => x);
     expect(e).toBeInstanceOf(TxError);
     expect(e.signature).toBe("S2");
+  });
+  it("fails on blockhash expiry instead of claiming success", async () => {
+    const c = { ...mockConn(), getSignatureStatuses: vi.fn().mockResolvedValue({ value: [null] }), getBlockHeight: vi.fn().mockResolvedValue(101) };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await expect(runTransaction({ connection: c as any, wallet: wallet(async () => "S3") as any, tx: tx(), pollMs: 1 })).rejects.toThrow(/expired/);
   });
   it("detects wallet rejection and partial sequences", async () => {
     const c = mockConn();
