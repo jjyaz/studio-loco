@@ -20,6 +20,7 @@ import { redactUrls } from "@/lib/format";
 import { MAX_UI_BINS, STRATEGIES, STRATEGY_TYPE_VALUE, distribute, type StrategyName } from "@/lib/strategy";
 import { useSettings, useStars } from "@/lib/settings";
 import { loadSdk, poolSupportsLimitOrders } from "@/lib/dlmm";
+import { discoverOrders } from "@/components/app/orders";
 import { planKey, usePlan } from "@/lib/plan";
 import { splitAmount } from "@/lib/derive";
 import { simulateExact } from "@/lib/tx";
@@ -533,11 +534,13 @@ function Orders({ address, snap, symX, symY }: { address: string; snap: PoolSnap
   const qc = useQueryClient();
   const runner = useTxRunner();
   const ctxKey = usePlanContext(address);
+  const { settings } = useSettings();
   const support = useQuery({ queryKey: ["lo-support", ctxKey.rpc, ctxKey.cluster, address, sdk.dataUpdatedAt], enabled: !!sdk.data, queryFn: () => poolSupportsLimitOrders(sdk.data!) });
   const orders = useQuery({
     queryKey: ["limit-orders", ctxKey.rpc, ctxKey.cluster, address, publicKey?.toBase58()],
     enabled: !!sdk.data && !!publicKey && support.data?.ok === true,
-    queryFn: () => sdk.data!.getLimitOrderByUserAndLbPair(publicKey!),
+    queryFn: ({ signal }) => discoverOrders(sdk.data!, connection, publicKey!, { cluster: ctxKey.cluster, customRpc: !!settings.rpc[settings.cluster] }, signal),
+    structuralSharing: false,
     retry: 1,
   });
 
@@ -682,8 +685,9 @@ function Orders({ address, snap, symX, symY }: { address: string; snap: PoolSnap
         <Panel>
           <div className="flex items-center justify-between"><h3 className="station-code text-amber">Your orders in this pool</h3>{orders.data && <Btn size="sm" variant="line" onClick={() => orders.refetch()}>Refresh</Btn>}</div>
           {!publicKey && <p className="mt-3 text-sm text-cream/70">Connect a wallet to read your orders.</p>}
-          {publicKey && support.data?.ok && orders.isPending && <Spinner label="Reading orders (getProgramAccounts)" />}
-          {orders.isError && <Notice tone="error" title="Couldn't read orders" action={<Btn size="sm" onClick={() => orders.refetch()}>Retry</Btn>}>{redactUrls(String(((orders.error) as Error)?.message ?? ""))}. This needs getProgramAccounts; a dedicated RPC may be required.</Notice>}
+          {publicKey && support.data?.ok && orders.isPending && <Spinner label="Reading your orders" />}
+          {orders.isError && <Notice tone="error" title="Couldn't read orders" action={<Btn size="sm" onClick={() => orders.refetch()}>Retry</Btn>}>{redactUrls(String(((orders.error) as Error)?.message ?? ""))}. {ctxKey.cluster === "mainnet-beta" && !settings.rpc[settings.cluster] ? "Orders are found via Meteora's index, then checked on chain." : "This network scans the chain, which some RPCs restrict; a dedicated RPC may be required."}</Notice>}
+          {orders.data && (orders.data.report.rejected > 0 || orders.data.report.truncated) && <Notice tone="warn" title="Order list may be incomplete">{orders.data.report.rejected > 0 && `${orders.data.report.rejected} indexed order(s) failed on-chain verification and are hidden. `}{orders.data.report.truncated && `The index reports ${orders.data.report.indexedTotal ?? "more"} orders; only the first 250 are read.`}</Notice>}
           {orders.data && orders.data.length === 0 && <p className="mt-3 text-sm text-cream/70">No limit orders for this wallet in this pool.</p>}
           {orders.data?.map((o) => {
             const d = o.limitOrderData;
