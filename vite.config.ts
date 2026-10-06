@@ -14,6 +14,7 @@ const workerBrowserFallback = {
     if (name === "client") return;
     const c = config.resolve?.conditions;
     if (c && !c.includes("browser")) return { resolve: { conditions: [...c, "browser"] } };
+    return undefined;
   },
 };
 
