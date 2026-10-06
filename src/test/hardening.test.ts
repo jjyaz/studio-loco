@@ -363,11 +363,15 @@ describe("indexed account verification", () => {
     expect(verifyDlmmAccount(acct({ owner: Keypair.generate().publicKey }), want)).toBe(false);
     expect(verifyDlmmAccount(null, want)).toBe(false);
   });
-  it("uses the SDK IDL discriminators", async () => {
-    const sdk = await import("@meteora-ag/dlmm");
-    expect(Array.from(sdk.getAccountDiscriminator("positionV2"))).toHaveLength(8);
-    expect(Array.from(sdk.getAccountDiscriminator("limitOrder"))).not.toEqual(Array.from(sdk.getAccountDiscriminator("positionV2")));
-  }, 30_000);
+  it("matches the installed SDK IDL discriminators", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { createHash } = await import("node:crypto");
+    const dts = readFileSync("node_modules/@meteora-ag/dlmm/dist/index.d.ts", "utf8").replace(/\s+/g, "");
+    for (const [idl, acct] of [["positionV2", "PositionV2"], ["limitOrder", "LimitOrder"]] as const) {
+      const want = Array.from(createHash("sha256").update(`account:${acct}`).digest().subarray(0, 8));
+      expect(dts).toContain(`"name":"${idl}";"discriminator":[${want.join(",")}]`);
+    }
+  });
   it("chunks account reads to at most 100", () => {
     const parts = chunk(Array.from({ length: 250 }, (_, i) => i), 100);
     expect(parts.map((p) => p.length)).toEqual([100, 100, 50]);
