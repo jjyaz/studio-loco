@@ -104,7 +104,7 @@ function PositionCard({ r, selected, onSelect, onAct, busy }: { r: PositionRow; 
   const d = r.position.positionData;
   const [pct, setPct] = useState(50);
   const st = rangeState(r.activeId, r.lower, r.upper, 0);
-  const empty = new BN(d.totalXAmount.split(".")[0] ?? "0" || "0").isZero() && new BN(d.totalYAmount.split(".")[0] ?? "0" || "0").isZero();
+  const empty = new BN(d.totalXAmount.split(".")[0] || "0").isZero() && new BN(d.totalYAmount.split(".")[0] || "0").isZero();
   return (
     <Panel>
       <div className="flex items-start justify-between gap-3">
