@@ -6,6 +6,7 @@ import { Btn, Cap, Notice, PageHead, Panel, Stat } from "@/components/kit";
 import { fetchJson, METEORA_API, type PoolPage } from "@/lib/meteora-api";
 import { DLMM_PROGRAM_ID } from "@/lib/dlmm";
 import { explorerAccount, timeAgo } from "@/lib/format";
+import { redactUrls } from "@/lib/format";
 import { useSettings } from "@/lib/settings";
 import { CAPABILITIES } from "@/lib/capabilities";
 
@@ -59,7 +60,7 @@ function Network() {
       <div className="grid gap-6 lg:grid-cols-2">
         <Panel>
           <div className="flex justify-between"><h2 className="station-code text-amber">Solana RPC</h2><span className="station-code text-cream/60">{rpc.dataUpdatedAt ? timeAgo(rpc.dataUpdatedAt) : "—"}</span></div>
-          {rpc.isError ? <div className="mt-3"><Notice tone="error" title="RPC unreachable">{(rpc.error as Error).message}</Notice></div> : (
+          {rpc.isError ? <div className="mt-3"><Notice tone="error" title="RPC unreachable">{redactUrls(String(((rpc.error) as Error)?.message ?? ""))}</Notice></div> : (
             <div className="mt-4 grid grid-cols-2 gap-5">
               <Stat label="Confirmed slot" value={rpc.data?.slot.toLocaleString() ?? "…"} />
               <Stat label="Block height" value={rpc.data?.height.toLocaleString() ?? "…"} />
@@ -77,7 +78,7 @@ function Network() {
             <Stat label="Account found" value={rpc.data ? (rpc.data.program ? "Yes" : "No") : "…"} />
             <Stat label="Executable" value={rpc.data?.program ? (rpc.data.program.executable ? "Yes" : "No") : "—"} />
             <Stat label="Loader" value={rpc.data?.program ? `${rpc.data.program.owner.slice(0, 10)}…` : "—"} />
-            <Stat label="Data API" value={settings.cluster !== "mainnet-beta" ? "Mainnet only" : api.isError ? "Error" : api.data ? `OK · ${api.data.latency} ms` : "…"} sub={api.data ? `${api.data.total.toLocaleString()} pools indexed` : api.isError ? (api.error as Error).message : undefined} />
+            <Stat label="Data API" value={settings.cluster !== "mainnet-beta" ? "Mainnet only" : api.isError ? "Error" : api.data ? `OK · ${api.data.latency} ms` : "…"} sub={api.data ? `${api.data.total.toLocaleString()} pools indexed` : api.isError ? redactUrls((api.error as Error).message) : undefined} />
           </div>
         </Panel>
         <Panel tone="cobalt">

@@ -10,6 +10,7 @@ import { usePositions, rangeState, type PositionRow } from "@/components/app/pos
 import { formatUnits } from "@/lib/amount";
 import { getPool, invalidatePool } from "@/lib/dlmm";
 import { shortAddr, timeAgo } from "@/lib/format";
+import { redactUrls } from "@/lib/format";
 import { useSettings } from "@/lib/settings";
 import { cn } from "@/lib/utils";
 
@@ -64,7 +65,7 @@ function Portfolio() {
       if (steps.length === 0) { setErr("Nothing to do for the selected positions."); return; }
       await runner.run(steps);
     } catch (e) {
-      setErr(e instanceof Error ? e.message : String(e));
+      setErr(redactUrls(e instanceof Error ? e.message : String(e)));
     } finally {
       qc.invalidateQueries({ queryKey: ["positions"] });
     }
@@ -79,7 +80,7 @@ function Portfolio() {
       {publicKey && q.isPending && <Spinner label="Scanning DLMM positions" />}
       {q.isError && (
         <Notice tone="error" title="Couldn't read positions" action={<Btn size="sm" onClick={() => q.refetch()}>Retry</Btn>}>
-          {(q.error as Error).message}. Position scans use getProgramAccounts, which public RPCs often restrict — set a dedicated RPC in Settings. This is an error, not an empty portfolio.
+          {redactUrls(String(((q.error) as Error)?.message ?? ""))}. Position scans use getProgramAccounts, which public RPCs often restrict — set a dedicated RPC in Settings. This is an error, not an empty portfolio.
         </Notice>
       )}
       {q.data && q.data.length === 0 && <Panel><p className="text-cream/80">No DLMM positions found for {shortAddr(publicKey?.toBase58())} on this cluster.</p><Link to="/app" className="mt-3 inline-block underline">Find a pool →</Link></Panel>}

@@ -7,6 +7,7 @@ import { Btn, Cap, Field, Notice, PageHead, Spinner } from "@/components/kit";
 import { fetchPools, SORT_LABELS, v24, type ApiPool, type SortKey } from "@/lib/meteora-api";
 import { practicePage } from "@/lib/practice-data";
 import { DASH, fmtPct, fmtUsd, isBase58Address, timeAgo } from "@/lib/format";
+import { redactUrls } from "@/lib/format";
 import { useSettings, useStars } from "@/lib/settings";
 import { cn } from "@/lib/utils";
 
@@ -127,7 +128,7 @@ function Terminal() {
             </div>
           }
         >
-          {(query.error as Error).message}. No substitute data is shown.
+          {redactUrls(String(((query.error) as Error)?.message ?? ""))}. No substitute data is shown.
         </Notice>
       )}
 

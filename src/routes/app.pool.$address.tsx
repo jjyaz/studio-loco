@@ -1,11 +1,11 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { z } from "zod";
 import { zodValidator } from "@tanstack/zod-adapter";
 import BN from "bn.js";
-import type { Keypair } from "@solana/web3.js";
+import type { Keypair, Transaction } from "@solana/web3.js";
 import { Btn, Cap, Field, Notice, Panel, Segmented, Spinner, Stat, Eyebrow } from "@/components/kit";
 import { RailMap } from "@/components/app/RailMap";
 import { TxSteps, useTxRunner } from "@/components/app/useTx";
@@ -15,9 +15,13 @@ import { fetchPool, v24 } from "@/lib/meteora-api";
 import { formatUnits, parseUnits } from "@/lib/amount";
 import { uiPriceFromBin, binFromUiPrice, pctMoveBetweenBins } from "@/lib/bins";
 import { DASH, explorerAccount, fmtNum, fmtPct, fmtUsd, isBase58Address, shortAddr, timeAgo } from "@/lib/format";
+import { redactUrls } from "@/lib/format";
 import { MAX_UI_BINS, STRATEGIES, STRATEGY_TYPE_VALUE, distribute, type StrategyName } from "@/lib/strategy";
 import { useSettings, useStars } from "@/lib/settings";
-import { loadSdk } from "@/lib/dlmm";
+import { loadSdk, poolSupportsLimitOrders } from "@/lib/dlmm";
+import { planKey, usePlan } from "@/lib/plan";
+import { simulateExact } from "@/lib/tx";
+import { spendable, WSOL_MINT, SOL_RESERVE_LAMPORTS } from "@/lib/chain";
 import { cn } from "@/lib/utils";
 import nightAsset from "@/assets/studio-loco-night-station.png.asset.json";
 
@@ -28,6 +32,8 @@ const search = z.object({
   above: z.number().int().min(0).max(MAX_UI_BINS).optional().catch(undefined),
   x: z.string().max(40).optional().catch(undefined),
   y: z.string().max(40).optional().catch(undefined),
+  /** cluster a Studio plan was built for; mismatches block review */
+  cluster: z.enum(["mainnet-beta", "devnet"]).optional().catch(undefined),
 });
 
 export const Route = createFileRoute("/app/pool/$address")({
@@ -97,19 +103,19 @@ function PoolPage() {
 
       {(sdk.isError || snap.isError) && (
         <Notice tone="error" title="Couldn't read this pool from your RPC" action={<Btn size="sm" onClick={() => { sdk.refetch(); snap.refetch(); }}>Retry</Btn>}>
-          {((sdk.error ?? snap.error) as Error)?.message}. Check the cluster and RPC endpoint in Settings. The public RPC is rate-limited.
+          {redactUrls(String(((sdk.error ?? snap.error) as Error)?.message ?? ""))}. Check the cluster and RPC endpoint in Settings. The public RPC is rate-limited.
         </Notice>
       )}
 
-      {tab === "overview" && <Overview address={address} api={api} snap={snap.data} snapLoading={snap.isPending && !sdk.isError} symX={symX} symY={symY} updatedAt={snap.dataUpdatedAt} />}
+      {tab === "overview" && <Overview address={address} api={api} snap={snap.data} snapLoading={snap.isPending && !sdk.isError} symX={symX} symY={symY} updatedAt={snap.dataUpdatedAt} cluster={settings.cluster} />}
       {tab === "add" && (snap.data ? <AddLiquidity address={address} snap={snap.data} symX={symX} symY={symY} prefill={s} /> : !sdk.isError && <Spinner label="Loading pool bins" />)}
       {tab === "swap" && (snap.data ? <Swap address={address} snap={snap.data} symX={symX} symY={symY} /> : !sdk.isError && <Spinner label="Loading pool" />)}
-      {tab === "orders" && (snap.data ? <Orders address={address} snap={snap.data} /> : !sdk.isError && <Spinner label="Reading pool mode" />)}
+      {tab === "orders" && (snap.data ? <Orders address={address} snap={snap.data} symX={symX} symY={symY} /> : !sdk.isError && <Spinner label="Reading pool mode" />)}
     </div>
   );
 }
 
-function Overview({ address, api, snap, snapLoading, symX, symY, updatedAt }: { address: string; api: ReturnType<typeof useQuery<Awaited<ReturnType<typeof fetchPool>>>>; snap?: PoolSnapshot; snapLoading: boolean; symX: string; symY: string; updatedAt: number }) {
+function Overview({ address, api, snap, snapLoading, symX, symY, updatedAt, cluster }: { cluster: import("@/lib/settings").Cluster; address: string; api: ReturnType<typeof useQuery<Awaited<ReturnType<typeof fetchPool>>>>; snap?: PoolSnapshot; snapLoading: boolean; symX: string; symY: string; updatedAt: number }) {
   const p = api.data;
   return (
     <div className="grid gap-6 lg:grid-cols-[1.6fr_1fr]">
@@ -126,7 +132,7 @@ function Overview({ address, api, snap, snapLoading, symX, symY, updatedAt }: { 
       <div className="flex flex-col gap-6">
         <Panel tone="cobalt">
           <h2 className="station-code text-amber">Market · Meteora API</h2>
-          {api.isError && <p className="mt-2 text-sm text-destructive">API data unavailable: {(api.error as Error).message}</p>}
+          {api.isError && <p className="mt-2 text-sm text-destructive">API data unavailable: {redactUrls(String(((api.error) as Error)?.message ?? ""))}</p>}
           {!api.isEnabled && <p className="mt-2 text-sm text-cream/70">API metrics are mainnet-only.</p>}
           <div className="mt-4 grid grid-cols-2 gap-5">
             <Stat label="TVL" value={fmtUsd(p?.tvl)} />
@@ -143,8 +149,8 @@ function Overview({ address, api, snap, snapLoading, symX, symY, updatedAt }: { 
             <dt className="text-cream/65">Active bin</dt><dd className="font-mono tabular">{snap?.activeId ?? DASH}</dd>
             <dt className="text-cream/65">Price</dt><dd className="font-mono tabular">{snap ? `${fmtNum(snap.activePrice, 6)} ${symY}/${symX}` : DASH}</dd>
             <dt className="text-cream/65">Bin step</dt><dd className="font-mono tabular">{snap ? `${snap.binStep} bps` : DASH}</dd>
-            <dt className="text-cream/65">Token X</dt><dd className="font-mono">{snap ? <a className="underline" href={explorerAccount(snap.mintX, "mainnet-beta")} target="_blank" rel="noreferrer">{symX} · {snap.decX}d</a> : DASH}</dd>
-            <dt className="text-cream/65">Token Y</dt><dd className="font-mono">{snap ? <a className="underline" href={explorerAccount(snap.mintY, "mainnet-beta")} target="_blank" rel="noreferrer">{symY} · {snap.decY}d</a> : DASH}</dd>
+            <dt className="text-cream/65">Token X</dt><dd className="font-mono">{snap ? <a className="underline" href={explorerAccount(snap.mintX, cluster)} target="_blank" rel="noreferrer">{symX} · {snap.decX}d</a> : DASH}</dd>
+            <dt className="text-cream/65">Token Y</dt><dd className="font-mono">{snap ? <a className="underline" href={explorerAccount(snap.mintY, cluster)} target="_blank" rel="noreferrer">{symY} · {snap.decY}d</a> : DASH}</dd>
             <dt className="text-cream/65">Reserve X</dt><dd className="font-mono tabular">{snap ? formatUnits(snap.reserveX, snap.decX, 4) : DASH}</dd>
             <dt className="text-cream/65">Reserve Y</dt><dd className="font-mono tabular">{snap ? formatUnits(snap.reserveY, snap.decY, 4) : DASH}</dd>
             <dt className="text-cream/65">Function mode</dt><dd className="font-mono">{snap ? fnName(snap.functionType) : DASH}</dd>
@@ -158,6 +164,29 @@ function Overview({ address, api, snap, snapLoading, symX, symY, updatedAt }: { 
 
 const fnName = (f?: number) => (f === 1 ? "Liquidity Mining" : f === 2 ? "Limit Order" : f === 0 ? "Undetermined" : DASH);
 
+/* ------------------------------ shared helpers ------------------------------ */
+
+function usePlanContext(address: string) {
+  const { publicKey } = useWallet();
+  const { connection } = useConnection();
+  const { settings } = useSettings();
+  return { wallet: publicKey?.toBase58(), cluster: settings.cluster, rpc: connection.rpcEndpoint, pool: address, slippage: settings.slippageBps };
+}
+
+/** Balance + native SOL reserve check. Returns an error string, or null when the amount is affordable. */
+function affordability(mint: string, need: BN, bal: BN | undefined, sym: string): string | null {
+  if (!bal) return null;
+  if (mint === WSOL_MINT) {
+    if (need.add(SOL_RESERVE_LAMPORTS).gt(bal)) return `${sym}: keep ~${formatUnits(SOL_RESERVE_LAMPORTS, 9)} SOL for fees and rent — reduce the amount`;
+    return null;
+  }
+  return need.gt(bal) ? `${sym} amount exceeds your balance` : null;
+}
+
+function simText(sim: { value: { err: unknown; logs: string[] | null } }) {
+  return sim.value.err ? `${JSON.stringify(sim.value.err)} — ${(sim.value.logs ?? []).slice(-3).join(" | ")}` : null;
+}
+
 /* ------------------------------ Add liquidity ------------------------------ */
 
 function AddLiquidity({ address, snap, symX, symY, prefill }: { address: string; snap: PoolSnapshot; symX: string; symY: string; prefill: z.infer<typeof search> }) {
@@ -166,6 +195,7 @@ function AddLiquidity({ address, snap, symX, symY, prefill }: { address: string;
   const { settings } = useSettings();
   const sdk = usePoolSdk(address);
   const qc = useQueryClient();
+  const ctxKey = usePlanContext(address);
   const [strategy, setStrategy] = useState<StrategyName>(prefill.strategy ?? "Spot");
   const [mode, setMode] = useState<"bins" | "price">("bins");
   const [below, setBelow] = useState(String(prefill.below ?? 10));
@@ -174,10 +204,8 @@ function AddLiquidity({ address, snap, symX, symY, prefill }: { address: string;
   const [maxP, setMaxP] = useState("");
   const [xAmt, setXAmt] = useState(prefill.x ?? "");
   const [yAmt, setYAmt] = useState(prefill.y ?? "");
-  const [review, setReview] = useState<null | { tx: import("@solana/web3.js").Transaction; feeLamports: number | null; rentLamports: number; position: string; sim: string | null }>(null);
   const [prepErr, setPrepErr] = useState<string | null>(null);
   const [preparing, setPreparing] = useState(false);
-  const kp = useRef<Keypair | null>(null);
   const runner = useTxRunner();
   const balX = useBalance(publicKey, snap.mintX);
   const balY = useBalance(publicKey, snap.mintY);
@@ -193,7 +221,7 @@ function AddLiquidity({ address, snap, symX, symY, prefill }: { address: string;
     if (!Number.isFinite(lo) || !Number.isFinite(hi)) return { minBin: NaN, maxBin: NaN, rangeErr: "Enter positive min and max prices" };
     if (lo > hi) return { minBin: NaN, maxBin: NaN, rangeErr: "Min price must be below max price" };
     return { minBin: lo, maxBin: hi, rangeErr: null };
-  }, [mode, below, above, minP, maxP, snap]);
+  }, [mode, below, above, minP, maxP, snap.activeId, snap.binStep, snap.decX, snap.decY]);
 
   const width = maxBin - minBin + 1;
   const widthErr = !rangeErr && width > MAX_UI_BINS ? `Range is ${width} bins; this interface caps new positions at ${MAX_UI_BINS} bins` : null;
@@ -209,57 +237,59 @@ function AddLiquidity({ address, snap, symX, symY, prefill }: { address: string;
   else if (xRaw!.isZero() && yRaw!.isZero()) amtErr = "Enter an amount for at least one token";
   else if (onlyAbove && !yRaw!.isZero()) amtErr = `Range is entirely above the active bin — it can only hold ${symX}. Set ${symY} to 0.`;
   else if (onlyBelow && !xRaw!.isZero()) amtErr = `Range is entirely below the active bin — it can only hold ${symY}. Set ${symX} to 0.`;
-  else if (balX.data && xRaw!.gt(balX.data)) amtErr = `${symX} amount exceeds your balance`;
-  else if (balY.data && yRaw!.gt(balY.data)) amtErr = `${symY} amount exceeds your balance`;
+  else amtErr = affordability(snap.mintX, xRaw!, balX.data, symX) ?? affordability(snap.mintY, yRaw!, balY.data, symY);
 
   const preview = !rangeErr && !widthErr ? distribute(strategy, snap.activeId, minBin, maxBin) : [];
-  const canReview = !!publicKey && !rangeErr && !widthErr && !amtErr && !!sdk.data && !balX.isError && !balY.isError;
+  const balancesReady = !!balX.data && !!balY.data;
+  const clusterBlock = prefill.cluster && prefill.cluster !== settings.cluster ? `This plan was built for ${prefill.cluster}; you are on ${settings.cluster}. Switch cluster in Settings — it will not execute here.` : null;
+  const canReview = !clusterBlock && !!publicKey && !rangeErr && !widthErr && !amtErr && !!sdk.data && balancesReady;
 
-  useEffect(() => { setReview(null); kp.current = null; }, [strategy, minBin, maxBin, xAmt, yAmt]);
+  type Review = { tx: Transaction; signer: Keypair; feeLamports: number | null; rentLamports: number; position: string; sim: string | null; strategy: StrategyName; minBin: number; maxBin: number; x: BN; y: BN; slippageBps: number; activeId: number };
+  const liveKey = planKey({ ...ctxKey, strategy, minBin, maxBin, x: xRaw?.toString(), y: yRaw?.toString() });
+  const { plan: review, begin, clear } = usePlan<Review>(liveKey);
 
   async function prepare() {
-    if (!sdk.data || !publicKey || !xRaw || !yRaw) return;
+    if (!sdk.data || !publicKey || !xRaw || !yRaw || preparing) return;
+    const job = begin();
     setPreparing(true);
     setPrepErr(null);
     try {
       const { Keypair } = await import("@solana/web3.js");
-      await loadSdk();
-      const positionKp = Keypair.generate(); // ephemeral: memory only, never persisted or logged
-      kp.current = positionKp;
+      const sdkMod = await loadSdk();
+      const positionKp = Keypair.generate(); // ephemeral: lives only inside this in-memory plan; never persisted or logged
       await sdk.data.refetchStates();
+      const slippageBps = settings.slippageBps;
       const tx = await sdk.data.initializePositionAndAddLiquidityByStrategy({
         positionPubKey: positionKp.publicKey,
-        totalXAmount: xRaw,
+        totalXAmount: xRaw, // base units (BN), per SDK types
         totalYAmount: yRaw,
         strategy: { minBinId: minBin, maxBinId: maxBin, strategyType: STRATEGY_TYPE_VALUE[strategy] },
         user: publicKey,
-        slippage: settings.slippageBps / 100,
+        slippage: slippageBps / 100,
       });
       const { blockhash } = await connection.getLatestBlockhash("confirmed");
       tx.recentBlockhash = blockhash;
       tx.feePayer = publicKey;
-      const { POSITION_MIN_SIZE } = await loadSdk();
+      const msg = tx.serializeMessage();
       const [fee, rent, sim] = await Promise.all([
         connection.getFeeForMessage(tx.compileMessage(), "confirmed").then((r) => r.value).catch(() => null),
-        connection.getMinimumBalanceForRentExemption(POSITION_MIN_SIZE),
-        connection.simulateTransaction(tx),
+        connection.getMinimumBalanceForRentExemption(sdkMod.POSITION_MIN_SIZE),
+        simulateExact(connection, msg),
       ]);
-      setReview({ tx, feeLamports: fee, rentLamports: rent, position: positionKp.publicKey.toBase58(), sim: sim.value.err ? `${JSON.stringify(sim.value.err)} — ${(sim.value.logs ?? []).slice(-3).join(" | ")}` : null });
+      job.commit({ tx, signer: positionKp, feeLamports: fee, rentLamports: rent, position: positionKp.publicKey.toBase58(), sim: simText(sim), strategy, minBin, maxBin, x: xRaw, y: yRaw, slippageBps, activeId: snap.activeId });
     } catch (e) {
-      kp.current = null;
-      setPrepErr(e instanceof Error ? e.message : String(e));
+      if (job.isCurrent()) setPrepErr(redactUrls(e instanceof Error ? e.message : String(e)));
     } finally {
       setPreparing(false);
     }
   }
 
   async function execute() {
-    if (!review || !kp.current) return;
-    const signer = kp.current;
-    const res = await runner.run([{ label: "Create position and add liquidity", tx: review.tx, signers: [signer] }]);
-    kp.current = null; // drop ephemeral key
-    if (res.every((r) => r.phase === "confirmed")) {
-      setReview(null);
+    if (!review || runner.running) return;
+    const r = review;
+    const res = await runner.run([{ label: "Create position and add liquidity", tx: r.tx, signers: [r.signer] }]);
+    clear(); // drop the plan (and the ephemeral key with it) whatever the outcome
+    if (res.length && res.every((x) => x.phase === "confirmed")) {
       qc.invalidateQueries({ queryKey: ["bal"] });
       qc.invalidateQueries({ queryKey: ["dlmm-snap"] });
       qc.invalidateQueries({ queryKey: ["positions"] });
@@ -295,13 +325,15 @@ function AddLiquidity({ address, snap, symX, symY, prefill }: { address: string;
           )}
           {(rangeErr || widthErr) && <p role="alert" className="text-sm text-destructive">{rangeErr ?? widthErr}</p>}
           {!rangeErr && (
-            <p className="station-code text-cream/75">
+            <p className="station-code break-words text-cream/75">
               Bins {minBin} → {maxBin} · {width} bins · {fmtNum(lowPrice, 6)} – {fmtNum(highPrice, 6)} ({fmtPct(pctMoveBetweenBins(snap.activeId, minBin, snap.binStep))} / +{fmtPct(pctMoveBetweenBins(snap.activeId, maxBin, snap.binStep))})
             </p>
           )}
-          <Field label={`${symX} amount`} inputMode="decimal" value={xAmt} onChange={(e) => setXAmt(e.target.value)} hint={publicKey ? <BalanceHint q={balX} dec={snap.decX} sym={symX} onMax={(v) => setXAmt(v)} /> : undefined} disabled={onlyBelow} />
-          <Field label={`${symY} amount`} inputMode="decimal" value={yAmt} onChange={(e) => setYAmt(e.target.value)} hint={publicKey ? <BalanceHint q={balY} dec={snap.decY} sym={symY} onMax={(v) => setYAmt(v)} /> : undefined} disabled={onlyAbove} />
+          <Field label={`${symX} amount`} inputMode="decimal" value={xAmt} onChange={(e) => setXAmt(e.target.value)} hint={publicKey ? <BalanceHint q={balX} mint={snap.mintX} dec={snap.decX} sym={symX} onMax={(v) => setXAmt(v)} /> : undefined} disabled={onlyBelow} />
+          <Field label={`${symY} amount`} inputMode="decimal" value={yAmt} onChange={(e) => setYAmt(e.target.value)} hint={publicKey ? <BalanceHint q={balY} mint={snap.mintY} dec={snap.decY} sym={symY} onMax={(v) => setYAmt(v)} /> : undefined} disabled={onlyAbove} />
           {amtErr && (xAmt || yAmt) && <p role="alert" className="text-sm text-destructive">{amtErr}</p>}
+          {publicKey && !balancesReady && <p className="text-xs text-cream/70">{balX.isError || balY.isError ? "Balance check failed — review is disabled until balances can be read." : "Checking balances before review…"}</p>}
+          {clusterBlock && <Notice tone="error" title="Wrong cluster for this plan">{clusterBlock}</Notice>}
           {!publicKey ? <WalletButton /> : <Btn onClick={prepare} disabled={!canReview || preparing}>{preparing ? "Building with SDK…" : "Review transaction"}</Btn>}
           {prepErr && <Notice tone="error" title="Couldn't build the transaction">{prepErr}</Notice>}
         </div>
@@ -323,19 +355,20 @@ function AddLiquidity({ address, snap, symX, symY, prefill }: { address: string;
         {review && (
           <Panel tone="cobalt">
             <h3 className="display text-2xl">Review</h3>
+            <p className="station-code mt-1 text-cream/65">Frozen plan · changes to the form discard it</p>
             <dl className="mt-4 grid grid-cols-2 gap-y-2 text-sm">
               <dt className="text-cream/70">Pool</dt><dd className="font-mono">{shortAddr(address, 6)}</dd>
-              <dt className="text-cream/70">Strategy</dt><dd>{strategy}</dd>
-              <dt className="text-cream/70">Bins</dt><dd className="font-mono">{minBin} → {maxBin} ({width})</dd>
-              <dt className="text-cream/70">Deposit {symX}</dt><dd className="font-mono">{formatUnits(xRaw!, snap.decX)}</dd>
-              <dt className="text-cream/70">Deposit {symY}</dt><dd className="font-mono">{formatUnits(yRaw!, snap.decY)}</dd>
-              <dt className="text-cream/70">Slippage</dt><dd className="font-mono">{settings.slippageBps / 100}%</dd>
+              <dt className="text-cream/70">Strategy</dt><dd>{review.strategy}</dd>
+              <dt className="text-cream/70">Bins</dt><dd className="font-mono">{review.minBin} → {review.maxBin} ({review.maxBin - review.minBin + 1}) · active {review.activeId}</dd>
+              <dt className="text-cream/70">Deposit {symX}</dt><dd className="break-all font-mono">{formatUnits(review.x, snap.decX)}</dd>
+              <dt className="text-cream/70">Deposit {symY}</dt><dd className="break-all font-mono">{formatUnits(review.y, snap.decY)}</dd>
+              <dt className="text-cream/70">Slippage</dt><dd className="font-mono">{review.slippageBps / 100}%</dd>
               <dt className="text-cream/70">Network fee</dt><dd className="font-mono">{review.feeLamports !== null ? `${formatUnits(String(review.feeLamports), 9)} SOL` : DASH}</dd>
               <dt className="text-cream/70">Position rent</dt><dd className="font-mono">~{formatUnits(String(review.rentLamports), 9, 5)} SOL (refundable on close)</dd>
               <dt className="text-cream/70">New position</dt><dd className="font-mono">{shortAddr(review.position, 6)}</dd>
             </dl>
             <p className="mt-3 text-xs text-cream/70">Additional rent may apply if new bin arrays must be initialised; it appears in your wallet's preview.</p>
-            {review.sim ? <Notice tone="error" title="Simulation failed — not sent">{review.sim}</Notice> : <p className="mt-3 station-code text-success">Simulation passed</p>}
+            {review.sim ? <Notice tone="error" title="Simulation failed — not sent">{review.sim}</Notice> : <p className="mt-3 station-code text-success">Exact message simulation passed</p>}
             <Btn className="mt-4 w-full" onClick={execute} disabled={!!review.sim || runner.running}>{runner.running ? "Working…" : "Sign & send with wallet"}</Btn>
           </Panel>
         )}
@@ -345,12 +378,13 @@ function AddLiquidity({ address, snap, symX, symY, prefill }: { address: string;
   );
 }
 
-function BalanceHint({ q, dec, sym, onMax }: { q: ReturnType<typeof useBalance>; dec: number; sym: string; onMax: (v: string) => void }) {
+function BalanceHint({ q, mint, dec, sym, onMax }: { q: ReturnType<typeof useBalance>; mint: string; dec: number; sym: string; onMax: (v: string) => void }) {
   if (q.isPending) return <>Reading balance…</>;
-  if (q.isError) return <span className="text-destructive">Balance unavailable ({(q.error as Error).message.slice(0, 60)})</span>;
-  const v = formatUnits(q.data!, dec).replace(/,/g, "");
+  if (q.isError) return <span className="text-destructive">Balance unavailable ({redactUrls((q.error as Error).message).slice(0, 60)})</span>;
+  const max = spendable(mint, q.data!);
+  const v = formatUnits(max, dec).replace(/,/g, "");
   return (
-    <>Balance {formatUnits(q.data!, dec, 6)} {sym} · <button type="button" className="underline" onClick={() => onMax(v)}>Max</button></>
+    <>Balance {formatUnits(q.data!, dec, 6)} {sym} · <button type="button" className="underline" onClick={() => onMax(v)} disabled={max.isZero()}>Max</button>{mint === WSOL_MINT && " (keeps 0.05 SOL for fees/rent)"}</>
   );
 }
 
@@ -364,63 +398,71 @@ function Swap({ address, snap, symX, symY }: { address: string; snap: PoolSnapsh
   const sdk = usePoolSdk(address);
   const qc = useQueryClient();
   const runner = useTxRunner();
+  const ctxKey = usePlanContext(address);
   const [xToY, setXToY] = useState(true);
   const [amt, setAmt] = useState("");
-  const [quote, setQuote] = useState<null | { at: number; inRaw: BN; out: BN; min: BN; fee: BN; impact: string; binArrays: import("@solana/web3.js").PublicKey[] }>(null);
   const [qErr, setQErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [now, setNow] = useState(Date.now());
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, []);
-  useEffect(() => setQuote(null), [amt, xToY]);
 
   const inDec = xToY ? snap.decX : snap.decY;
   const outDec = xToY ? snap.decY : snap.decX;
   const inSym = xToY ? symX : symY;
   const outSym = xToY ? symY : symX;
-  const bal = useBalance(publicKey, xToY ? snap.mintX : snap.mintY);
+  const inMint = xToY ? snap.mintX : snap.mintY;
+  const bal = useBalance(publicKey, inMint);
   const parsed = amt.trim() ? parseUnits(amt, inDec) : null;
-  const inputErr = parsed && !parsed.ok ? parsed.error : parsed?.ok && parsed.raw.isZero() ? "Amount must be greater than 0" : parsed?.ok && bal.data && parsed.raw.gt(bal.data) ? "Exceeds your balance" : null;
+  const inputErr = parsed && !parsed.ok ? parsed.error : parsed?.ok && parsed.raw.isZero() ? "Amount must be greater than 0" : parsed?.ok ? affordability(inMint, parsed.raw, bal.data, inSym) : null;
+
+  type Quote = { at: number; xToY: boolean; requested: BN; inRaw: BN; out: BN; min: BN; fee: BN; impact: string; binArrays: import("@solana/web3.js").PublicKey[]; slippageBps: number; inSym: string; outSym: string; inDec: number; outDec: number };
+  const liveKey = planKey({ ...ctxKey, xToY, amt: parsed?.ok ? parsed.raw.toString() : amt });
+  const { plan: quote, begin, clear } = usePlan<Quote>(liveKey);
   const expired = quote ? now - quote.at > QUOTE_TTL : false;
+  const ready = !!publicKey ? !!bal.data : true;
 
   async function getQuote() {
-    if (!sdk.data || !parsed?.ok) return;
+    if (!sdk.data || !parsed?.ok || busy) return;
+    const job = begin();
     setBusy(true);
     setQErr(null);
     try {
       await sdk.data.refetchStates();
       const arrays = await sdk.data.getBinArrayForSwap(xToY, 4);
-      const q = sdk.data.swapQuote(parsed.raw, xToY, new BN(settings.slippageBps), arrays);
-      setQuote({ at: Date.now(), inRaw: q.consumedInAmount, out: q.outAmount, min: q.minOutAmount, fee: q.fee, impact: q.priceImpact.toString(), binArrays: q.binArraysPubkey });
+      const slippageBps = settings.slippageBps;
+      const q = sdk.data.swapQuote(parsed.raw, xToY, new BN(slippageBps), arrays);
+      job.commit({ at: Date.now(), xToY, requested: parsed.raw, inRaw: q.consumedInAmount, out: q.outAmount, min: q.minOutAmount, fee: q.fee, impact: q.priceImpact.toString(), binArrays: q.binArraysPubkey, slippageBps, inSym, outSym, inDec, outDec });
     } catch (e) {
-      setQErr(e instanceof Error ? e.message : String(e));
+      if (job.isCurrent()) setQErr(redactUrls(e instanceof Error ? e.message : String(e)));
     } finally {
       setBusy(false);
     }
   }
 
   async function doSwap() {
-    if (!sdk.data || !publicKey || !quote || expired) return;
+    if (!sdk.data || !publicKey || !quote || expired || busy || runner.running) return;
+    const q = quote;
     setBusy(true);
     try {
       const { PublicKey } = await import("@solana/web3.js");
       const tx = await sdk.data.swap({
-        inToken: new PublicKey(xToY ? snap.mintX : snap.mintY),
-        outToken: new PublicKey(xToY ? snap.mintY : snap.mintX),
-        inAmount: quote.inRaw,
-        minOutAmount: quote.min,
+        inToken: new PublicKey(q.xToY ? snap.mintX : snap.mintY),
+        outToken: new PublicKey(q.xToY ? snap.mintY : snap.mintX),
+        inAmount: q.inRaw,
+        minOutAmount: q.min,
         lbPair: sdk.data.pubkey,
         user: publicKey,
-        binArraysPubkey: quote.binArrays,
+        binArraysPubkey: q.binArrays,
       });
-      const res = await runner.run([{ label: `Swap ${inSym} → ${outSym}`, tx }]);
-      if (res.every((r) => r.phase === "confirmed")) {
-        setQuote(null);
+      const res = await runner.run([{ label: `Swap ${q.inSym} → ${q.outSym}`, tx }]);
+      clear();
+      if (res.length && res.every((r) => r.phase === "confirmed")) {
         setAmt("");
         qc.invalidateQueries({ queryKey: ["bal"] });
         qc.invalidateQueries({ queryKey: ["dlmm-snap"] });
       }
     } catch (e) {
-      setQErr(e instanceof Error ? e.message : String(e));
+      setQErr(redactUrls(e instanceof Error ? e.message : String(e)));
     } finally {
       setBusy(false);
     }
@@ -432,9 +474,9 @@ function Swap({ address, snap, symX, symY }: { address: string; snap: PoolSnapsh
         <h2 className="display text-2xl">Direct pool swap</h2>
         <p className="mt-1 text-sm text-cream/70">Trades against this DLMM pool only, not an aggregator route.</p>
         <div className="mt-5 flex flex-col gap-4">
-          <Field label={`You pay (${inSym})`} inputMode="decimal" value={amt} onChange={(e) => setAmt(e.target.value)} error={amt ? inputErr : null} hint={publicKey ? <BalanceHint q={bal} dec={inDec} sym={inSym} onMax={setAmt} /> : undefined} />
+          <Field label={`You pay (${inSym})`} inputMode="decimal" value={amt} onChange={(e) => setAmt(e.target.value)} error={amt ? inputErr : null} hint={publicKey ? <BalanceHint q={bal} mint={inMint} dec={inDec} sym={inSym} onMax={setAmt} /> : undefined} />
           <Btn variant="line" size="sm" onClick={() => setXToY((v) => !v)} aria-label="Reverse swap direction">⇅ Reverse: {inSym} → {outSym}</Btn>
-          <Btn variant="quiet" onClick={getQuote} disabled={!parsed?.ok || !!inputErr || busy || !sdk.data}>{busy && !quote ? "Quoting…" : quote ? "Refresh quote" : "Get quote"}</Btn>
+          <Btn variant="quiet" onClick={getQuote} disabled={!parsed?.ok || !!inputErr || busy || !sdk.data || !ready}>{busy && !quote ? "Quoting…" : quote ? "Refresh quote" : "Get quote"}</Btn>
           {qErr && <Notice tone="error" title="Quote or swap failed">{qErr}</Notice>}
         </div>
       </Panel>
@@ -443,16 +485,16 @@ function Swap({ address, snap, symX, symY }: { address: string; snap: PoolSnapsh
           <h3 className="station-code text-amber">Quote · SDK</h3>
           {quote ? (
             <dl className="mt-4 grid grid-cols-2 gap-y-2 text-sm">
-              <dt className="text-cream/70">Input used</dt><dd className="font-mono">{formatUnits(quote.inRaw, inDec)} {inSym}</dd>
-              <dt className="text-cream/70">Expected out</dt><dd className="font-mono">{formatUnits(quote.out, outDec)} {outSym}</dd>
-              <dt className="text-cream/70">Minimum received</dt><dd className="font-mono text-amber">{formatUnits(quote.min, outDec)} {outSym}</dd>
-              <dt className="text-cream/70">Swap fee</dt><dd className="font-mono">{formatUnits(quote.fee, inDec)} {inSym}</dd>
+              <dt className="text-cream/70">Input used</dt><dd className="break-all font-mono">{formatUnits(quote.inRaw, quote.inDec)} {quote.inSym}</dd>
+              <dt className="text-cream/70">Expected out</dt><dd className="break-all font-mono">{formatUnits(quote.out, quote.outDec)} {quote.outSym}</dd>
+              <dt className="text-cream/70">Minimum received</dt><dd className="break-all font-mono text-amber">{formatUnits(quote.min, quote.outDec)} {quote.outSym}</dd>
+              <dt className="text-cream/70">Swap fee</dt><dd className="break-all font-mono">{formatUnits(quote.fee, quote.inDec)} {quote.inSym}</dd>
               <dt className="text-cream/70">Price impact</dt><dd className="font-mono">{fmtPct(Number(quote.impact))}</dd>
-              <dt className="text-cream/70">Slippage</dt><dd className="font-mono">{settings.slippageBps / 100}%</dd>
+              <dt className="text-cream/70">Slippage</dt><dd className="font-mono">{quote.slippageBps / 100}%</dd>
               <dt className="text-cream/70">Quote age</dt><dd className={cn("font-mono", expired && "text-destructive")}>{expired ? "Expired — refresh" : `${Math.max(0, Math.ceil((QUOTE_TTL - (now - quote.at)) / 1000))}s left`}</dd>
             </dl>
-          ) : <p className="mt-3 text-sm text-cream/70">Enter an amount and fetch a fresh quote.</p>}
-          {quote && quote.inRaw.lt(parsed?.ok ? parsed.raw : new BN(0)) && <p className="mt-2 text-xs text-amber">Pool liquidity covers only part of this input within the fetched bins.</p>}
+          ) : <p className="mt-3 text-sm text-cream/70">Enter an amount and fetch a fresh quote. Changing the amount, direction, slippage, cluster, RPC or wallet discards the quote.</p>}
+          {quote && quote.inRaw.lt(quote.requested) && <p className="mt-2 text-xs text-amber">Pool liquidity covers only part of this input within the fetched bins; only the "input used" amount is swapped.</p>}
           {!publicKey ? <div className="mt-4"><WalletButton /></div> : <Btn className="mt-4 w-full" onClick={doSwap} disabled={!quote || expired || busy || runner.running}>{runner.running ? "Working…" : "Swap with wallet"}</Btn>}
         </Panel>
         <TxSteps steps={runner.steps} />
@@ -463,25 +505,209 @@ function Swap({ address, snap, symX, symY }: { address: string; snap: PoolSnapsh
 
 /* --------------------------------- Orders --------------------------------- */
 
-function Orders({ address, snap }: { address: string; snap: PoolSnapshot }) {
+const LO_STATUS = ["Not filled", "Partially filled", "Filled"];
+const MAX_UI_ORDER_BINS = 10;
+
+/** Split an exact integer amount across n bins; remainder goes to the last bin. */
+export function splitAmount(total: BN, n: number): BN[] {
+  if (n < 1) return [];
+  const each = total.divn(n);
+  const out = Array.from({ length: n }, () => each.clone());
+  out[n - 1] = out[n - 1]!.add(total.sub(each.muln(n)));
+  return out;
+}
+
+function Orders({ address, snap, symX, symY }: { address: string; snap: PoolSnapshot; symX: string; symY: string }) {
+  const { publicKey } = useWallet();
+  const { connection } = useConnection();
+  const sdk = usePoolSdk(address);
+  const qc = useQueryClient();
+  const runner = useTxRunner();
+  const ctxKey = usePlanContext(address);
+  const support = useQuery({ queryKey: ["lo-support", ctxKey.rpc, ctxKey.cluster, address, sdk.dataUpdatedAt], enabled: !!sdk.data, queryFn: () => poolSupportsLimitOrders(sdk.data!) });
+  const orders = useQuery({
+    queryKey: ["limit-orders", ctxKey.rpc, ctxKey.cluster, address, publicKey?.toBase58()],
+    enabled: !!sdk.data && !!publicKey && support.data?.ok === true,
+    queryFn: () => sdk.data!.getLimitOrderByUserAndLbPair(publicKey!),
+    retry: 1,
+  });
+
+  const [side, setSide] = useState<"ask" | "bid">("ask");
+  const [placement, setPlacement] = useState<"offset" | "price">("offset");
+  const [offset, setOffset] = useState("1");
+  const [priceStr, setPriceStr] = useState("");
+  const [count, setCount] = useState("1");
+  const [amt, setAmt] = useState("");
+  const [err, setErr] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const isAsk = side === "ask";
+  const inMint = isAsk ? snap.mintX : snap.mintY;
+  const inDec = isAsk ? snap.decX : snap.decY;
+  const inSym = isAsk ? symX : symY;
+  const bal = useBalance(publicKey, inMint);
+
+  // Ask (sell X) sits above the active bin; bid (buy X with Y) below it.
+  const { startBin, placeErr } = useMemo(() => {
+    if (placement === "offset") {
+      const o = Number(offset);
+      if (!Number.isInteger(o) || o < 1 || o > 500) return { startBin: NaN, placeErr: "Offset must be a whole number of bins from 1 to 500" };
+      return { startBin: isAsk ? snap.activeId + o : snap.activeId - o, placeErr: null };
+    }
+    const b = binFromUiPrice(Number(priceStr), snap.binStep, snap.decX, snap.decY, isAsk ? "ceil" : "floor");
+    if (!Number.isFinite(b)) return { startBin: NaN, placeErr: "Enter a positive price" };
+    if (isAsk && b <= snap.activeId) return { startBin: NaN, placeErr: `A sell order must be priced above the active price (bin ${snap.activeId})` };
+    if (!isAsk && b >= snap.activeId) return { startBin: NaN, placeErr: `A buy order must be priced below the active price (bin ${snap.activeId})` };
+    return { startBin: b, placeErr: null };
+  }, [placement, offset, priceStr, isAsk, snap.activeId, snap.binStep, snap.decX, snap.decY]);
+  const n = Number(count);
+  const countErr = !Number.isInteger(n) || n < 1 || n > MAX_UI_ORDER_BINS ? `Bins must be 1–${MAX_UI_ORDER_BINS}` : null;
+  const binIds = !placeErr && !countErr ? Array.from({ length: n }, (_, i) => (isAsk ? startBin + i : startBin - i)).sort((a, b) => a - b) : [];
+  const parsed = amt.trim() ? parseUnits(amt, inDec) : null;
+  const amounts = parsed?.ok && binIds.length ? splitAmount(parsed.raw, binIds.length) : [];
+  const amtErr = parsed && !parsed.ok ? parsed.error : parsed?.ok && amounts.some((a) => a.isZero()) ? "Amount too small to place in every bin" : parsed?.ok ? affordability(inMint, parsed.raw, bal.data, inSym) : null;
+
+  type Review = { tx: Transaction; signer: Keypair; order: string; isAsk: boolean; bins: { id: number; amount: BN }[]; total: BN; cost: { limitOrderCost: number; binArrayCost: number; bitmapExtensionCost: number; binArraysCount: number }; sim: string | null; activeId: number; feeLamports: number | null };
+  const liveKey = planKey({ ...ctxKey, side, bins: binIds.join(","), amt: parsed?.ok ? parsed.raw.toString() : amt });
+  const { plan: review, begin, clear } = usePlan<Review>(liveKey);
+  const canReview = !!publicKey && !!sdk.data && support.data?.ok && !placeErr && !countErr && parsed?.ok && !amtErr && !!bal.data && binIds.length > 0;
+
+  async function prepare() {
+    if (!canReview || !sdk.data || !publicKey || !parsed?.ok || busy) return;
+    const job = begin();
+    setBusy(true); setErr(null);
+    try {
+      const { Keypair } = await import("@solana/web3.js");
+      await sdk.data.refetchStates();
+      const bins = binIds.map((id, i) => ({ id, amount: amounts[i]! }));
+      const cost = await sdk.data.quoteCreateLimitOrder({ bins: bins.map((b) => ({ id: b.id })) });
+      const orderKp = Keypair.generate(); // ephemeral limit-order account signer, memory only
+      const tx = await sdk.data.placeLimitOrder({ owner: publicKey, payer: publicKey, sender: publicKey, limitOrder: orderKp.publicKey, params: { isAskSide: isAsk, relativeBin: null, bins } });
+      const { blockhash } = await connection.getLatestBlockhash("confirmed");
+      tx.recentBlockhash = blockhash; tx.feePayer = publicKey;
+      const [sim, fee] = await Promise.all([
+        simulateExact(connection, tx.serializeMessage()),
+        connection.getFeeForMessage(tx.compileMessage(), "confirmed").then((r) => r.value).catch(() => null),
+      ]);
+      job.commit({ tx, signer: orderKp, order: orderKp.publicKey.toBase58(), isAsk, bins, total: parsed.raw, cost, sim: simText(sim), activeId: sdk.data.lbPair.activeId, feeLamports: fee });
+    } catch (e) {
+      if (job.isCurrent()) setErr(redactUrls(e instanceof Error ? e.message : String(e)));
+    } finally { setBusy(false); }
+  }
+
+  async function place() {
+    if (!review || runner.running) return;
+    const r = review;
+    const res = await runner.run([{ label: `Place ${r.isAsk ? "sell" : "buy"} limit order (${r.bins.length} bin${r.bins.length > 1 ? "s" : ""})`, tx: r.tx, signers: [r.signer] }]);
+    clear();
+    if (res.length && res.every((x) => x.phase === "confirmed")) refresh();
+  }
+
+  function refresh() {
+    qc.invalidateQueries({ queryKey: ["limit-orders"] });
+    qc.invalidateQueries({ queryKey: ["bal"] });
+    qc.invalidateQueries({ queryKey: ["dlmm-snap"] });
+  }
+
+  async function act(kind: "cancel" | "close", orderPk: string, binIdsToCancel: number[]) {
+    if (!sdk.data || !publicKey || runner.running) return;
+    setErr(null);
+    try {
+      const { PublicKey } = await import("@solana/web3.js");
+      const pk = new PublicKey(orderPk);
+      await sdk.data.refetchStates();
+      const tx = kind === "cancel"
+        ? await sdk.data.cancelLimitOrder({ limitOrderPubkey: pk, owner: publicKey, rentReceiver: publicKey, binIds: binIdsToCancel })
+        : await sdk.data.closeLimitOrderIfEmpty({ limitOrder: pk, owner: publicKey, rentReceiver: publicKey });
+      const res = await runner.run([{ label: kind === "cancel" ? `Cancel / withdraw ${binIdsToCancel.length} order bin(s)` : "Close empty limit order (reclaim rent)", tx }]);
+      if (res.length && res.every((x) => x.phase === "confirmed")) refresh();
+    } catch (e) { setErr(redactUrls(e instanceof Error ? e.message : String(e))); }
+  }
+
+  const mode = snap.functionType;
   return (
-    <Panel>
-      <h2 className="display text-2xl">Orders</h2>
-      <p className="mt-2 text-cream/80">Onchain function mode: <strong className="text-amber">{fnName(snap.functionType)}</strong></p>
-      {snap.functionType === 2 ? (
-        <div className="mt-4 flex flex-col gap-3 text-sm text-cream/80">
-          <p>This pool is in Limit Order mode, so the DLMM program supports native limit orders here.</p>
-          <Notice tone="warn" title="Order placement isn't implemented in Studio Loco yet">
-            We read the mode from chain but haven't shipped and tested the native order adapter. You can place orders in Meteora's app.
-          </Notice>
-          <a className="underline" href={`https://app.meteora.ag/dlmm/${address}`} target="_blank" rel="noreferrer">Open this pool on Meteora ↗</a>
-        </div>
-      ) : (
-        <div className="mt-4 text-sm text-cream/80">
-          <p>Native limit orders are not available for this pool's mode. One-sided liquidity (only {""}X above or only Y below) is LP inventory, not a limit order — it can be swapped back if price returns.</p>
-        </div>
-      )}
-      <div className="mt-4"><Cap kind="handoff" /></div>
-    </Panel>
+    <div className="grid gap-6 lg:grid-cols-[1fr_1.2fr]">
+      <Panel>
+        <div className="flex flex-wrap items-center justify-between gap-2"><h2 className="display text-2xl">Native limit orders</h2><Cap kind={support.data?.ok ? "live" : "handoff"} /></div>
+        <p className="mt-2 text-sm text-cream/80">Pool function mode (lbPair.parameters.functionType): <strong className="text-amber">{fnName(mode)}</strong></p>
+        {support.isPending && <Spinner label="Checking order support" />}
+        {support.data && <p className={cn("mt-2 text-sm", support.data.ok ? "text-success" : "text-destructive")}>{support.data.reason}</p>}
+        {support.data && !support.data.ok && <p className="mt-3 text-sm text-cream/75">One-sided liquidity (only {symX} above, or only {symY} below) is LP inventory, not a limit order — it is swapped back if price returns.</p>}
+        {support.data?.ok && (
+          <div className="mt-5 flex flex-col gap-4">
+            <Segmented label="Order side" value={side} onChange={setSide} options={[{ value: "ask", label: `Sell ${symX}` }, { value: "bid", label: `Buy ${symX} with ${symY}` }]} />
+            <Segmented label="Placement" value={placement} onChange={setPlacement} options={[{ value: "offset", label: "Bins from active" }, { value: "price", label: "Price" }]} />
+            {placement === "offset"
+              ? <Field label={`Bins ${isAsk ? "above" : "below"} active (${snap.activeId})`} inputMode="numeric" value={offset} onChange={(e) => setOffset(e.target.value)} />
+              : <Field label={`Price (${symY} per ${symX})`} inputMode="decimal" value={priceStr} onChange={(e) => setPriceStr(e.target.value)} hint={`Active ≈ ${fmtNum(snap.activePrice, 8)}. Rounded ${isAsk ? "up" : "down"} to a bin.`} />}
+            <Field label="Spread across bins" inputMode="numeric" value={count} onChange={(e) => setCount(e.target.value)} hint={`1–${MAX_UI_ORDER_BINS} consecutive bins moving away from the price (program max 50).`} />
+            <Field label={`Amount (${inSym})`} inputMode="decimal" value={amt} onChange={(e) => setAmt(e.target.value)} hint={publicKey ? <BalanceHint q={bal} mint={inMint} dec={inDec} sym={inSym} onMax={setAmt} /> : undefined} />
+            {(placeErr || countErr || (amt && amtErr)) && <p role="alert" className="text-sm text-destructive">{placeErr ?? countErr ?? amtErr}</p>}
+            {binIds.length > 0 && <p className="station-code break-words text-cream/75">Bins {binIds[0]} → {binIds[binIds.length - 1]} · {fmtNum(uiPriceFromBin(binIds[0]!, snap.binStep, snap.decX, snap.decY), 8)} – {fmtNum(uiPriceFromBin(binIds[binIds.length - 1]!, snap.binStep, snap.decX, snap.decY), 8)}</p>}
+            {!publicKey ? <WalletButton /> : <Btn onClick={prepare} disabled={!canReview || busy}>{busy ? "Building…" : "Review order"}</Btn>}
+            {err && <Notice tone="error" title="Order action failed">{err}</Notice>}
+          </div>
+        )}
+      </Panel>
+      <div className="flex flex-col gap-6">
+        {review && (
+          <Panel tone="cobalt">
+            <h3 className="display text-2xl">Review order</h3>
+            <dl className="mt-4 grid grid-cols-2 gap-y-2 text-sm">
+              <dt className="text-cream/70">Side</dt><dd>{review.isAsk ? `Sell ${symX} for ${symY}` : `Buy ${symX} with ${symY}`}</dd>
+              <dt className="text-cream/70">Deposit</dt><dd className="break-all font-mono">{formatUnits(review.total, review.isAsk ? snap.decX : snap.decY)} {review.isAsk ? symX : symY}</dd>
+              <dt className="text-cream/70">Bins</dt><dd className="font-mono">{review.bins.map((b) => b.id).join(", ")}</dd>
+              <dt className="text-cream/70">Active at build</dt><dd className="font-mono">{review.activeId}</dd>
+              <dt className="text-cream/70">Order account rent</dt><dd className="font-mono">{fmtNum(review.cost.limitOrderCost, 6)} SOL</dd>
+              <dt className="text-cream/70">New bin arrays</dt><dd className="font-mono">{review.cost.binArraysCount} · {fmtNum(review.cost.binArrayCost, 6)} SOL</dd>
+              <dt className="text-cream/70">Bitmap extension</dt><dd className="font-mono">{fmtNum(review.cost.bitmapExtensionCost, 6)} SOL</dd>
+              <dt className="text-cream/70">Network fee</dt><dd className="font-mono">{review.feeLamports !== null ? `${formatUnits(String(review.feeLamports), 9)} SOL` : DASH}</dd>
+              <dt className="text-cream/70">Order account</dt><dd className="font-mono">{shortAddr(review.order, 6)}</dd>
+            </dl>
+            <p className="mt-3 text-xs text-cream/70">Fills happen when swaps cross these bins. If the active price has already moved past a bin when the transaction lands, the program decides the outcome — simulation runs against the current state.</p>
+            {review.sim ? <Notice tone="error" title="Simulation failed — not sent">{review.sim}</Notice> : <p className="mt-3 station-code text-success">Exact message simulation passed</p>}
+            <Btn className="mt-4 w-full" onClick={place} disabled={!!review.sim || runner.running}>{runner.running ? "Working…" : "Sign & place order"}</Btn>
+          </Panel>
+        )}
+        <TxSteps steps={runner.steps} />
+        <Panel>
+          <div className="flex items-center justify-between"><h3 className="station-code text-amber">Your orders in this pool</h3>{orders.data && <Btn size="sm" variant="line" onClick={() => orders.refetch()}>Refresh</Btn>}</div>
+          {!publicKey && <p className="mt-3 text-sm text-cream/70">Connect a wallet to read your orders.</p>}
+          {publicKey && support.data?.ok && orders.isPending && <Spinner label="Reading orders (getProgramAccounts)" />}
+          {orders.isError && <Notice tone="error" title="Couldn't read orders" action={<Btn size="sm" onClick={() => orders.refetch()}>Retry</Btn>}>{redactUrls(String(((orders.error) as Error)?.message ?? ""))}. This needs getProgramAccounts; a dedicated RPC may be required.</Notice>}
+          {orders.data && orders.data.length === 0 && <p className="mt-3 text-sm text-cream/70">No limit orders for this wallet in this pool.</p>}
+          {orders.data?.map((o) => {
+            const d = o.limitOrderData;
+            const open = d.limitOrderBinData.filter((b) => !b.empty);
+            return (
+              <div key={o.publicKey.toBase58()} className="mt-4 border border-line p-3 text-sm">
+                <p className="font-mono text-xs">{shortAddr(o.publicKey.toBase58(), 6)}</p>
+                <dl className="mt-2 grid grid-cols-2 gap-y-1 text-xs">
+                  <dt className="text-cream/65">Deposited</dt><dd className="break-all font-mono">{formatUnits(d.totalDepositAmountX, snap.decX)} {symX} · {formatUnits(d.totalDepositAmountY, snap.decY)} {symY}</dd>
+                  <dt className="text-cream/65">Unfilled</dt><dd className="break-all font-mono">{formatUnits(d.totalUnfilledAmountX, snap.decX)} {symX} · {formatUnits(d.totalUnfilledAmountY, snap.decY)} {symY}</dd>
+                  <dt className="text-cream/65">Filled</dt><dd className="break-all font-mono">{formatUnits(d.totalFilledAmountX, snap.decX)} {symX} · {formatUnits(d.totalFilledAmountY, snap.decY)} {symY}</dd>
+                  <dt className="text-cream/65">Withdrawable</dt><dd className="break-all font-mono">{formatUnits(d.transferFeeExcludedWithdrawableAmountX, snap.decX)} {symX} · {formatUnits(d.transferFeeExcludedWithdrawableAmountY, snap.decY)} {symY}</dd>
+                </dl>
+                {open.length > 0 && (
+                  <div className="mt-2 overflow-x-auto">
+                    <table className="w-full min-w-[360px] text-xs">
+                      <thead><tr className="text-left text-cream/60"><th className="py-1">Bin</th><th>Side</th><th>Status</th><th>Unfilled</th></tr></thead>
+                      <tbody>{open.map((b) => (
+                        <tr key={b.binId} className="border-t border-line/50"><td className="py-1 font-mono">{b.binId}</td><td>{b.isAskSide ? "Sell" : "Buy"}</td><td>{LO_STATUS[b.status] ?? DASH}</td><td className="font-mono">{b.isAskSide ? `${formatUnits(b.unfilledAmountX, snap.decX)} ${symX}` : `${formatUnits(b.unfilledAmountY, snap.decY)} ${symY}`}</td></tr>
+                      ))}</tbody>
+                    </table>
+                  </div>
+                )}
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {open.length > 0 && <Btn size="sm" variant="line" disabled={runner.running} onClick={() => act("cancel", o.publicKey.toBase58(), open.map((b) => b.binId))}>Cancel & withdraw all bins</Btn>}
+                  {open.length === 0 && <Btn size="sm" variant="line" disabled={runner.running} onClick={() => act("close", o.publicKey.toBase58(), [])}>Close & reclaim rent</Btn>}
+                </div>
+              </div>
+            );
+          })}
+          <p className="mt-4 text-xs text-cream/60">The SDK has no separate "claim filled" call: cancelLimitOrder withdraws whatever the selected bins hold (unfilled input and filled output) to your wallet; closeLimitOrderIfEmpty then reclaims the account rent. Review amounts in the simulation before signing.</p>
+        </Panel>
+      </div>
+    </div>
   );
 }

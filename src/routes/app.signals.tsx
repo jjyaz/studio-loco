@@ -11,8 +11,10 @@ import { fetchPools, v24 } from "@/lib/meteora-api";
 import { formatUnits } from "@/lib/amount";
 import { getPool, invalidatePool } from "@/lib/dlmm";
 import { fmtPct, fmtUsd, shortAddr, timeAgo } from "@/lib/format";
+import { redactUrls } from "@/lib/format";
 import { useLocalState, useSettings } from "@/lib/settings";
 import { cn } from "@/lib/utils";
+import { MAX_UI_BINS } from "@/lib/strategy";
 
 export const Route = createFileRoute("/app/signals")({
   head: () => ({
@@ -50,7 +52,7 @@ function Watch() {
   const [plan, setPlan] = useState<PositionRow | null>(null);
   if (!publicKey) return <Panel><p className="mb-4 text-cream/80">Connect a wallet to watch your positions.</p><WalletButton /></Panel>;
   if (q.isPending) return <Spinner label="Reading positions" />;
-  if (q.isError) return <Notice tone="error" title="Couldn't read positions" action={<Btn size="sm" onClick={() => q.refetch()}>Retry</Btn>}>{(q.error as Error).message}. A dedicated RPC is usually required.</Notice>;
+  if (q.isError) return <Notice tone="error" title="Couldn't read positions" action={<Btn size="sm" onClick={() => q.refetch()}>Retry</Btn>}>{redactUrls(String(((q.error) as Error)?.message ?? ""))}. A dedicated RPC is usually required.</Notice>;
   if (!q.data.length) return <Panel><p>No positions to watch. <Link className="underline" to="/app">Open a pool</Link>.</p></Panel>;
   return (
     <div className="flex flex-col gap-4">
@@ -112,12 +114,12 @@ function Rebalance({ r, onClose }: { r: PositionRow; onClose: () => void }) {
   const [err, setErr] = useState<string | null>(null);
   const d = r.position.positionData;
   const width = r.upper - r.lower + 1;
-  const half = Math.floor((width - 1) / 2);
   const xRaw = d.totalXAmount.split(".")[0] ?? "0";
   const yRaw = d.totalYAmount.split(".")[0] ?? "0";
-  const minX = new BN(xRaw).mul(new BN(10_000 - settings.slippageBps)).div(new BN(10_000));
-  const minY = new BN(yRaw).mul(new BN(10_000 - settings.slippageBps)).div(new BN(10_000));
-  const step1Done = runner.steps?.length && runner.steps.every((s) => s.phase === "confirmed");
+  // Continuation must be a range the add flow accepts.
+  const nextWidth = Math.min(width, MAX_UI_BINS);
+  const nextHalf = Math.floor((nextWidth - 1) / 2);
+  const step1Done = !!runner.steps?.length && runner.steps.every((s) => s.phase === "confirmed");
 
   async function step1() {
     if (!publicKey) return;
@@ -130,7 +132,7 @@ function Rebalance({ r, onClose }: { r: PositionRow; onClose: () => void }) {
       qc.invalidateQueries({ queryKey: ["positions"] });
       qc.invalidateQueries({ queryKey: ["bal"] });
     } catch (e) {
-      setErr(e instanceof Error ? e.message : String(e));
+      setErr(redactUrls(e instanceof Error ? e.message : String(e)));
     }
   }
 
@@ -142,14 +144,15 @@ function Rebalance({ r, onClose }: { r: PositionRow; onClose: () => void }) {
         <li className="border-l-2 border-amber pl-4">
           <p className="font-medium">Step 1 — Withdraw 100%, claim fees, close position</p>
           <p className="text-cream/75">Current holdings: {formatUnits(xRaw, r.decX, 6)} X · {formatUnits(yRaw, r.decY, 6)} Y, plus unclaimed fees {formatUnits(d.feeX, r.decX, 6)} X · {formatUnits(d.feeY, r.decY, 6)} Y. Position rent is refunded.</p>
-          <p className="text-cream/75">Planning floor at {settings.slippageBps / 100}% tolerance: ≥ {formatUnits(minX, r.decX, 6)} X · ≥ {formatUnits(minY, r.decY, 6)} Y (exact amounts settle onchain).</p>
+          <p className="text-cream/75">These are estimates from the current position state. The SDK's removeLiquidity instruction used here does not enforce a minimum withdrawn amount, so what you receive is whatever the bins hold when it lands.</p>
           <Btn size="sm" className="mt-2" onClick={step1} disabled={runner.running || !!step1Done}>{step1Done ? "Step 1 confirmed" : "Run step 1"}</Btn>
         </li>
         <li className={cn("border-l-2 pl-4", step1Done ? "border-amber" : "border-line opacity-60")}>
-          <p className="font-medium">Step 2 — Add a new {width}-bin Spot position centred on the current active bin</p>
+          <p className="font-medium">Step 2 — Add a new {nextWidth}-bin Spot position centred on the current active bin</p>
+          {width > MAX_UI_BINS && <p className="text-amber">Your old position spans {width} bins; this interface opens new positions of at most {MAX_UI_BINS} bins, so step 2 is narrowed.</p>}
           <p className="text-cream/75">Opens the pool's Add Liquidity flow pre-filled. You review amounts against your fresh wallet balance and sign separately.</p>
           {step1Done ? (
-            <Link to="/app/pool/$address" params={{ address: r.pair }} search={{ tab: "add", strategy: "Spot", below: half, above: width - 1 - half }} className="mt-2 inline-block underline">Continue to step 2 →</Link>
+            <Link to="/app/pool/$address" params={{ address: r.pair }} search={{ tab: "add", strategy: "Spot", below: nextHalf, above: nextWidth - 1 - nextHalf }} className="mt-2 inline-block underline">Continue to step 2 →</Link>
           ) : <p className="mt-2 station-code text-cream/60">Available after step 1 confirms</p>}
         </li>
       </ol>
@@ -159,24 +162,30 @@ function Rebalance({ r, onClose }: { r: PositionRow; onClose: () => void }) {
   );
 }
 
+/** Observation label only. Requires both readings. */
+export function skyOf(dynamicPct: number, basePct: number): "Storm" | "Breezy" | "Calm" {
+  return dynamicPct > basePct * 0.5 ? "Storm" : dynamicPct > 0 ? "Breezy" : "Calm";
+}
+
 function Weather() {
   const q = useQuery({ queryKey: ["weather"], queryFn: ({ signal }) => fetchPools({ page: 1, pageSize: 24, sort: "volume_24h", dir: "desc", hideBlacklisted: true }, signal), refetchInterval: 60_000, retry: false });
   if (q.isPending) return <Spinner label="Reading the sky" />;
-  if (q.isError) return <Notice tone="error" title="Fee Weather unavailable" action={<Btn size="sm" onClick={() => q.refetch()}>Retry</Btn>}>{(q.error as Error).message}</Notice>;
+  if (q.isError) return <Notice tone="error" title="Fee Weather unavailable" action={<Btn size="sm" onClick={() => q.refetch()}>Retry</Btn>}>{redactUrls(String(((q.error) as Error)?.message ?? ""))}</Notice>;
   return (
     <div>
       <p className="mb-4 max-w-3xl text-sm text-cream/80">Current readings for the 24 busiest pools by 24h volume. A dynamic fee above zero means recent volatility pushed the variable fee up. These are observations, not forecasts. <span className="station-code text-cream/60">Updated {timeAgo(q.dataUpdatedAt)}</span></p>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {q.data.data.map((p) => {
-          const dyn = p.dynamic_fee_pct ?? 0;
-          const base = p.pool_config?.base_fee_pct ?? 0;
+          const dyn = typeof p.dynamic_fee_pct === "number" && Number.isFinite(p.dynamic_fee_pct) ? p.dynamic_fee_pct : undefined;
+          const base = typeof p.pool_config?.base_fee_pct === "number" && Number.isFinite(p.pool_config.base_fee_pct) ? p.pool_config.base_fee_pct : undefined;
           const h1 = p.volume?.["1h"];
           const h24 = v24(p.volume);
           const pace = h1 !== undefined && h24 ? (h1 * 24) / h24 : undefined;
-          const sky = dyn > base * 0.5 ? "Storm" : dyn > 0 ? "Breezy" : "Calm";
+          // Missing observations are "Unavailable", never Calm.
+          const sky = dyn === undefined || base === undefined ? "Unavailable" : skyOf(dyn, base);
           return (
             <Link key={p.address} to="/app/pool/$address" params={{ address: p.address }} className="ticket block p-4 hover:bg-cobalt">
-              <div className="flex justify-between"><span className="font-medium">{p.name}</span><span className={cn("station-code", sky === "Storm" ? "text-ochre" : sky === "Breezy" ? "text-amber" : "text-cream/70")}>{sky}</span></div>
+              <div className="flex justify-between"><span className="font-medium">{p.name}</span><span className={cn("station-code", sky === "Storm" ? "text-ochre" : sky === "Breezy" ? "text-amber" : "text-cream/70")}>{sky === "Unavailable" ? "— Unavailable" : sky}</span></div>
               <div className="mt-3 grid grid-cols-2 gap-3">
                 <Stat label="Base fee" value={fmtPct(base)} />
                 <Stat label="Dynamic" value={fmtPct(p.dynamic_fee_pct)} />

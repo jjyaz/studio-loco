@@ -4,9 +4,10 @@ import type { PublicKey } from "@solana/web3.js";
 import { getPool, invalidatePool, poolFunctionType } from "@/lib/dlmm";
 import { getMintBalance } from "@/lib/chain";
 import { useSettings } from "@/lib/settings";
+import { uiPriceFromBin } from "@/lib/bins";
 import type { RailBin } from "./RailMap";
 
-export function usePoolSdk(address: string) {
+export function usePoolSdk(address: string, opts: { cluster?: string } = {}) {
   const { connection } = useConnection();
   const { settings } = useSettings();
   return useQuery({
@@ -16,7 +17,8 @@ export function usePoolSdk(address: string) {
       const pool = await getPool(connection, address, settings.cluster);
       return pool;
     },
-    enabled: /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(address),
+    // Suppress requests for empty/invalid addresses and for plans bound to another cluster.
+    enabled: /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(address) && (!opts.cluster || opts.cluster === settings.cluster),
     retry: 1,
     staleTime: 20_000,
   });
@@ -37,8 +39,8 @@ export interface PoolSnapshot {
   status: number;
 }
 
-export function usePoolSnapshot(address: string, radius = 40) {
-  const sdk = usePoolSdk(address);
+export function usePoolSnapshot(address: string, radius = 40, opts: { cluster?: string } = {}) {
+  const sdk = usePoolSdk(address, opts);
   const { connection } = useConnection();
   return useQuery({
     queryKey: ["dlmm-snap", connection.rpcEndpoint, address, radius, sdk.dataUpdatedAt],
@@ -59,9 +61,11 @@ export function usePoolSnapshot(address: string, radius = 40) {
         reserveX: pool.tokenX.amount.toString(),
         reserveY: pool.tokenY.amount.toString(),
         functionType: poolFunctionType(pool),
-        status: (pool.lbPair as unknown as { status: number }).status,
+        status: pool.lbPair.status,
         bins: bins.map((b) => ({ binId: b.binId, xAmount: b.xAmount.toString(), yAmount: b.yAmount.toString(), price: Number(b.pricePerToken) })),
-        activePrice: Number(bins.find((b) => b.binId === activeBin)?.pricePerToken ?? pool.fromPricePerLamport(Number((pool.lbPair as unknown as { activeId: number }).activeId))),
+        // pricePerToken from the SDK is already decimal-adjusted (Y per X). If the active bin
+        // isn't in the returned set, derive from the bin id with both decimals — never pass a bin id as a price.
+        activePrice: (() => { const b = bins.find((x) => x.binId === activeBin); return b ? Number(b.pricePerToken) : uiPriceFromBin(activeBin, pool.lbPair.binStep, decX, decY); })(),
       };
     },
     refetchInterval: 30_000,

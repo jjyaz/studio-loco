@@ -1,7 +1,9 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { planKey, usePlan } from "@/lib/plan";
+import { simulateExact } from "@/lib/tx";
 import BN from "bn.js";
 import type { Transaction } from "@solana/web3.js";
 import { Btn, Cap, Field, Notice, PageHead, Panel, Spinner } from "@/components/kit";
@@ -11,6 +13,7 @@ import { fetchMint, type MintInfo } from "@/lib/chain";
 import { baseFeePct, uiPriceFromBin } from "@/lib/bins";
 import { loadSdk } from "@/lib/dlmm";
 import { fmtNum, shortAddr } from "@/lib/format";
+import { redactUrls } from "@/lib/format";
 import { useSettings } from "@/lib/settings";
 import { cn } from "@/lib/utils";
 
@@ -41,7 +44,6 @@ function Launch() {
   const [checking, setChecking] = useState(false);
   const [preset, setPreset] = useState<string>("");
   const [price, setPrice] = useState("");
-  const [review, setReview] = useState<null | { tx: Transaction; pair: string; activeId: number; sim: string | null; actualPrice: number }>(null);
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -58,23 +60,32 @@ function Launch() {
     retry: 1,
   });
 
+  // Mints validated on one cluster/RPC are not valid evidence on another.
+  useEffect(() => { setMx(null); setMy(null); }, [settings.cluster, connection.rpcEndpoint]);
+  const liveKey = planKey({ x: mx?.address, y: my?.address, preset, price, cluster: settings.cluster, rpc: connection.rpcEndpoint, wallet: publicKey?.toBase58() });
+  type Review = { tx: Transaction; pair: string; activeId: number; sim: string | null; actualPrice: number; requested: string; preset: Preset; x: MintInfo; y: MintInfo; cluster: string };
+  const { plan: review, begin } = usePlan<Review>(liveKey);
+
   async function checkMints() {
-    setChecking(true); setMintErr(null); setMx(null); setMy(null); setReview(null);
+    setChecking(true); setMintErr(null); setMx(null); setMy(null);
     try {
       if (xAddr.trim() === yAddr.trim()) throw new Error("Base and quote mints must differ");
       const [a, b] = await Promise.all([fetchMint(connection, xAddr).catch((e) => { throw new Error(`Base: ${e.message}`); }), fetchMint(connection, yAddr).catch((e) => { throw new Error(`Quote: ${e.message}`); })]);
       setMx(a); setMy(b);
-    } catch (e) { setMintErr(e instanceof Error ? e.message : String(e)); } finally { setChecking(false); }
+    } catch (e) { setMintErr(redactUrls(e instanceof Error ? e.message : String(e))); } finally { setChecking(false); }
   }
 
   const sel = presets.data?.find((p) => p.key === preset);
   const priceNum = Number(price);
   const priceErr = price && !(priceNum > 0 && Number.isFinite(priceNum)) ? "Price must be a positive number" : null;
-  const ready = !!mx && !!my && !!sel && priceNum > 0 && !priceErr && !!publicKey;
+  const blocked = [...(mx?.blockedExtensions ?? []), ...(my?.blockedExtensions ?? [])];
+  const ready = blocked.length === 0 && !!mx && !!my && !!sel && priceNum > 0 && !priceErr && !!publicKey;
 
   async function build() {
-    if (!mx || !my || !sel || !publicKey) return;
-    setBusy(true); setErr(null); setReview(null);
+    if (!mx || !my || !sel || !publicKey || busy) return;
+    const job = begin();
+    const frozen = { x: mx, y: my, preset: sel, requested: price, cluster: settings.cluster };
+    setBusy(true); setErr(null);
     try {
       const sdk = await loadSdk();
       const { PublicKey } = await import("@solana/web3.js");
@@ -88,9 +99,9 @@ function Launch() {
       const tx = await DLMM.createLbPair2(connection, publicKey, new PublicKey(mx.address), new PublicKey(my.address), new PublicKey(sel.key), new BN(activeId), { cluster: settings.cluster });
       const { blockhash } = await connection.getLatestBlockhash("confirmed");
       tx.recentBlockhash = blockhash; tx.feePayer = publicKey;
-      const sim = await connection.simulateTransaction(tx);
-      setReview({ tx, pair: pair.toBase58(), activeId, actualPrice: uiPriceFromBin(activeId, sel.binStep, mx.decimals, my.decimals), sim: sim.value.err ? `${JSON.stringify(sim.value.err)} — ${(sim.value.logs ?? []).slice(-3).join(" | ")}` : null });
-    } catch (e) { setErr(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
+      const sim = await simulateExact(connection, tx.serializeMessage());
+      job.commit({ ...frozen, tx, pair: pair.toBase58(), activeId, actualPrice: uiPriceFromBin(activeId, sel.binStep, mx.decimals, my.decimals), sim: sim.value.err ? `${JSON.stringify(sim.value.err)} — ${(sim.value.logs ?? []).slice(-3).join(" | ")}` : null });
+    } catch (e) { if (job.isCurrent()) setErr(redactUrls(e instanceof Error ? e.message : String(e))); } finally { setBusy(false); }
   }
 
   return (
@@ -109,7 +120,7 @@ function Launch() {
                 {[["X", mx], ["Y", my]].map(([k, m]) => { const mi = m as MintInfo; return (
                   <div key={k as string} className="contents">
                     <dt className="text-cream/65">{k as string}</dt>
-                    <dd className="font-mono">{shortAddr(mi.address, 6)} · {mi.decimals} decimals · {mi.program}{mi.freezeAuthority ? " · freeze authority set ⚠" : ""}</dd>
+                    <dd className="font-mono">{shortAddr(mi.address, 6)} · {mi.decimals} decimals · {mi.program}{mi.freezeAuthority ? " · freeze authority set ⚠" : ""}{mi.extensions.length ? ` · ext: ${mi.extensions.join(", ")}` : ""}{mi.blockedExtensions.length ? ` · blocked: ${mi.blockedExtensions.join(", ")}` : ""}</dd>
                   </div>); })}
               </dl>
             )}
@@ -118,7 +129,7 @@ function Launch() {
 
           <h2 className="mt-6 station-code text-amber">2 · Preset (PresetParameter2, onchain)</h2>
           {presets.isPending && <Spinner label="Fetching presets" />}
-          {presets.isError && <Notice tone="error" title="Couldn't fetch presets" action={<Btn size="sm" onClick={() => presets.refetch()}>Retry</Btn>}>{(presets.error as Error).message}. This uses getProgramAccounts; a dedicated RPC may be required.</Notice>}
+          {presets.isError && <Notice tone="error" title="Couldn't fetch presets" action={<Btn size="sm" onClick={() => presets.refetch()}>Retry</Btn>}>{redactUrls(String(((presets.error) as Error)?.message ?? ""))}. This uses getProgramAccounts; a dedicated RPC may be required.</Notice>}
           {presets.data && (
             <div className="mt-3 max-h-64 overflow-auto border border-line">
               {presets.data.map((p) => (
@@ -137,21 +148,22 @@ function Launch() {
         </Panel>
 
         <div className="flex flex-col gap-6">
-          {review && sel && mx && my && (
+          {review && (
             <Panel tone="cobalt">
               <h3 className="display text-2xl">Review</h3>
               <dl className="mt-4 grid grid-cols-2 gap-y-2 text-sm">
                 <dt className="text-cream/70">New pool</dt><dd className="font-mono">{shortAddr(review.pair, 6)}</dd>
-                <dt className="text-cream/70">Base / quote</dt><dd className="font-mono">{shortAddr(mx.address)} / {shortAddr(my.address)}</dd>
-                <dt className="text-cream/70">Bin step</dt><dd className="font-mono">{sel.binStep} bps</dd>
-                <dt className="text-cream/70">Base fee</dt><dd className="font-mono">{fmtNum(sel.fee, 4)}%</dd>
+                <dt className="text-cream/70">Base / quote</dt><dd className="font-mono">{shortAddr(review.x.address)} ({review.x.decimals}d) / {shortAddr(review.y.address)} ({review.y.decimals}d)</dd>
+                <dt className="text-cream/70">Bin step</dt><dd className="font-mono">{review.preset.binStep} bps</dd>
+                <dt className="text-cream/70">Base fee</dt><dd className="font-mono">{fmtNum(review.preset.fee, 4)}%</dd>
+                <dt className="text-cream/70">Cluster</dt><dd className="font-mono">{review.cluster}</dd>
                 <dt className="text-cream/70">Active bin</dt><dd className="font-mono">{review.activeId}</dd>
-                <dt className="text-cream/70">Start price</dt><dd className="font-mono">{fmtNum(review.actualPrice, 8)} (requested {price})</dd>
+                <dt className="text-cream/70">Start price</dt><dd className="font-mono">{fmtNum(review.actualPrice, 8)} (requested {review.requested})</dd>
               </dl>
               <p className="mt-3 text-xs text-cream/70">Creates the pool, reserves and oracle accounts (rent paid by you). It does not add liquidity.</p>
               {review.sim ? <Notice tone="error" title="Simulation failed — not sent">{review.sim}</Notice> : <p className="mt-3 station-code text-success">Simulation passed</p>}
               <Btn className="mt-4 w-full" disabled={!!review.sim || runner.running} onClick={() => runner.run([{ label: "Create DLMM pool (createLbPair2)", tx: review.tx }])}>Sign & send</Btn>
-              {runner.steps?.every((s) => s.phase === "confirmed") && <Link to="/app/pool/$address" params={{ address: review.pair }} search={{ tab: "add" }} className="mt-3 inline-block underline">Seed liquidity in the new pool →</Link>}
+              {!!runner.steps?.length && runner.steps.every((s) => s.phase === "confirmed") && <Link to="/app/pool/$address" params={{ address: review.pair }} search={{ tab: "add" }} className="mt-3 inline-block underline">Seed liquidity in the new pool →</Link>}
             </Panel>
           )}
           <TxSteps steps={runner.steps} />

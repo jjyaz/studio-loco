@@ -1,4 +1,5 @@
 import { z } from "zod";
+import bs58 from "bs58";
 
 export type StrategyName = "Spot" | "Curve" | "BidAsk";
 export const STRATEGIES: StrategyName[] = ["Spot", "Curve", "BidAsk"];
@@ -76,56 +77,128 @@ export const TEMPLATES: Template[] = [
 
 /* ---------- Saved routes (versioned JSON) ---------- */
 
-export const RouteSchema = z.object({
-  id: z.string().min(1).max(64),
-  name: z.string().trim().min(1).max(60),
-  pool: z.string().regex(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/, "Invalid pool address"),
-  poolName: z.string().max(60).optional(),
-  strategy: z.enum(["Spot", "Curve", "BidAsk"]),
-  below: z.number().int().min(0).max(MAX_UI_BINS),
-  above: z.number().int().min(0).max(MAX_UI_BINS),
-  budget: z.number().nonnegative().max(1e15),
-  xShare: z.number().min(0).max(1),
-  createdAt: z.number().int(),
-});
-export type SavedRoute = z.infer<typeof RouteSchema>;
-
-export const RouteFileSchema = z.object({
-  kind: z.literal("studio-loco/routes"),
-  version: z.literal(1),
-  routes: z.array(RouteSchema).max(200),
-});
-
-export function exportRoutes(routes: SavedRoute[]): string {
-  return JSON.stringify({ kind: "studio-loco/routes", version: 1, routes }, null, 2);
+/** Real Solana public key check: base58 that decodes to exactly 32 bytes. */
+export function isPublicKey(s: string): boolean {
+  if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(s)) return false;
+  try {
+    return bs58.decode(s).length === 32;
+  } catch {
+    return false;
+  }
 }
 
-export function importRoutes(text: string): { ok: true; routes: SavedRoute[] } | { ok: false; error: string } {
+export const DECIMAL_TEXT = /^(?:\d{1,20})(?:\.\d{1,18})?$/;
+const pubkey = z.string().refine(isPublicKey, "Invalid Solana address");
+const finite = (max: number) => z.number().finite().min(0).max(max);
+const bins = z.number().int().min(0).max(MAX_UI_BINS - 1);
+const decimalText = z.string().max(40).refine((v) => v === "" || DECIMAL_TEXT.test(v), "Amount must be plain decimal text");
+
+const RouteV1 = z.object({
+  id: z.string().min(1).max(64),
+  name: z.string().trim().min(1).max(60),
+  pool: pubkey,
+  poolName: z.string().max(60).optional(),
+  strategy: z.enum(["Spot", "Curve", "BidAsk"]),
+  below: bins,
+  above: bins,
+  budget: finite(1e15),
+  xShare: finite(1),
+  createdAt: z.number().int().nonnegative(),
+});
+
+export const RouteSchema = z
+  .object({
+    id: z.string().min(1).max(64),
+    name: z.string().trim().min(1).max(60),
+    /** null = migrated from v1 without cluster identity; must be assigned before execution */
+    cluster: z.enum(["mainnet-beta", "devnet"]).nullable(),
+    pool: pubkey,
+    poolName: z.string().max(60).optional(),
+    strategy: z.enum(["Spot", "Curve", "BidAsk"]),
+    below: bins,
+    above: bins,
+    /** execution-ready exact decimal token amounts (bound to the pool's mints at review time) */
+    exec: z.object({ x: decimalText, y: decimalText, symX: z.string().max(20).optional(), symY: z.string().max(20).optional(), decX: z.number().int().min(0).max(18).optional(), decY: z.number().int().min(0).max(18).optional() }),
+    /** illustrative only: never converted into token amounts */
+    illustrative: z.object({ budget: finite(1e15), xShare: finite(1) }),
+    createdAt: z.number().int().nonnegative(),
+  })
+  .refine((r) => r.below + r.above + 1 <= MAX_UI_BINS, { message: `Route exceeds ${MAX_UI_BINS} bins` });
+export type SavedRoute = z.infer<typeof RouteSchema>;
+
+export function migrateV1(r: z.infer<typeof RouteV1>): SavedRoute {
+  return { id: r.id, name: r.name, cluster: null, pool: r.pool, poolName: r.poolName, strategy: r.strategy, below: r.below, above: r.above, exec: { x: "", y: "" }, illustrative: { budget: r.budget, xShare: r.xShare }, createdAt: r.createdAt };
+}
+
+const FileV1 = z.object({ kind: z.literal("studio-loco/routes"), version: z.literal(1), routes: z.array(z.unknown()).max(200) });
+const FileV2 = z.object({ kind: z.literal("studio-loco/routes"), version: z.literal(2), routes: z.array(z.unknown()).max(200) });
+
+export function exportRoutes(routes: SavedRoute[]): string {
+  return JSON.stringify({ kind: "studio-loco/routes", version: 2, routes }, null, 2);
+}
+
+/** Validate one route of either version. Width is checked before schema bounds so the message is specific. */
+export function parseRoute(raw: unknown, version: 1 | 2): { ok: true; route: SavedRoute; migrated: boolean } | { ok: false; error: string } {
+  const w = raw as { below?: unknown; above?: unknown; name?: unknown };
+  if (typeof w?.below === "number" && typeof w?.above === "number" && w.below + w.above + 1 > MAX_UI_BINS) {
+    return { ok: false, error: `Route "${String(w.name ?? "?")}" exceeds ${MAX_UI_BINS} bins` };
+  }
+  if (version === 1) {
+    const r = RouteV1.safeParse(raw);
+    return r.success ? { ok: true, route: migrateV1(r.data), migrated: true } : { ok: false, error: r.error.issues[0]?.message ?? "Invalid route" };
+  }
+  const r = RouteSchema.safeParse(raw);
+  return r.success ? { ok: true, route: r.data, migrated: false } : { ok: false, error: r.error.issues[0]?.message ?? "Invalid route" };
+}
+
+export function importRoutes(text: string): { ok: true; routes: SavedRoute[]; migrated: number } | { ok: false; error: string } {
   let parsed: unknown;
   try {
     parsed = JSON.parse(text);
   } catch {
     return { ok: false, error: "File is not valid JSON" };
   }
-  const res = RouteFileSchema.safeParse(parsed);
-  if (!res.success) return { ok: false, error: res.error.issues[0]?.message ?? "Invalid route file" };
-  const width = res.data.routes.find((r) => r.below + r.above + 1 > MAX_UI_BINS);
-  if (width) return { ok: false, error: `Route "${width.name}" exceeds ${MAX_UI_BINS} bins` };
-  return { ok: true, routes: res.data.routes };
+  const v2 = FileV2.safeParse(parsed);
+  const v1 = v2.success ? null : FileV1.safeParse(parsed);
+  if (!v2.success && !v1?.success) return { ok: false, error: "Not a Studio Loco route file (kind/version 1 or 2 expected)" };
+  const version = v2.success ? 2 : 1;
+  const list = v2.success ? v2.data.routes : v1!.data!.routes;
+  const out: SavedRoute[] = [];
+  let migrated = 0;
+  for (const raw of list) {
+    const r = parseRoute(raw, version);
+    if (!r.ok) return r;
+    if (r.migrated) migrated++;
+    out.push(r.route);
+  }
+  return { ok: true, routes: out, migrated };
+}
+
+/** Local storage loader: accepts stored v1 or v2 arrays, drops invalid entries. */
+export function loadStoredRoutes(raw: unknown): SavedRoute[] {
+  if (!Array.isArray(raw)) return [];
+  const out: SavedRoute[] = [];
+  for (const r of raw.slice(0, 200)) {
+    const v = parseRoute(r, (r as { illustrative?: unknown })?.illustrative ? 2 : 1);
+    if (v.ok) out.push(v.route);
+  }
+  return out;
 }
 
 export function encodeShare(route: SavedRoute): string {
-  const json = JSON.stringify(route);
+  const json = JSON.stringify({ v: 2, r: route });
   const b64 = typeof btoa === "function" ? btoa(unescape(encodeURIComponent(json))) : Buffer.from(json).toString("base64");
   return b64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
 export function decodeShare(s: string): SavedRoute | null {
   try {
+    if (s.length > 4000) return null;
     const b64 = s.replace(/-/g, "+").replace(/_/g, "/");
     const json = typeof atob === "function" ? decodeURIComponent(escape(atob(b64))) : Buffer.from(b64, "base64").toString();
-    const r = RouteSchema.safeParse(JSON.parse(json));
-    return r.success ? r.data : null;
+    const obj = JSON.parse(json) as { v?: number; r?: unknown };
+    const r = obj && obj.v === 2 ? parseRoute(obj.r, 2) : parseRoute(obj, 1);
+    return r.ok ? r.route : null;
   } catch {
     return null;
   }
