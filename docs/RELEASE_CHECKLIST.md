@@ -62,3 +62,10 @@ Not production-ready: no funded wallet has signed any transaction built by this 
 - [x] Tests: 93/93 (`src/test/arb.test.ts`, new `src/test/arb-guards.test.ts`: expiry/ABA/practice during approval, pre-sign guard, fee null/error/increase, sim failure, rejection, composition order + encoded amounts, no intermediate close, strict vs idempotent create, floor, bindings, reversed orientation, oversize, receipts). Typecheck clean; `vite build` exit 0.
 - [x] Built Worker (wrangler dev, server RPC override): /, /app, /app/dispatch 200, unknown 404; relay getGenesisHash = mainnet. Browser: live scan 4 pools / 12 routes, best -0.002024791 SOL on 0.1 SOL → "no profitable route"; monitor start/pause; invalid input disables Scan and clears results; 10 s interval disables Start; no page errors; no horizontal overflow at 390 px and 1280 px.
 - [ ] Not exercised: review/approval with a real connected wallet (none available headless), funded signature. No funds used.
+
+### Lifecycle fix (review of 69f63bb) — 6 Oct 2026, 22:15 UTC
+- [x] Scan/requote share a synchronous single-job lock (`JobControl`); requote stops monitoring and cancels scans first; Scan/Start disabled while reviewing, a review exists, the runner is busy or a request is draining.
+- [x] Every requote await (SDK pool load, refetchStates, verification, wallet reads, quotes, builds, fee reads) and scan rent/fee/scan reads is bounded and re-checks generation/abort/mounted afterwards; obsolete success/error/finally updates are suppressed.
+- [x] Pause, tab hide, config/identity change and unmount bump the generation, abort the job and clear reviews immediately; a timed-out request keeps a drain latch until it settles (UI shows Draining).
+- [x] Reset resets the form draft as well as saved config.
+- [x] Tests 101/101 (new `src/test/job-control.test.ts`, 8 tests against the real controller); typecheck 0 errors; `vite build` exit 0. No browser re-check of this pass; no funds used.
