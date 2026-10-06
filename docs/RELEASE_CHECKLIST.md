@@ -11,7 +11,7 @@ Not production-ready: no funded wallet has signed any transaction built by this 
 | Hero art | Pass | Train and field visible at 390 and 1280; headline on clean sky |
 | Live pool list, real bins, limit-order mode detection | Pass | YZY-USDC active bin −124, mode Undetermined → order-capable per SDK |
 | Wallet absence | Pass | every action shows Connect wallet; nothing auto-transacts |
-| Keyboard focus, wallet modal, dialogs | **Not re-verified this pass** | |
+| Keyboard focus, wallet modal, dialogs | Pass (pass 5, /app at 1280px) | Skip link first; nav, Settings, Connect wallet, tabs, Refresh, inputs all show focus (search via amber frame); Enter opens wallet dialog, Escape closes it; 0 page errors |
 | Devnet integration (create/add/swap/withdraw/close/orders) | **Not run** | no disposable devnet wallet run was performed this pass |
 | Funded wallet signing (all flows incl. native orders) | **Not run** | requires human approval |
 | Confidential protocol | **Not deployed** | educational simulation only |
