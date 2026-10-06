@@ -54,6 +54,9 @@ const mobileWalletServerStub = {
 const browserBufferPackage = {
   name: "studio-loco:browser-buffer-package",
   enforce: "pre" as const,
+  // Build only: in dev, pointing at the raw CJS entry bypasses Vite's dep
+  // pre-bundling and the client fails on `import { Buffer } from "buffer"`.
+  apply: "build" as const,
   resolveId(this: { environment?: { name: string } }, source: string) {
     if (this.environment?.name !== "client") return;
     if (!/^(node:)?buffer\/?$/.test(source)) return;
