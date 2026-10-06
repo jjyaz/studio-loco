@@ -225,6 +225,9 @@ export async function runTransaction(opts: {
     if (isUserRejection(e)) throw new TxError("You declined the request in your wallet", "rejected");
     throw new TxError(`Wallet could not sign: ${e instanceof Error ? e.message : String(e)}`, "sending");
   }
+  // Wallet/network may have changed while the approval dialog was open: stop before anything is
+  // persisted or broadcast. The signed bytes are discarded.
+  guard();
   if (!sameBytes(new Uint8Array(signed.serializeMessage()), messageBytes)) {
     throw new TxError("Your wallet changed the transaction after simulation, so it was not sent. Review again.", "sending");
   }
@@ -284,7 +287,7 @@ export async function checkSignature(connection: Connection, signature: string, 
   if (v) return { kind: "pending" }; // processed only
   let height: number;
   try {
-    height = await connection.getBlockHeight("confirmed");
+    height = await withTimeout(connection.getBlockHeight("confirmed"), 10_000, "Block height lookup");
   } catch {
     return { kind: "unknown", reason: "block height lookup failed" };
   }
