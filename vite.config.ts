@@ -47,16 +47,18 @@ const mobileWalletServerStub = {
   },
 };
 
-// In the production client build, bare `buffer` (Node builtin name) was replaced by an empty
-// browser-external stub, so safe-buffer/bs58 crashed with "reading 'from'" and hydration died.
-// Pin it to the real npm `buffer` package for the browser.
-const browserBufferPackage = {
-  name: "studio-loco:browser-buffer-package",
+// bn.js maps "buffer" to false in its package "browser" field. In the production client build
+// Rolldown applied that empty stub to every `buffer` import, so safe-buffer/bs58/web3.js crashed
+// with "Cannot read properties of undefined (reading 'from')" and the page never hydrated.
+// Drop bn.js's optional require (it already falls back without Buffer) so the stub never exists.
+const bnBufferStubFix = {
+  name: "studio-loco:bn-buffer-stub-fix",
   enforce: "pre" as const,
-  resolveId(this: { environment?: { name: string } }, source: string) {
-    if (source !== "buffer" && source !== "buffer/" && source !== "node:buffer") return;
-    if (this.environment && this.environment.name !== "client") return;
-    return createRequire(import.meta.url).resolve("buffer/index.js");
+  transform(this: { environment?: { name: string } }, code: string, id: string) {
+    if (this.environment?.name !== "client") return;
+    if (!/[\\/]bn\.js[\\/]lib[\\/]bn\.js$/.test(id.split("?")[0])) return;
+    const next = code.replace("require('buffer').Buffer", "undefined");
+    return next === code ? undefined : { code: next, map: null };
   },
 };
 
