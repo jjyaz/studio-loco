@@ -47,6 +47,19 @@ const mobileWalletServerStub = {
   },
 };
 
+// In the production client build, bare `buffer` (Node builtin name) was replaced by an empty
+// browser-external stub, so safe-buffer/bs58 crashed with "reading 'from'" and hydration died.
+// Pin it to the real npm `buffer` package for the browser.
+const browserBufferPackage = {
+  name: "studio-loco:browser-buffer-package",
+  enforce: "pre" as const,
+  resolveId(this: { environment?: { name: string } }, source: string) {
+    if (source !== "buffer" && source !== "buffer/" && source !== "node:buffer") return;
+    if (this.environment && this.environment.name !== "client") return;
+    return createRequire(import.meta.url).resolve("buffer/index.js");
+  },
+};
+
 export default defineConfig({
   tanstackStart: {
     // Redirect TanStack Start's bundled server entry to src/server.ts (our SSR error wrapper).
