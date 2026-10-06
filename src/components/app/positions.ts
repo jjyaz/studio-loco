@@ -74,6 +74,8 @@ export function useIndexedPortfolio(address: string | null) {
   });
 }
 
+export type PositionRows = PositionRow[] & { report?: { rejected: number; truncated: boolean; indexedTotal?: number } };
+
 export interface PositionRow {
   pair: string;
   position: LbPosition;
@@ -98,10 +100,12 @@ export function usePositions(refetchMs: number | false = false) {
     enabled: !!publicKey,
     refetchInterval: refetchMs,
     retry: 1,
-    queryFn: async ({ signal }): Promise<PositionRow[]> => {
+    // Rows carry a `report` (rejected/truncated) that structural sharing would strip.
+    structuralSharing: false,
+    queryFn: async ({ signal }): Promise<PositionRows> => {
       if (settings.cluster === "mainnet-beta") {
         const r = await hydrateIndexedPositions(connection, publicKey!, signal);
-        return r.rows;
+        return Object.assign(r.rows, { report: { rejected: r.rejected, truncated: r.truncated, indexedTotal: r.indexedTotal } });
       }
       const sdk = await loadSdk();
       const map = await sdk.default.getAllLbPairPositionsByUser(connection, publicKey!, { cluster: settings.cluster });

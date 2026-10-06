@@ -85,7 +85,13 @@ function Portfolio() {
           {redactUrls(String(((q.error) as Error)?.message ?? ""))}. {settings.cluster === "mainnet-beta" ? "Mainnet positions are found through Meteora's index, then each one is checked on chain." : "Devnet positions are found by scanning the chain, which some RPCs restrict — try a dedicated RPC in Settings."} This is an error, not an empty portfolio.
         </Notice>
       )}
-      {q.data && q.data.length === 0 && <Panel><p className="text-cream/80">No DLMM positions found for {shortAddr(publicKey?.toBase58())} on this cluster.</p><Link to="/app" className="mt-3 inline-block underline">Find a pool →</Link></Panel>}
+      {q.data?.report && (q.data.report.rejected > 0 || q.data.report.truncated) && (
+        <div className="mb-4"><Notice tone="warn" title="Portfolio may be incomplete">
+          {q.data.report.rejected > 0 && <>{q.data.report.rejected} indexed position{q.data.report.rejected === 1 ? "" : "s"} failed on-chain verification (wrong program, account type, pool or owner) and {q.data.report.rejected === 1 ? "is" : "are"} hidden. </>}
+          {q.data.report.truncated && <>The index returned more positions than this page reads ({q.data.report.indexedTotal ?? "—"} reported); only the first pages are shown. </>}
+        </Notice></div>
+      )}
+      {q.data && q.data.length === 0 && <Panel><p className="text-cream/80">{q.data.report?.rejected || q.data.report?.truncated ? "No verified positions to show." : <>No DLMM positions found for {shortAddr(publicKey?.toBase58())} on this cluster.</>}</p><Link to="/app" className="mt-3 inline-block underline">Find a pool →</Link></Panel>}
       {q.data && q.data.length > 0 && (
         <>
           <div className="mb-4 flex flex-wrap gap-2">
