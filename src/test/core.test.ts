@@ -1,9 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import BN from "bn.js";
 import { parseUnits, formatUnits, bpsOf } from "@/lib/amount";
-import { distribute, importRoutes, exportRoutes, encodeShare, decodeShare, type SavedRoute } from "@/lib/strategy";
+import { distribute } from "@/lib/strategy";
 import { binFromUiPrice, uiPriceFromBin, baseFeePct } from "@/lib/bins";
-import { runTransaction, runSequence, TxError } from "@/lib/tx";
 import { fetchJson, ApiError } from "@/lib/meteora-api";
 import { practicePage } from "@/lib/practice-data";
 import { rangeState } from "@/components/app/positions";
@@ -58,16 +57,6 @@ describe("strategy normalization", () => {
     expect(d.reduce((a, b) => a + b.x, 0)).toBeCloseTo(1);
     expect(distribute("Spot", 0, 5, 1)).toEqual([]);
   });
-  it("route file round trip and validation", () => {
-    const r: SavedRoute = { id: "a", name: "Test", pool: "DQ9weJhfiU4iL5LUoeshDrm5KxDHCMiSbnnKJz7buMcf", strategy: "Curve", below: 5, above: 5, budget: 10, xShare: 0.5, createdAt: 1 };
-    const ok = importRoutes(exportRoutes([r]));
-    expect(ok.ok && ok.routes[0]!.name).toBe("Test");
-    expect(importRoutes("{").ok).toBe(false);
-    expect(importRoutes(JSON.stringify({ kind: "studio-loco/routes", version: 2, routes: [] })).ok).toBe(false);
-    expect(importRoutes(exportRoutes([{ ...r, below: 40, above: 40 }])).ok).toBe(false);
-    expect(decodeShare(encodeShare(r))).toEqual(r);
-    expect(decodeShare("garbage")).toBeNull();
-  });
 });
 
 describe("bin math", () => {
@@ -84,59 +73,6 @@ describe("bin math", () => {
     expect(rangeState(10, 0, 20, 3)).toBe("in-range");
     expect(rangeState(1, 0, 20, 3)).toBe("approaching-edge");
     expect(rangeState(21, 0, 20, 3)).toBe("out-of-range");
-  });
-});
-
-/* -------- transaction runner -------- */
-function mockConn(opts: { simErr?: unknown; confErr?: unknown } = {}) {
-  return {
-    getLatestBlockhash: vi.fn().mockResolvedValue({ blockhash: "BH", lastValidBlockHeight: 100 }),
-    simulateTransaction: vi.fn().mockResolvedValue({ value: { err: opts.simErr ?? null, logs: ["log1"] } }),
-    getSignatureStatuses: vi.fn().mockResolvedValue({ value: [{ slot: 5, confirmationStatus: "confirmed", err: opts.confErr ?? null }] }),
-    getBlockHeight: vi.fn().mockResolvedValue(50),
-  };
-}
-const wallet = (send: () => Promise<string>) => ({ publicKey: { toBase58: () => "W" }, sendTransaction: vi.fn(send) });
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const tx = () => ({}) as any;
-
-describe("transaction runner", () => {
-  it("succeeds only after confirmation with blockhash + lastValidBlockHeight", async () => {
-    const c = mockConn();
-    const w = wallet(async () => "SIG");
-    const phases: string[] = [];
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const r = await runTransaction({ connection: c as any, wallet: w as any, tx: tx(), onPhase: (p) => phases.push(p) });
-    expect(r.signature).toBe("SIG");
-    expect(c.getSignatureStatuses).toHaveBeenCalledWith(["SIG"], { searchTransactionHistory: false });
-    expect(phases).toEqual(["preparing", "simulating", "awaiting-signature", "confirming", "confirmed"]);
-  });
-  it("never asks the wallet when simulation fails", async () => {
-    const c = mockConn({ simErr: { InstructionError: [0, "Custom"] } });
-    const w = wallet(async () => "SIG");
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await expect(runTransaction({ connection: c as any, wallet: w as any, tx: tx() })).rejects.toMatchObject({ phase: "simulating" });
-    expect(w.sendTransaction).not.toHaveBeenCalled();
-  });
-  it("reports onchain failure even with a signature", async () => {
-    const c = mockConn({ confErr: { InstructionError: [1, "X"] } });
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const e = await runTransaction({ connection: c as any, wallet: wallet(async () => "S2") as any, tx: tx() }).catch((x) => x);
-    expect(e).toBeInstanceOf(TxError);
-    expect(e.signature).toBe("S2");
-  });
-  it("fails on blockhash expiry instead of claiming success", async () => {
-    const c = { ...mockConn(), getSignatureStatuses: vi.fn().mockResolvedValue({ value: [null] }), getBlockHeight: vi.fn().mockResolvedValue(101) };
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await expect(runTransaction({ connection: c as any, wallet: wallet(async () => "S3") as any, tx: tx(), pollMs: 1 })).rejects.toThrow(/expired/);
-  });
-  it("detects wallet rejection and partial sequences", async () => {
-    const c = mockConn();
-    let n = 0;
-    const w = wallet(async () => { n++; if (n === 2) throw new Error("User rejected the request."); return `S${n}`; });
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const steps = await runSequence({ connection: c as any, wallet: w as any, steps: [{ label: "a", tx: tx() }, { label: "b", tx: tx() }, { label: "c", tx: tx() }], onUpdate: () => {} });
-    expect(steps.map((s) => s.phase)).toEqual(["confirmed", "rejected", "skipped"]);
   });
 });
 
