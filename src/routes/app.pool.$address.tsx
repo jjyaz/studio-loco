@@ -251,7 +251,8 @@ function AddLiquidity({ address, snap, symX, symY, prefill }: { address: string;
   const clusterBlock = prefill.cluster && prefill.cluster !== settings.cluster ? `This plan was built for ${prefill.cluster}; you are on ${settings.cluster}. Switch cluster in Settings — it will not execute here.` : null;
   const canReview = !clusterBlock && !!publicKey && !rangeErr && !widthErr && !amtErr && !!sdk.data && balancesReady;
 
-  type Review = { tx: Transaction; signer: Keypair; feeLamports: number | null; rentLamports: number; position: string; sim: string | null; strategy: StrategyName; minBin: number; maxBin: number; x: BN; y: BN; slippageBps: number; activeId: number };
+  type CostQuote = { positionCost: number; positionReallocCost: number; bitmapExtensionCost: number; binArraysCount: number; binArrayCost: number } | null;
+  type Review = { tx: Transaction; signer: Keypair; feeLamports: number | null; rentLamports: number; cost: CostQuote; position: string; sim: string | null; strategy: StrategyName; minBin: number; maxBin: number; x: BN; y: BN; slippageBps: number; activeId: number };
   const liveKey = planKey({ ...ctxKey, strategy, minBin, maxBin, x: xRaw?.toString(), y: yRaw?.toString() });
   const { plan: review, begin, clear } = usePlan<Review>(liveKey);
 
@@ -278,12 +279,14 @@ function AddLiquidity({ address, snap, symX, symY, prefill }: { address: string;
       tx.recentBlockhash = blockhash;
       tx.feePayer = publicKey;
       const msg = tx.serializeMessage();
-      const [fee, rent, sim] = await Promise.all([
+      const [fee, rent, sim, cost] = await Promise.all([
         connection.getFeeForMessage(tx.compileMessage(), "confirmed").then((r) => r.value).catch(() => null),
         connection.getMinimumBalanceForRentExemption(sdkMod.POSITION_MIN_SIZE),
         simulateExact(connection, msg),
+        // SDK quote (values in SOL): position, realloc, bitmap-extension and new bin-array rent. Null if the SDK call fails.
+        sdk.data.quoteCreatePosition({ strategy: { minBinId: minBin, maxBinId: maxBin, strategyType: STRATEGY_TYPE_VALUE[strategy] } }).catch(() => null),
       ]);
-      job.commit({ tx, signer: positionKp, feeLamports: fee, rentLamports: rent, position: positionKp.publicKey.toBase58(), sim: simText(sim), strategy, minBin, maxBin, x: xRaw, y: yRaw, slippageBps, activeId: snap.activeId });
+      job.commit({ tx, signer: positionKp, feeLamports: fee, rentLamports: rent, cost, position: positionKp.publicKey.toBase58(), sim: simText(sim), strategy, minBin, maxBin, x: xRaw, y: yRaw, slippageBps, activeId: snap.activeId });
     } catch (e) {
       if (job.isCurrent()) setPrepErr(redactUrls(e instanceof Error ? e.message : String(e)));
     } finally {
@@ -374,7 +377,15 @@ function AddLiquidity({ address, snap, symX, symY, prefill }: { address: string;
               <dt className="text-cream/70">Position rent</dt><dd className="font-mono">~{formatUnits(String(review.rentLamports), 9, 5)} SOL (refundable on close)</dd>
               <dt className="text-cream/70">New position</dt><dd className="font-mono">{shortAddr(review.position, 6)}</dd>
             </dl>
-            <p className="mt-3 text-xs text-cream/70">Additional rent may apply if new bin arrays must be initialised; it appears in your wallet's preview.</p>
+            {review.cost ? (
+              <dl className="mt-3 grid grid-cols-2 gap-y-1 border-t border-cream/20 pt-3 text-xs">
+                <dt className="text-cream/70">SDK estimate · position</dt><dd className="font-mono">{fmtNum(review.cost.positionCost + review.cost.positionReallocCost, 6)} SOL</dd>
+                <dt className="text-cream/70">New bin arrays ({review.cost.binArraysCount})</dt><dd className="font-mono">{fmtNum(review.cost.binArrayCost, 6)} SOL (not refundable)</dd>
+                <dt className="text-cream/70">Bitmap extension</dt><dd className="font-mono">{fmtNum(review.cost.bitmapExtensionCost, 6)} SOL</dd>
+                <dt className="text-cream/70">Estimated total + network fee</dt><dd className="font-mono">{fmtNum(review.cost.positionCost + review.cost.positionReallocCost + review.cost.binArrayCost + review.cost.bitmapExtensionCost + (review.feeLamports ?? 0) / 1e9, 6)} SOL</dd>
+              </dl>
+            ) : <p className="mt-3 text-xs text-cream/70">Full cost estimate unavailable — {DASH}.</p>}
+            <p className="mt-2 text-xs text-cream/70">Estimates exclude any new token-account rent (~0.002 SOL each). The exact simulation above checks you can afford it; the wallet preview shows the final amount.</p>
             {review.sim ? <Notice tone="error" title="Simulation failed — not sent">{review.sim}</Notice> : <p className="mt-3 station-code text-success">Exact message simulation passed</p>}
             <Btn className="mt-4 w-full" onClick={execute} disabled={!!review.sim || runner.running}>{runner.running ? "Working…" : "Sign & send with wallet"}</Btn>
           </Panel>
@@ -391,7 +402,7 @@ function BalanceHint({ q, mint, dec, sym, onMax }: { q: ReturnType<typeof useBal
   const max = spendable(mint, q.data!);
   const v = formatUnits(max, dec).replace(/,/g, "");
   return (
-    <>Balance {formatUnits(q.data!, dec, 6)} {sym} · <button type="button" className="underline" onClick={() => onMax(v)} disabled={max.isZero()}>Max</button>{mint === WSOL_MINT && " (keeps 0.05 SOL for fees/rent)"}</>
+    <>Balance {formatUnits(q.data!, dec, 6)} {sym} · <button type="button" className="underline" onClick={() => onMax(v)} disabled={max.isZero()}>Max</button>{mint === WSOL_MINT && " (keeps 0.05 SOL back — new positions can cost more; check the review)"}</>
   );
 }
 
