@@ -43,7 +43,7 @@ export async function open(key: CryptoKey, s: Sealed): Promise<{ value: string; 
 export function tallyBallot(values: string[], options: string[]) {
   const counts = Object.fromEntries(options.map((o) => [o, 0])) as Record<string, number>;
   let invalid = 0;
-  for (const v of values) (v in counts ? counts[v]++ : invalid++);
+  for (const v of values) { if (v in counts) counts[v] = (counts[v] ?? 0) + 1; else invalid++; }
   return { counts, invalid };
 }
 
