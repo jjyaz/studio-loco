@@ -1,4 +1,5 @@
-import "./polyfills";
+import { installNodeGlobals } from "./polyfills";
+installNodeGlobals();
 import type { Connection, PublicKey } from "@solana/web3.js";
 import { TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID } from "@solana/spl-token";
 import BN from "bn.js";
