@@ -254,7 +254,7 @@ export interface IndexedPool {
   balances?: number; unclaimedFees?: number; pnl?: number; pnlPctChange?: number;
   poolPrice?: number; binStep?: number; poolStateUpdatedAtSlot?: number; poolStateUpdatedAtBlockTime?: number;
 }
-export interface IndexedPortfolio { pools: IndexedPool[]; totalPositions?: number; fetchedAt: number; pages: number }
+export interface IndexedPortfolio { pools: IndexedPool[]; totalPositions?: number; fetchedAt: number; pages: number; truncated: boolean; droppedPools: number }
 export function normalizeIndexedPool(raw: unknown): IndexedPool | null {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const o = raw as any;
@@ -276,14 +276,39 @@ export function normalizeIndexedPool(raw: unknown): IndexedPool | null {
 export async function fetchIndexedPortfolio(user: string, signal?: AbortSignal, fetchImpl?: typeof fetch): Promise<IndexedPortfolio> {
   if (!B58.test(user)) throw new ApiError("Not a valid Solana address", "parse");
   const pools: IndexedPool[] = [];
-  let page = 1, total: number | undefined;
+  let page = 1, total: number | undefined, truncated = false, dropped = 0;
   for (; page <= 10; page++) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const r = await fetchJson<any>(`${METEORA_API}/portfolio/open?user=${encodeURIComponent(user)}&page=${page}&page_size=50`, { signal, fetchImpl });
     if (!r || !Array.isArray(r.pools)) throw new ApiError("Unexpected portfolio shape", "parse");
-    for (const p of r.pools) { const n = normalizeIndexedPool(p); if (n) pools.push(n); }
+    for (const p of r.pools) { const n = normalizeIndexedPool(p); if (n) pools.push(n); else dropped++; }
     total = fin(r.totalPositions);
     if (r.hasNext !== true) break;
+    if (page === 10) truncated = true;
   }
-  return { pools, totalPositions: total, fetchedAt: Date.now(), pages: page };
+  return { pools, totalPositions: total, fetchedAt: Date.now(), pages: Math.min(page, 10), truncated, droppedPools: dropped };
+}
+
+/* ---------------- indexed open limit orders (mainnet) ---------------- */
+export interface IndexedOrders { addresses: string[]; total?: number; pages: number; truncated: boolean; dropped: number; fetchedAt: number }
+const ORDER_ADDR_KEYS = ["limit_order_address", "limit_order", "order_address", "address", "pubkey"];
+/** GET /wallets/{wallet}/limit_orders/open/pools/{pool} — {data,total,pages,current_page,page_size}.
+ *  Discovery only: addresses must be hydrated and verified on chain before use. Capped at 5 pages × 50. */
+export async function fetchIndexedOpenOrders(wallet: string, pool: string, signal?: AbortSignal, fetchImpl?: typeof fetch): Promise<IndexedOrders> {
+  if (!B58.test(wallet) || !B58.test(pool)) throw new ApiError("Not a valid Solana address", "parse");
+  const out = new Set<string>();
+  let pages = 0, total: number | undefined, truncated = false, dropped = 0;
+  for (let page = 1; page <= 5; page++) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const r = await fetchJson<any>(`${METEORA_API}/wallets/${wallet}/limit_orders/open/pools/${pool}?page=${page}&page_size=50`, { signal, fetchImpl });
+    if (!r || !Array.isArray(r.data)) throw new ApiError("Unexpected open-orders shape", "parse");
+    pages = fin(r.pages) ?? 0; total = fin(r.total);
+    for (const o of r.data) {
+      const a = o && ORDER_ADDR_KEYS.map((k) => o[k]).find((v) => typeof v === "string" && B58.test(v));
+      if (a) out.add(a); else dropped++;
+    }
+    if (page >= pages) break;
+    if (page === 5) truncated = true;
+  }
+  return { addresses: [...out], total, pages, truncated, dropped, fetchedAt: Date.now() };
 }
