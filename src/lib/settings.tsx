@@ -79,16 +79,16 @@ export function useSettings(): Ctx {
   return c;
 }
 
-export function useLocalState<T>(key: string, initial: T): [T, (v: T | ((p: T) => T)) => void] {
+export function useLocalState<T>(key: string, initial: T, parse?: (raw: unknown) => T): [T, (v: T | ((p: T) => T)) => void] {
   const [v, setV] = useState<T>(initial);
   useEffect(() => {
     try {
       const raw = localStorage.getItem(key);
-      if (raw) setV(JSON.parse(raw) as T);
+      if (raw) setV(parse ? parse(JSON.parse(raw)) : (JSON.parse(raw) as T));
     } catch {
       /* ignore */
     }
-  }, [key]);
+  }, [key]); // eslint-disable-line react-hooks/exhaustive-deps
   const set = (nv: T | ((p: T) => T)) =>
     setV((prev) => {
       const next = typeof nv === "function" ? (nv as (p: T) => T)(prev) : nv;

@@ -31,6 +31,8 @@ const search = z.object({
   above: z.number().int().min(0).max(MAX_UI_BINS).optional().catch(undefined),
   x: z.string().max(40).optional().catch(undefined),
   y: z.string().max(40).optional().catch(undefined),
+  /** cluster a Studio plan was built for; mismatches block review */
+  cluster: z.enum(["mainnet-beta", "devnet"]).optional().catch(undefined),
 });
 
 export const Route = createFileRoute("/app/pool/$address")({
@@ -238,7 +240,8 @@ function AddLiquidity({ address, snap, symX, symY, prefill }: { address: string;
 
   const preview = !rangeErr && !widthErr ? distribute(strategy, snap.activeId, minBin, maxBin) : [];
   const balancesReady = !!balX.data && !!balY.data;
-  const canReview = !!publicKey && !rangeErr && !widthErr && !amtErr && !!sdk.data && balancesReady;
+  const clusterBlock = prefill.cluster && prefill.cluster !== settings.cluster ? `This plan was built for ${prefill.cluster}; you are on ${settings.cluster}. Switch cluster in Settings — it will not execute here.` : null;
+  const canReview = !clusterBlock && !!publicKey && !rangeErr && !widthErr && !amtErr && !!sdk.data && balancesReady;
 
   type Review = { tx: Transaction; signer: Keypair; feeLamports: number | null; rentLamports: number; position: string; sim: string | null; strategy: StrategyName; minBin: number; maxBin: number; x: BN; y: BN; slippageBps: number; activeId: number };
   const liveKey = planKey({ ...ctxKey, strategy, minBin, maxBin, x: xRaw?.toString(), y: yRaw?.toString() });
@@ -329,6 +332,7 @@ function AddLiquidity({ address, snap, symX, symY, prefill }: { address: string;
           <Field label={`${symY} amount`} inputMode="decimal" value={yAmt} onChange={(e) => setYAmt(e.target.value)} hint={publicKey ? <BalanceHint q={balY} mint={snap.mintY} dec={snap.decY} sym={symY} onMax={(v) => setYAmt(v)} /> : undefined} disabled={onlyAbove} />
           {amtErr && (xAmt || yAmt) && <p role="alert" className="text-sm text-destructive">{amtErr}</p>}
           {publicKey && !balancesReady && <p className="text-xs text-cream/70">{balX.isError || balY.isError ? "Balance check failed — review is disabled until balances can be read." : "Checking balances before review…"}</p>}
+          {clusterBlock && <Notice tone="error" title="Wrong cluster for this plan">{clusterBlock}</Notice>}
           {!publicKey ? <WalletButton /> : <Btn onClick={prepare} disabled={!canReview || preparing}>{preparing ? "Building with SDK…" : "Review transaction"}</Btn>}
           {prepErr && <Notice tone="error" title="Couldn't build the transaction">{prepErr}</Notice>}
         </div>
