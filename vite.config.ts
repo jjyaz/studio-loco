@@ -42,7 +42,7 @@ const mobileWalletServerStub = {
   enforce: "pre" as const,
   resolveId(this: { environment?: { name: string } }, source: string) {
     if (source !== "@solana-mobile/wallet-adapter-mobile") return;
-    if (!this.environment || this.environment.name === "client") return;
+    if (this.environment?.name === "client") return;
     return join(process.cwd(), "src/lib/mobile-wallet-ssr-stub.ts");
   },
 };
