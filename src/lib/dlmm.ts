@@ -48,9 +48,9 @@ export async function poolSupportsLimitOrders(pool: DLMMType): Promise<{ ok: boo
   try {
     const ok = sdk.isSupportLimitOrder(pool.lbPair);
     const ft = poolFunctionType(pool);
-    if (ok) return { ok, reason: ft === 2 ? "Pool is in Limit Order mode." : "Pool mode is Undetermined with no liquidity-mining rewards, which the program treats as limit-order capable." };
-    return { ok, reason: ft === 1 ? "Pool is in Liquidity Mining mode; the program rejects native limit orders here." : "Pool has liquidity-mining reward mints configured, so native limit orders are unavailable." };
+    if (ok) return { ok, reason: ft === 2 ? "This pool accepts native limit orders." : "This pool has no reward programme set up, so it accepts native limit orders." };
+    return { ok, reason: ft === 1 ? "This pool is set up for liquidity rewards, so it doesn't accept native limit orders." : "This pool pays liquidity rewards, so it doesn't accept native limit orders." };
   } catch {
-    return { ok: false, reason: "Unrecognised function mode — orders disabled." };
+    return { ok: false, reason: "We couldn't recognise this pool's type, so orders are turned off to be safe." };
   }
 }
