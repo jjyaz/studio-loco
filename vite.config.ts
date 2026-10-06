@@ -35,6 +35,18 @@ const workerBrowserFallback = {
   },
 };
 
+// The mobile wallet adapter crashes the Worker at import time (util.inherits on undefined).
+// Server builds get a stub; the browser keeps the real package.
+const mobileWalletServerStub = {
+  name: "studio-loco:mobile-wallet-server-stub",
+  enforce: "pre" as const,
+  resolveId(this: { environment?: { name: string } }, source: string) {
+    if (source !== "@solana-mobile/wallet-adapter-mobile") return;
+    if (this.environment?.name === "client") return;
+    return join(process.cwd(), "src/lib/mobile-wallet-ssr-stub.ts");
+  },
+};
+
 export default defineConfig({
   tanstackStart: {
     // Redirect TanStack Start's bundled server entry to src/server.ts (our SSR error wrapper).
@@ -42,8 +54,8 @@ export default defineConfig({
     server: { entry: "server" },
   },
   vite: {
-    plugins: [workerBrowserFallback, anchorBrowserEntry],
-    // Resolve Anchor before the final server bundling stage; never externalize it.
-    ssr: { noExternal: [/^@meteora-ag\/dlmm$/, /^@coral-xyz\/anchor$/] },
+    plugins: [workerBrowserFallback, anchorBrowserEntry, mobileWalletServerStub],
+    // Resolve these before the final server bundling stage; never externalize them.
+    ssr: { noExternal: [/^@solana\/wallet-adapter-react$/, /^@meteora-ag\/dlmm$/, /^@coral-xyz\/anchor$/] },
   },
 });
