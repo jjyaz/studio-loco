@@ -51,8 +51,10 @@ export const Route = createFileRoute("/api/public/rpc/$cluster")({
   server: {
     handlers: {
       POST: async ({ request, params }) => {
-        const upstream = UPSTREAM[params.cluster];
-        if (!upstream) return new Response("Unknown cluster", { status: 404 });
+        if (!UPSTREAM[params.cluster]) return new Response("Unknown cluster", { status: 404 });
+        // Optional server-side upstream (e.g. a keyed provider) — public Solana RPC blocks hosted-Worker IPs.
+        const override = process.env[params.cluster === "mainnet" ? "SOLANA_MAINNET_RPC_URL" : "SOLANA_DEVNET_RPC_URL"];
+        const upstream = override && /^https:\/\//.test(override) ? override : UPSTREAM[params.cluster]!;
         const len = Number(request.headers.get("content-length") ?? "0");
         if (len > RELAY_LIMITS.bodyChars) return new Response("Body too large", { status: 413 });
         const text = await request.text();
@@ -74,6 +76,7 @@ export const Route = createFileRoute("/api/public/rpc/$cluster")({
           return rpcErr(calls[0]?.id, -32003, timeout ? "Public RPC did not respond in time. Retry, or add your own RPC in Settings." : "Public RPC unreachable. Retry, or add your own RPC in Settings.", 504);
         }
         if (res.status === 429) return rpcErr(calls[0]?.id, 429, "Public RPC rate limit reached. Wait a moment, or add your own RPC in Settings.", 429);
+        if (res.status === 403) return rpcErr(calls[0]?.id, 403, "Public Solana RPC refused the hosted relay (403). Add your own RPC in Settings.", 502);
         const out = await res.text();
         if (out.length > RELAY_LIMITS.responseBytes) return rpcErr(calls[0]?.id, -32004, "Upstream response too large for the public relay. Use your own RPC in Settings.", 502);
         return new Response(out, { status: res.status, headers: { "content-type": "application/json", "cache-control": "no-store" } });
