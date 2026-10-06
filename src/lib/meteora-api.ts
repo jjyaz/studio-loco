@@ -163,7 +163,8 @@ const finRec = (r: unknown): Record<string, number> | undefined => {
   return o;
 };
 function normToken(t: unknown): ApiToken | null {
-  const o = t as Record<string, unknown> | null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const o = t as any;
   if (!o || typeof o.address !== "string" || !B58.test(o.address)) return null;
   const dec = fin(o.decimals);
   return {
@@ -177,11 +178,13 @@ function normToken(t: unknown): ApiToken | null {
 }
 /** Validate one live pool row. Invalid addresses drop the row; non-finite numbers become undefined (shown as —). */
 export function normalizePool(raw: unknown): ApiPool | null {
-  const o = raw as Record<string, unknown> | null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const o = raw as any;
   if (!o || typeof o.address !== "string" || !B58.test(o.address)) return null;
   const tx = normToken(o.token_x), ty = normToken(o.token_y);
   if (!tx || !ty) return null;
-  const pc = (o.pool_config ?? {}) as Record<string, unknown>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const pc = (o.pool_config ?? {}) as any;
   return {
     address: o.address,
     name: typeof o.name === "string" ? o.name : undefined,
@@ -229,7 +232,8 @@ export function normalizeCandles(raw: unknown): Candle[] {
   const rows = (raw as { data?: unknown })?.data;
   if (!Array.isArray(rows)) throw new ApiError("Unexpected price-history shape", "parse");
   const out = new Map<number, Candle>();
-  for (const r of rows as Record<string, unknown>[]) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  for (const r of rows as any[]) {
     const t = fin(r?.timestamp), o = fin(r?.open), h = fin(r?.high), l = fin(r?.low), c = fin(r?.close), v = fin(r?.volume);
     if (t === undefined || o === undefined || h === undefined || l === undefined || c === undefined) continue;
     if (o <= 0 || c <= 0 || l <= 0 || h < Math.max(o, c) || l > Math.min(o, c)) continue;
@@ -252,7 +256,8 @@ export interface IndexedPool {
 }
 export interface IndexedPortfolio { pools: IndexedPool[]; totalPositions?: number; fetchedAt: number; pages: number }
 export function normalizeIndexedPool(raw: unknown): IndexedPool | null {
-  const o = raw as Record<string, unknown> | null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const o = raw as any;
   if (!o) return null;
   const s = (k: string) => (typeof o[k] === "string" ? (o[k] as string) : undefined);
   const addr = s("poolAddress"), mx = s("tokenXMint"), my = s("tokenYMint");
@@ -273,7 +278,8 @@ export async function fetchIndexedPortfolio(user: string, signal?: AbortSignal, 
   const pools: IndexedPool[] = [];
   let page = 1, total: number | undefined;
   for (; page <= 10; page++) {
-    const r = await fetchJson<Record<string, unknown>>(`${METEORA_API}/portfolio/open?user=${encodeURIComponent(user)}&page=${page}&page_size=50`, { signal, fetchImpl });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const r = await fetchJson<any>(`${METEORA_API}/portfolio/open?user=${encodeURIComponent(user)}&page=${page}&page_size=50`, { signal, fetchImpl });
     if (!r || !Array.isArray(r.pools)) throw new ApiError("Unexpected portfolio shape", "parse");
     for (const p of r.pools) { const n = normalizeIndexedPool(p); if (n) pools.push(n); }
     total = fin(r.totalPositions);
