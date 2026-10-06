@@ -36,3 +36,8 @@ Not production-ready: no funded wallet has signed any transaction built by this 
 - Root cause: the production client build resolved every `node:buffer` import to Vite's empty `__vite-browser-external` stub; safe-buffer read `undefined.from` while loading, so no page hydrated.
 - Fix: `studio-loco:browser-buffer-package` plugin (client only, first in plugin order) resolves to the npm `buffer` package.
 - Verified on the built Worker (wrangler dev): /app loaded live pools, wallet dialog opened on Enter and closed on Escape, homepage FAQ opened, bin explainer slider responded, no page errors. Hosted image paths 404 locally only (served by hosting).
+
+## Pass 8 — pool detail SDK init (2026-10-06)
+- Root cause 1: `package.json` has `"sideEffects": false`, so the production bundler dropped the side-effect-only `import "./polyfills"`; the SDK then hit `Buffer is not defined`. Fix: exported `installNodeGlobals()` called explicitly before the lazy SDK import; a failed SDK import resets so Retry re-evaluates it.
+- Root cause 2 (exposed once the SDK ran): PublicNode answers 403 "Request blocked" to `getMultipleAccounts` with >10 keys (10 → 200, 11 → 403, verified). The relay splits those into ≤10-key requests (max 100 keys), merged in order; any failed chunk fails the whole call. Default mainnet upstream only.
+- Verified on the built Worker (wrangler dev) in a browser, SOL-USDC 5rCf…HAS6: 80 real bins, active bin −5292 at 120.467 USDC/SOL, bin step 4 bps, SOL 9 decimals / USDC 6, reserves, mode Undetermined; read-only quote 0.1 SOL → 12.036704 USDC, minimum 11.97652, fee 0.000038944 SOL, impact 0.00%. All relay calls 200, no page errors. Not yet verified on the live site.
