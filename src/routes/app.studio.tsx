@@ -8,6 +8,7 @@ import { usePoolSnapshot } from "@/components/app/pool-hooks";
 import { fetchPools } from "@/lib/meteora-api";
 import { pctMoveBetweenBins, uiPriceFromBin } from "@/lib/bins";
 import { fmtNum, fmtPct, isBase58Address, shortAddr } from "@/lib/format";
+import { redactUrls } from "@/lib/format";
 import { useLocalState, useSettings, type Cluster } from "@/lib/settings";
 import { parseUnits } from "@/lib/amount";
 import { MAX_UI_BINS, STRATEGIES, TEMPLATES, DECIMAL_TEXT, decodeShare, distribute, loadStoredRoutes, encodeShare, exportRoutes, importRoutes, type SavedRoute, type StrategyName } from "@/lib/strategy";
@@ -112,7 +113,7 @@ function Studio() {
               ))}
             </ul>
           )}
-          {results.isError && <p className="mt-2 text-xs text-destructive">Search failed: {(results.error as Error).message}</p>}
+          {results.isError && <p className="mt-2 text-xs text-destructive">Search failed: {redactUrls(String(((results.error) as Error)?.message ?? ""))}</p>}
           <p className="mt-2 station-code text-cream/70">Selected: {pool ? `${poolName || "Pool"} · ${shortAddr(pool)}` : "none"}{live ? ` · active #${live.activeId} · ${live.binStep} bps` : pool && snap.isError ? " · onchain read failed" : ""}</p>
 
           <h2 className="mt-6 station-code text-amber">Plan cluster</h2>

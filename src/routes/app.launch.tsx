@@ -13,6 +13,7 @@ import { fetchMint, type MintInfo } from "@/lib/chain";
 import { baseFeePct, uiPriceFromBin } from "@/lib/bins";
 import { loadSdk } from "@/lib/dlmm";
 import { fmtNum, shortAddr } from "@/lib/format";
+import { redactUrls } from "@/lib/format";
 import { useSettings } from "@/lib/settings";
 import { cn } from "@/lib/utils";
 
@@ -128,7 +129,7 @@ function Launch() {
 
           <h2 className="mt-6 station-code text-amber">2 · Preset (PresetParameter2, onchain)</h2>
           {presets.isPending && <Spinner label="Fetching presets" />}
-          {presets.isError && <Notice tone="error" title="Couldn't fetch presets" action={<Btn size="sm" onClick={() => presets.refetch()}>Retry</Btn>}>{(presets.error as Error).message}. This uses getProgramAccounts; a dedicated RPC may be required.</Notice>}
+          {presets.isError && <Notice tone="error" title="Couldn't fetch presets" action={<Btn size="sm" onClick={() => presets.refetch()}>Retry</Btn>}>{redactUrls(String(((presets.error) as Error)?.message ?? ""))}. This uses getProgramAccounts; a dedicated RPC may be required.</Notice>}
           {presets.data && (
             <div className="mt-3 max-h-64 overflow-auto border border-line">
               {presets.data.map((p) => (

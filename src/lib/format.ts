@@ -47,3 +47,8 @@ export function explorerAccount(addr: string, cluster: "mainnet-beta" | "devnet"
 }
 
 export const isBase58Address = (s: string) => /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(s.trim());
+
+/** Strip URLs (custom RPC endpoints can embed API keys) from text shown to users. */
+export function redactUrls(s: string): string {
+  return s.replace(/\b(?:https?|wss?):\/\/[^\s"'<>)]+/gi, "[RPC endpoint]");
+}

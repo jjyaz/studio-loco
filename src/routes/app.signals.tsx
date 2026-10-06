@@ -11,6 +11,7 @@ import { fetchPools, v24 } from "@/lib/meteora-api";
 import { formatUnits } from "@/lib/amount";
 import { getPool, invalidatePool } from "@/lib/dlmm";
 import { fmtPct, fmtUsd, shortAddr, timeAgo } from "@/lib/format";
+import { redactUrls } from "@/lib/format";
 import { useLocalState, useSettings } from "@/lib/settings";
 import { cn } from "@/lib/utils";
 import { MAX_UI_BINS } from "@/lib/strategy";
@@ -51,7 +52,7 @@ function Watch() {
   const [plan, setPlan] = useState<PositionRow | null>(null);
   if (!publicKey) return <Panel><p className="mb-4 text-cream/80">Connect a wallet to watch your positions.</p><WalletButton /></Panel>;
   if (q.isPending) return <Spinner label="Reading positions" />;
-  if (q.isError) return <Notice tone="error" title="Couldn't read positions" action={<Btn size="sm" onClick={() => q.refetch()}>Retry</Btn>}>{(q.error as Error).message}. A dedicated RPC is usually required.</Notice>;
+  if (q.isError) return <Notice tone="error" title="Couldn't read positions" action={<Btn size="sm" onClick={() => q.refetch()}>Retry</Btn>}>{redactUrls(String(((q.error) as Error)?.message ?? ""))}. A dedicated RPC is usually required.</Notice>;
   if (!q.data.length) return <Panel><p>No positions to watch. <Link className="underline" to="/app">Open a pool</Link>.</p></Panel>;
   return (
     <div className="flex flex-col gap-4">
@@ -169,7 +170,7 @@ export function skyOf(dynamicPct: number, basePct: number): "Storm" | "Breezy" |
 function Weather() {
   const q = useQuery({ queryKey: ["weather"], queryFn: ({ signal }) => fetchPools({ page: 1, pageSize: 24, sort: "volume_24h", dir: "desc", hideBlacklisted: true }, signal), refetchInterval: 60_000, retry: false });
   if (q.isPending) return <Spinner label="Reading the sky" />;
-  if (q.isError) return <Notice tone="error" title="Fee Weather unavailable" action={<Btn size="sm" onClick={() => q.refetch()}>Retry</Btn>}>{(q.error as Error).message}</Notice>;
+  if (q.isError) return <Notice tone="error" title="Fee Weather unavailable" action={<Btn size="sm" onClick={() => q.refetch()}>Retry</Btn>}>{redactUrls(String(((q.error) as Error)?.message ?? ""))}</Notice>;
   return (
     <div>
       <p className="mb-4 max-w-3xl text-sm text-cream/80">Current readings for the 24 busiest pools by 24h volume. A dynamic fee above zero means recent volatility pushed the variable fee up. These are observations, not forecasts. <span className="station-code text-cream/60">Updated {timeAgo(q.dataUpdatedAt)}</span></p>

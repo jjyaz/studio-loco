@@ -1,5 +1,6 @@
 import type { Connection, Signer, Transaction, TransactionSignature, SendOptions } from "@solana/web3.js";
 import bs58 from "bs58";
+import { redactUrls } from "./format";
 
 /**
  * Transaction runner. Every wallet action (swap, liquidity, claim, withdraw, close,
@@ -72,7 +73,7 @@ export class TxError extends Error {
     public signature?: string,
     public pending?: PendingTx,
   ) {
-    super(message);
+    super(redactUrls(message));
   }
 }
 

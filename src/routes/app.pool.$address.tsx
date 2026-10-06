@@ -15,6 +15,7 @@ import { fetchPool, v24 } from "@/lib/meteora-api";
 import { formatUnits, parseUnits } from "@/lib/amount";
 import { uiPriceFromBin, binFromUiPrice, pctMoveBetweenBins } from "@/lib/bins";
 import { DASH, explorerAccount, fmtNum, fmtPct, fmtUsd, isBase58Address, shortAddr, timeAgo } from "@/lib/format";
+import { redactUrls } from "@/lib/format";
 import { MAX_UI_BINS, STRATEGIES, STRATEGY_TYPE_VALUE, distribute, type StrategyName } from "@/lib/strategy";
 import { useSettings, useStars } from "@/lib/settings";
 import { loadSdk, poolSupportsLimitOrders } from "@/lib/dlmm";
@@ -102,7 +103,7 @@ function PoolPage() {
 
       {(sdk.isError || snap.isError) && (
         <Notice tone="error" title="Couldn't read this pool from your RPC" action={<Btn size="sm" onClick={() => { sdk.refetch(); snap.refetch(); }}>Retry</Btn>}>
-          {((sdk.error ?? snap.error) as Error)?.message}. Check the cluster and RPC endpoint in Settings. The public RPC is rate-limited.
+          {redactUrls(String(((sdk.error ?? snap.error) as Error)?.message ?? ""))}. Check the cluster and RPC endpoint in Settings. The public RPC is rate-limited.
         </Notice>
       )}
 
@@ -131,7 +132,7 @@ function Overview({ address, api, snap, snapLoading, symX, symY, updatedAt, clus
       <div className="flex flex-col gap-6">
         <Panel tone="cobalt">
           <h2 className="station-code text-amber">Market · Meteora API</h2>
-          {api.isError && <p className="mt-2 text-sm text-destructive">API data unavailable: {(api.error as Error).message}</p>}
+          {api.isError && <p className="mt-2 text-sm text-destructive">API data unavailable: {redactUrls(String(((api.error) as Error)?.message ?? ""))}</p>}
           {!api.isEnabled && <p className="mt-2 text-sm text-cream/70">API metrics are mainnet-only.</p>}
           <div className="mt-4 grid grid-cols-2 gap-5">
             <Stat label="TVL" value={fmtUsd(p?.tvl)} />
@@ -673,7 +674,7 @@ function Orders({ address, snap, symX, symY }: { address: string; snap: PoolSnap
           <div className="flex items-center justify-between"><h3 className="station-code text-amber">Your orders in this pool</h3>{orders.data && <Btn size="sm" variant="line" onClick={() => orders.refetch()}>Refresh</Btn>}</div>
           {!publicKey && <p className="mt-3 text-sm text-cream/70">Connect a wallet to read your orders.</p>}
           {publicKey && support.data?.ok && orders.isPending && <Spinner label="Reading orders (getProgramAccounts)" />}
-          {orders.isError && <Notice tone="error" title="Couldn't read orders" action={<Btn size="sm" onClick={() => orders.refetch()}>Retry</Btn>}>{(orders.error as Error).message}. This needs getProgramAccounts; a dedicated RPC may be required.</Notice>}
+          {orders.isError && <Notice tone="error" title="Couldn't read orders" action={<Btn size="sm" onClick={() => orders.refetch()}>Retry</Btn>}>{redactUrls(String(((orders.error) as Error)?.message ?? ""))}. This needs getProgramAccounts; a dedicated RPC may be required.</Notice>}
           {orders.data && orders.data.length === 0 && <p className="mt-3 text-sm text-cream/70">No limit orders for this wallet in this pool.</p>}
           {orders.data?.map((o) => {
             const d = o.limitOrderData;
