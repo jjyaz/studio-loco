@@ -5,6 +5,7 @@ import { Link } from "@tanstack/react-router";
 import { useState, type ReactNode } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Wordmark } from "@/components/site/Wordmark";
+import { CaButton } from "@/components/site/CaButton";
 import { WalletButton } from "@/components/wallet/WalletButton";
 import { Btn, Field, Segmented } from "@/components/kit";
 import { DEFAULT_RPC, SLIPPAGE_PRESETS, useSettings, validateRpc, type Cluster } from "@/lib/settings";
@@ -84,6 +85,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <span className="station-code hidden border border-line px-2 py-1 text-cream/75 sm:inline">{settings.cluster === "devnet" ? "Devnet" : "Mainnet"}</span>
           </div>
           <div className="flex items-center gap-2">
+            <CaButton compact />
             <Btn size="sm" variant="line" onClick={() => setOpen(true)} aria-label="Open settings">Settings</Btn>
             <WalletButton compact />
           </div>
