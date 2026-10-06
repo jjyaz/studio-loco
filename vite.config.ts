@@ -14,10 +14,12 @@ const anchorBrowserEntry = {
   name: "studio-loco:anchor-browser-entry",
   enforce: "pre" as const,
   resolveId(source: string, importer?: string) {
-    if (source !== "@coral-xyz/anchor") return;
+    if (source !== "@coral-xyz/anchor" && source !== "@coral-xyz/anchor/dist/cjs/utils/bytes") return;
     const require = createRequire(importer?.split("?")[0] ?? import.meta.url);
     const packagePath = require.resolve("@coral-xyz/anchor/package.json");
-    return join(dirname(packagePath), "dist/browser/index.js");
+    return join(dirname(packagePath), source === "@coral-xyz/anchor"
+      ? "dist/browser/index.js"
+      : "dist/esm/utils/bytes/index.js");
   },
 };
 
