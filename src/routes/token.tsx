@@ -6,10 +6,12 @@ import { useLocalState } from "@/lib/settings";
 export const Route = createFileRoute("/token")({
   head: () => ({
     meta: [
-      { title: "LOCO token status — Studio Loco" },
-      { name: "description", content: "LOCO has not been deployed. There is no mint, no sale and no tokenomics. Includes a clearly labelled planning worksheet." },
-      { property: "og:title", content: "LOCO: not deployed" },
-      { property: "og:description", content: "No LOCO mint or sale exists. Beware of impostors." },
+      { title: "LOCO planning worksheet — Studio Loco" },
+      { name: "description", content: "A local planning worksheet for exploring hypothetical allocations, not an official distribution or commitment." },
+      { property: "og:title", content: "LOCO planning worksheet — Studio Loco" },
+      { property: "og:description", content: "Explore hypothetical allocations in a clearly labelled local planning worksheet." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
     ],
   }),
   component: Token,
@@ -23,15 +25,8 @@ function Token() {
   const total = rows.reduce((a, r) => a + (Number.isFinite(r.pct) ? r.pct : 0), 0);
   return (
     <SiteLayout>
-      <PageHead code="LOCO · Status" title="LOCO does not exist." intro="No LOCO mint has been deployed. No public sale, airdrop or allocation is configured. Any token claiming to be LOCO is not from Studio Loco." cap={["not-deployed"]} />
-      <Panel tone="cobalt">
-        <dl className="grid gap-4 sm:grid-cols-4">
-          {[["Mint address", "None"], ["Supply", "None"], ["Sale", "Not configured"], ["Governance rights", "None"]].map(([k, v]) => (
-            <div key={k} className="border-l border-line pl-3"><dt className="station-code text-cream/65">{k}</dt><dd className="mt-1 font-mono text-lg">{v}</dd></div>
-          ))}
-        </dl>
-      </Panel>
-      <Panel className="mt-8">
+      <PageHead code="LOCO · Worksheet" title="LOCO planning worksheet." intro="Explore hypothetical allocations. This worksheet is not an official distribution or commitment." cap={["simulation"]} />
+      <Panel>
         <div className="flex flex-wrap items-center justify-between gap-2"><h2 className="display text-2xl">Planning worksheet</h2><span className="station-code border border-amber px-2 py-1 text-amber">Proposal · not a commitment</span></div>
         <p className="mt-2 text-sm text-cream/75">A private scratchpad stored in your browser for thinking through a hypothetical distribution. It does not represent any plan by Studio Loco.</p>
         <table className="mt-4 w-full text-sm">

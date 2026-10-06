@@ -1,5 +1,7 @@
 # Roadmap
 
+- [x] Remove “no LOCO token” statements across site copy and metadata, preserving simulation labels and avoiding unverified claims.
+
 - [x] Check existing project secret names (names only) — no Helius/RPC secret exists
 - [x] Verify PublicNode mainnet (genesis hash, getSlot, DLMM reads) — all passed; wired as default mainnet upstream, SOLANA_MAINNET_RPC_URL override kept higher priority
 - [x] Devnet unchanged (public Solana endpoint; custom RPC fallback); relay allowlist/limits/no-secret-logs preserved

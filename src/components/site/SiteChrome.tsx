@@ -58,7 +58,7 @@ export function SiteNav({ overlay = false }: { overlay?: boolean }) {
 export function Footer() {
   const cols: { title: string; links: { to: string; label: string; hash?: string }[] }[] = [
     { title: "Product", links: [{ to: "/app", label: "Liquidity Terminal" }, { to: "/app/studio", label: "Strategy Studio" }, { to: "/app/signals", label: "Signal Box" }, { to: "/app/launch", label: "Launch Station" }] },
-    { title: "World", links: [{ to: "/lab", label: "Coordination Lab" }, { to: "/governance", label: "Decision Room" }, { to: "/token", label: "LOCO status" }, { to: "/journal", label: "Field Notes" }] },
+    { title: "World", links: [{ to: "/lab", label: "Coordination Lab" }, { to: "/governance", label: "Decision Room" }, { to: "/token", label: "LOCO worksheet" }, { to: "/journal", label: "Field Notes" }] },
     { title: "Help", links: [{ to: "/docs", label: "Docs" }, { to: "/network", label: "Status" }, { to: "/docs", hash: "risk", label: "Risk information" }, { to: "/docs", hash: "privacy", label: "Privacy distinction" }] },
   ];
   return (
@@ -67,7 +67,7 @@ export function Footer() {
         <div>
           <Wordmark size="md" />
           <p className="mt-4 max-w-sm text-sm text-cream/70">
-            An independent interface for Meteora DLMM on Solana, with an educational coordination lab. Not affiliated with Meteora. No LOCO token exists.
+            An independent interface for Meteora DLMM on Solana, with an educational coordination lab. Not affiliated with Meteora.
           </p>
           <p className="mt-4 station-code text-cream/50">DLMM program LBUZKhRx…Pwxo</p>
         </div>

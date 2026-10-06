@@ -212,7 +212,6 @@ function BinExplainer() {
 
 const FAQ = [
   { q: "Is Studio Loco a DEX?", a: "No. It is an independent interface to Meteora DLMM pools on Solana. Trades and liquidity go directly to Meteora's onchain program from your wallet." },
-  { q: "Is there a LOCO token?", a: "No. LOCO has not been deployed and no sale is configured. Anyone offering LOCO is not us." },
   { q: "Does Meteora make my trades private?", a: "No. DLMM is public infrastructure. The Coordination Lab is a local educational simulation and does not provide privacy guarantees." },
   { q: "Do you hold my funds or keys?", a: "Never. There is no custodial backend. Your wallet signs every transaction after we simulate it." },
   { q: "What if data fails to load?", a: "You'll see an explicit error and a retry button. We never swap in fake markets; Practice mode is a separate, opt-in switch." },
