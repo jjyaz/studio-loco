@@ -1,7 +1,8 @@
 # Roadmap
 
-- [ ] Check existing project secret names (names only) for a usable Helius/RPC secret
-- [ ] Verify PublicNode mainnet (genesis hash, getSlot, DLMM reads); wire as default mainnet upstream if good, keeping SOLANA_MAINNET_RPC_URL override higher priority
-- [ ] Keep devnet honest/custom-RPC-only; preserve relay allowlist, limits, no-secret-logs
-- [ ] Update docs with actual provider results
-- [ ] Typecheck, tests, build; report SHA and relay results
+- [x] Check existing project secret names (names only) — no Helius/RPC secret exists
+- [x] Verify PublicNode mainnet (genesis hash, getSlot, DLMM reads) — all passed; wired as default mainnet upstream, SOLANA_MAINNET_RPC_URL override kept higher priority
+- [x] Devnet unchanged (public Solana endpoint; custom RPC fallback); relay allowlist/limits/no-secret-logs preserved
+- [x] Docs updated (RESEARCH.md, RELEASE_CHECKLIST.md, AGENTS.md)
+- [x] Typecheck, 64/64 tests, build all exit 0 — SHA 1b0ba323b6e804c68af37fd2778c97966d6663d0
+- [ ] User: publish, then verify deployed relay + pool bins/quotes
