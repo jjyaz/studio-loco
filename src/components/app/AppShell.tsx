@@ -1,3 +1,4 @@
+import { PendingTxList } from "./useTx";
 import { Link } from "@tanstack/react-router";
 import { useState, type ReactNode } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
@@ -105,7 +106,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <button type="button" className="underline" onClick={() => update({ practice: false })}>Return to live data</button>
         </div>
       )}
-      <main id="app-main" className="mx-auto w-full max-w-[1500px] flex-1 px-4 py-8 md:px-8">{children}</main>
+      <main id="app-main" className="mx-auto w-full max-w-[1500px] flex-1 px-4 py-8 md:px-8"><PendingTxList />{children}</main>
       <footer className="border-t border-line px-4 py-5 text-center text-xs text-cream/55">
         Independent interface for Meteora DLMM · <Link to="/docs" hash="risk" className="underline">Risk information</Link> · <Link to="/network" className="underline">Status</Link> · <Link to="/docs" className="underline">Docs</Link>
       </footer>

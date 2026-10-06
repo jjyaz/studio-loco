@@ -1,12 +1,19 @@
 import type { Connection, Signer, Transaction, TransactionSignature, SendOptions } from "@solana/web3.js";
+import bs58 from "bs58";
 
 /**
- * Transaction runner. Every wallet action goes through here:
- *  1. fresh blockhash + lastValidBlockHeight
- *  2. RPC simulation — a failing simulation never reaches the wallet
- *  3. wallet signs + sends (non-custodial; optional ephemeral signers are in-memory only)
- *  4. confirmation against blockhash / lastValidBlockHeight
- * Success is reported ONLY after confirmation without error.
+ * Transaction runner. Every wallet action (swap, liquidity, claim, withdraw, close,
+ * pool creation, limit orders) goes through here:
+ *  1. fresh blockhash + lastValidBlockHeight, fee payer fixed
+ *  2. the EXACT compiled message is simulated as a VersionedTransaction
+ *     (sigVerify:false, replaceRecentBlockhash:false). The legacy
+ *     `simulateTransaction(Transaction)` overload swaps in its own blockhash, so it is never used.
+ *  3. ephemeral signers partial-sign (memory only), wallet signs; when the wallet exposes
+ *     signTransaction we verify the signed message bytes equal the simulated bytes, then broadcast.
+ *  4. a public "pending" record (signature, blockhash, last-valid height, cluster, wallet) is stored
+ *     before broadcast so reloads keep unresolved signatures.
+ *  5. bounded confirmation. Outcomes: confirmed | failed (definitive) | expired (proven) | unknown.
+ * Success is reported ONLY after confirmation without error. Nothing is ever resent automatically.
  */
 export type TxPhase =
   | "idle"
@@ -18,7 +25,23 @@ export type TxPhase =
   | "confirmed"
   | "failed"
   | "rejected"
+  | "expired"
+  | "unknown"
   | "skipped";
+
+export const TERMINAL_PHASES: TxPhase[] = ["confirmed", "failed", "rejected", "expired", "unknown", "skipped"];
+
+export interface PendingTx {
+  signature: string;
+  blockhash: string;
+  lastValidBlockHeight: number;
+  cluster: string;
+  /** "relay" or "custom" — never the URL (custom RPC URLs can embed API keys) */
+  rpc: "relay" | "custom" | "public";
+  wallet: string;
+  label: string;
+  createdAt: number;
+}
 
 export interface TxStep {
   label: string;
@@ -26,33 +49,108 @@ export interface TxStep {
   signature?: string;
   error?: string;
   logs?: string[];
+  pending?: PendingTx;
 }
 
 export interface WalletSender {
   publicKey: { toBase58(): string } | null;
   sendTransaction: (tx: Transaction, connection: Connection, options?: SendOptions & { signers?: Signer[] }) => Promise<TransactionSignature>;
+  signTransaction?: (tx: Transaction) => Promise<Transaction>;
+}
+
+export interface TxContext {
+  cluster: string;
+  rpc: PendingTx["rpc"];
+  store?: PendingStore;
 }
 
 export class TxError extends Error {
-  constructor(message: string, public phase: "simulating" | "rejected" | "sending" | "confirming", public logs?: string[], public signature?: string) {
+  constructor(
+    message: string,
+    public phase: "simulating" | "rejected" | "sending" | "failed" | "expired" | "unknown",
+    public logs?: string[],
+    public signature?: string,
+    public pending?: PendingTx,
+  ) {
     super(message);
   }
 }
 
-function isUserRejection(e: unknown): boolean {
-  const m = e instanceof Error ? `${e.name} ${e.message}` : String(e);
-  return /reject|denied|cancel|declined|WalletSignTransactionError/i.test(m);
+/** Only explicit user rejections count — WalletSignTransactionError also wraps real wallet failures. */
+export function isUserRejection(e: unknown): boolean {
+  const err = e as { code?: unknown; error?: { code?: unknown; message?: unknown }; message?: unknown };
+  if (err?.code === 4001 || err?.error?.code === 4001) return true;
+  const m = [err?.message, err?.error?.message].filter((x) => typeof x === "string").join(" ");
+  return /user rejected|rejected the request|request rejected|user denied|denied by user|user declined|declined by user|user cancel+ed|approval denied/i.test(m);
 }
+
+/* ---------------- pending store (public metadata only) ---------------- */
+
+export interface PendingStore {
+  list(): PendingTx[];
+  put(p: PendingTx): void;
+  remove(signature: string): void;
+}
+
+const PENDING_KEY = "studio-loco:pending-tx:v1";
+
+export const browserPendingStore: PendingStore = {
+  list() {
+    if (typeof window === "undefined") return [];
+    try {
+      const v = JSON.parse(localStorage.getItem(PENDING_KEY) ?? "[]") as unknown;
+      return Array.isArray(v) ? (v as PendingTx[]).filter((p) => typeof p?.signature === "string").slice(0, 50) : [];
+    } catch {
+      return [];
+    }
+  },
+  put(p) {
+    if (typeof window === "undefined") return;
+    const all = browserPendingStore.list().filter((x) => x.signature !== p.signature);
+    localStorage.setItem(PENDING_KEY, JSON.stringify([p, ...all].slice(0, 50)));
+    window.dispatchEvent(new Event("studio-loco:pending"));
+  },
+  remove(sig) {
+    if (typeof window === "undefined") return;
+    localStorage.setItem(PENDING_KEY, JSON.stringify(browserPendingStore.list().filter((x) => x.signature !== sig)));
+    window.dispatchEvent(new Event("studio-loco:pending"));
+  },
+};
+
+export function memoryPendingStore(): PendingStore {
+  let items: PendingTx[] = [];
+  return {
+    list: () => items,
+    put: (p) => { items = [p, ...items.filter((x) => x.signature !== p.signature)]; },
+    remove: (s) => { items = items.filter((x) => x.signature !== s); },
+  };
+}
+
+/* ---------------- simulation of the exact message ---------------- */
+
+export async function simulateExact(connection: Connection, messageBytes: Uint8Array) {
+  const { VersionedMessage, VersionedTransaction } = await import("@solana/web3.js");
+  const vtx = new VersionedTransaction(VersionedMessage.deserialize(messageBytes));
+  return connection.simulateTransaction(vtx, { sigVerify: false, replaceRecentBlockhash: false, commitment: "confirmed" });
+}
+
+const sameBytes = (a: Uint8Array, b: Uint8Array) => a.length === b.length && a.every((v, i) => v === b[i]);
+
+/* ---------------- run one transaction ---------------- */
 
 export async function runTransaction(opts: {
   connection: Connection;
   wallet: WalletSender;
   tx: Transaction;
   signers?: Signer[];
-  onPhase?: (p: TxPhase, info?: { signature?: string }) => void;
+  ctx?: TxContext;
+  label?: string;
+  onPhase?: (p: TxPhase, info?: { signature?: string; pending?: PendingTx }) => void;
   pollMs?: number;
+  maxWaitMs?: number;
 }): Promise<{ signature: string; slot?: number }> {
-  const { connection, wallet, tx, signers = [], onPhase, pollMs = 2000 } = opts;
+  const { connection, wallet, tx, signers = [], onPhase, pollMs = 2000, maxWaitMs = 90_000 } = opts;
+  const ctx: TxContext = opts.ctx ?? { cluster: "unknown", rpc: "public" };
   if (!wallet.publicKey) throw new TxError("Wallet not connected", "rejected");
   onPhase?.("preparing");
   const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash("confirmed");
@@ -60,60 +158,153 @@ export async function runTransaction(opts: {
   tx.lastValidBlockHeight = lastValidBlockHeight;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   tx.feePayer = wallet.publicKey as any;
+  const messageBytes = new Uint8Array(tx.serializeMessage());
 
   onPhase?.("simulating");
-  const sim = await connection.simulateTransaction(tx);
+  const sim = await simulateExact(connection, messageBytes);
   if (sim.value.err) {
     throw new TxError(`Simulation failed: ${JSON.stringify(sim.value.err)}`, "simulating", sim.value.logs ?? undefined);
   }
 
   onPhase?.("awaiting-signature");
+  if (signers.length) tx.partialSign(...signers);
   let signature: string;
-  try {
-    signature = await wallet.sendTransaction(tx, connection, { signers, preflightCommitment: "confirmed", maxRetries: 3 });
-  } catch (e) {
-    if (isUserRejection(e)) throw new TxError("You declined the request in your wallet", "rejected");
-    throw new TxError(e instanceof Error ? e.message : "Wallet failed to send", "sending");
+  let pending: PendingTx | undefined;
+  const mkPending = (sig: string): PendingTx => ({
+    signature: sig, blockhash, lastValidBlockHeight, cluster: ctx.cluster, rpc: ctx.rpc,
+    wallet: wallet.publicKey!.toBase58(), label: opts.label ?? "Transaction", createdAt: Date.now(),
+  });
+
+  if (wallet.signTransaction) {
+    let signed: Transaction;
+    try {
+      signed = await wallet.signTransaction(tx);
+    } catch (e) {
+      if (isUserRejection(e)) throw new TxError("You declined the request in your wallet", "rejected");
+      throw new TxError(`Wallet could not sign: ${e instanceof Error ? e.message : String(e)}`, "sending");
+    }
+    if (!sameBytes(new Uint8Array(signed.serializeMessage()), messageBytes)) {
+      throw new TxError("Your wallet changed the transaction after simulation, so it was not sent. Review again.", "sending");
+    }
+    const sigBytes = signed.signature;
+    if (!sigBytes) throw new TxError("Wallet returned an unsigned transaction", "sending");
+    signature = bs58.encode(sigBytes);
+    pending = mkPending(signature);
+    ctx.store?.put(pending);
+    onPhase?.("sending", { signature, pending });
+    try {
+      await connection.sendRawTransaction(signed.serialize(), { skipPreflight: false, preflightCommitment: "confirmed", maxRetries: 3 });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      const logs = (e as { logs?: string[] })?.logs;
+      // A preflight rejection is definitive (the RPC refused it). Transport errors are not.
+      if (!/already been processed/i.test(msg) && /Transaction simulation failed|preflight|Blockhash not found/i.test(msg)) {
+        ctx.store?.remove(signature);
+        throw new TxError(`RPC rejected the transaction: ${msg}`, "failed", logs, signature);
+      }
+      // Unknown: it may or may not have reached the cluster. Fall through to status checks.
+    }
+  } else {
+    onPhase?.("sending");
+    try {
+      signature = await wallet.sendTransaction(tx, connection, { preflightCommitment: "confirmed", maxRetries: 3 });
+    } catch (e) {
+      if (isUserRejection(e)) throw new TxError("You declined the request in your wallet", "rejected");
+      throw new TxError(e instanceof Error ? e.message : "Wallet failed to send", "sending");
+    }
+    pending = mkPending(signature);
+    ctx.store?.put(pending);
   }
-  onPhase?.("confirming", { signature });
-  const conf = await confirmByPolling(connection, signature, lastValidBlockHeight, pollMs);
+
+  onPhase?.("confirming", { signature, pending });
+  const conf = await confirmByPolling(connection, signature, lastValidBlockHeight, { pollMs, maxWaitMs });
+  if (conf.kind === "unknown") {
+    throw new TxError(`Settlement unknown: ${conf.reason}. Do not resend — use “Check status”.`, "unknown", undefined, signature, pending);
+  }
+  ctx.store?.remove(signature);
+  if (conf.kind === "expired") {
+    throw new TxError("Blockhash expired and the signature is not in cluster history: the transaction did not land. It is safe to rebuild and retry.", "expired", undefined, signature);
+  }
   if (conf.err) {
-    throw new TxError(`Transaction failed onchain: ${JSON.stringify(conf.err)}`, "confirming", undefined, signature);
+    throw new TxError(`Transaction failed onchain: ${JSON.stringify(conf.err)}`, "failed", undefined, signature);
   }
   onPhase?.("confirmed", { signature });
   return { signature, slot: conf.slot };
 }
 
-/**
- * Confirmation without websockets: poll signature status until confirmed/finalized,
- * or fail once the chain passes lastValidBlockHeight (blockhash expired).
- */
-export async function confirmByPolling(connection: Connection, signature: string, lastValidBlockHeight: number, pollMs = 2000): Promise<{ err: unknown; slot?: number }> {
-  for (;;) {
-    const st = await connection.getSignatureStatuses([signature], { searchTransactionHistory: false }).catch(() => null);
-    const v = st?.value[0];
-    if (v && (v.confirmationStatus === "confirmed" || v.confirmationStatus === "finalized")) return { err: v.err, slot: v.slot };
-    if (v?.err) return { err: v.err, slot: v.slot };
-    const height = await connection.getBlockHeight("confirmed").catch(() => null);
-    if (height !== null && height > lastValidBlockHeight) {
-      const last = await connection.getSignatureStatuses([signature], { searchTransactionHistory: true }).catch(() => null);
-      const lv = last?.value[0];
-      if (lv && (lv.confirmationStatus === "confirmed" || lv.confirmationStatus === "finalized")) return { err: lv.err, slot: lv.slot };
-      throw new TxError("Blockhash expired before confirmation. The transaction did not land; it is safe to retry.", "confirming", undefined, signature);
+/* ---------------- confirmation ---------------- */
+
+export type Settlement =
+  | { kind: "confirmed"; err: unknown; slot?: number }
+  | { kind: "expired" }
+  | { kind: "unknown"; reason: string };
+
+/** One reconciliation pass. "expired" requires a successful history search AND height past expiry. */
+export async function checkSignature(connection: Connection, signature: string, lastValidBlockHeight: number): Promise<Settlement | { kind: "pending" }> {
+  let st;
+  try {
+    st = await connection.getSignatureStatuses([signature], { searchTransactionHistory: true });
+  } catch (e) {
+    return { kind: "unknown", reason: `status lookup failed (${e instanceof Error ? e.message.slice(0, 80) : "RPC error"})` };
+  }
+  const v = st?.value?.[0];
+  if (v && (v.confirmationStatus === "confirmed" || v.confirmationStatus === "finalized")) return { kind: "confirmed", err: v.err, slot: v.slot };
+  if (v?.err) return { kind: "confirmed", err: v.err, slot: v.slot };
+  if (v) return { kind: "pending" }; // processed only
+  let height: number;
+  try {
+    height = await connection.getBlockHeight("confirmed");
+  } catch {
+    return { kind: "unknown", reason: "block height lookup failed" };
+  }
+  if (height > lastValidBlockHeight) {
+    // Re-check history once more after observing expiry to avoid a race with late confirmation.
+    try {
+      const again = await connection.getSignatureStatuses([signature], { searchTransactionHistory: true });
+      const a = again?.value?.[0];
+      if (a && (a.confirmationStatus === "confirmed" || a.confirmationStatus === "finalized" || a.err)) return { kind: "confirmed", err: a.err, slot: a.slot };
+      if (a) return { kind: "pending" };
+      return { kind: "expired" };
+    } catch {
+      return { kind: "unknown", reason: "final history lookup failed after expiry" };
     }
-    await new Promise((r) => setTimeout(r, pollMs));
+  }
+  return { kind: "pending" };
+}
+
+/** Bounded polling. Never loops forever; RPC outages become "unknown", not "expired". */
+export async function confirmByPolling(
+  connection: Connection,
+  signature: string,
+  lastValidBlockHeight: number,
+  o: { pollMs?: number; maxWaitMs?: number } = {},
+): Promise<Settlement> {
+  const pollMs = o.pollMs ?? 2000;
+  const deadline = Date.now() + (o.maxWaitMs ?? 90_000);
+  let lastReason = "confirmation window elapsed";
+  for (;;) {
+    const r = await checkSignature(connection, signature, lastValidBlockHeight);
+    if (r.kind === "confirmed" || r.kind === "expired") return r;
+    if (r.kind === "unknown") lastReason = r.reason;
+    if (Date.now() >= deadline) return { kind: "unknown", reason: r.kind === "pending" ? "not confirmed within the confirmation window" : lastReason };
+    await new Promise((res) => setTimeout(res, pollMs));
   }
 }
 
+/* ---------------- sequences ---------------- */
+
 /**
- * Sequential multi-transaction execution. Stops at the first failure and
- * reports which steps confirmed, failed, or were skipped (partial success is explicit).
+ * Sequential multi-transaction execution. Stops at the first non-confirmed step
+ * (including unknown settlement) and reports confirmed / failed / unknown / skipped explicitly.
  */
 export async function runSequence(opts: {
   connection: Connection;
   wallet: WalletSender;
   steps: { label: string; tx: Transaction; signers?: Signer[] }[];
   onUpdate: (steps: TxStep[]) => void;
+  ctx?: TxContext;
+  pollMs?: number;
+  maxWaitMs?: number;
 }): Promise<TxStep[]> {
   const state: TxStep[] = opts.steps.map((s) => ({ label: s.label, phase: "idle" }));
   const emit = () => opts.onUpdate(state.map((s) => ({ ...s })));
@@ -127,21 +318,28 @@ export async function runSequence(opts: {
         wallet: opts.wallet,
         tx: step.tx,
         signers: step.signers,
+        ctx: opts.ctx,
+        label: step.label,
+        pollMs: opts.pollMs,
+        maxWaitMs: opts.maxWaitMs,
         onPhase: (p, info) => {
           cur.phase = p;
           if (info?.signature) cur.signature = info.signature;
+          if (info?.pending) cur.pending = info.pending;
           emit();
         },
       });
       cur.signature = signature;
       cur.phase = "confirmed";
+      cur.pending = undefined;
       emit();
     } catch (e) {
       const te = e instanceof TxError ? e : null;
-      cur.phase = te?.phase === "rejected" ? "rejected" : "failed";
+      cur.phase = te?.phase === "rejected" ? "rejected" : te?.phase === "unknown" ? "unknown" : te?.phase === "expired" ? "expired" : "failed";
       cur.error = e instanceof Error ? e.message : String(e);
       cur.logs = te?.logs;
       if (te?.signature) cur.signature = te.signature;
+      cur.pending = te?.phase === "unknown" ? te.pending : undefined;
       for (let j = i + 1; j < state.length; j++) state[j]!.phase = "skipped";
       emit();
       break;
@@ -150,9 +348,14 @@ export async function runSequence(opts: {
   return state;
 }
 
-export const summarize = (steps: TxStep[]) => {
+export type SummaryKind = "success" | "partial" | "failure" | "unknown" | "none";
+
+export const summarize = (steps: TxStep[]): { kind: SummaryKind; text: string } => {
+  if (steps.length === 0) return { kind: "none", text: "Nothing was sent." };
   const ok = steps.filter((s) => s.phase === "confirmed").length;
-  if (ok === steps.length) return { kind: "success" as const, text: `All ${ok} transaction(s) confirmed.` };
-  if (ok === 0) return { kind: "failure" as const, text: "No transactions confirmed." };
-  return { kind: "partial" as const, text: `${ok} of ${steps.length} transactions confirmed. Remaining steps did not run.` };
+  const unknown = steps.some((s) => s.phase === "unknown");
+  if (ok === steps.length) return { kind: "success", text: `All ${ok} transaction(s) confirmed.` };
+  if (unknown) return { kind: "unknown", text: `${ok} of ${steps.length} confirmed; one is unresolved. Check its status before doing anything else — later steps were stopped.` };
+  if (ok === 0) return { kind: "failure", text: "No transactions confirmed." };
+  return { kind: "partial", text: `${ok} of ${steps.length} transactions confirmed. Remaining steps did not run.` };
 };

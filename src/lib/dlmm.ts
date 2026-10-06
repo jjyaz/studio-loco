@@ -33,8 +33,24 @@ export function invalidatePool(address: string) {
   for (const k of cache.keys()) if (k.endsWith(`|${address}`)) cache.delete(k);
 }
 
-/** functionType: 0 undetermined, 1 liquidity mining, 2 limit order */
-export function poolFunctionType(pool: DLMMType): number | undefined {
-  const params = pool.lbPair.parameters as unknown as { functionType?: number };
-  return typeof params?.functionType === "number" ? params.functionType : undefined;
+/**
+ * Pool function mode from lbPair.parameters.functionType (FunctionType enum:
+ * 0 Undetermined, 1 LiquidityMining, 2 LimitOrder). This is NOT ConcreteFunctionType,
+ * which only exists on PresetParameter2 (0 LimitOrder, 1 LiquidityMining).
+ */
+export function poolFunctionType(pool: DLMMType): number {
+  return pool.lbPair.parameters.functionType;
+}
+
+/** Uses the SDK's own isSupportLimitOrder (Undetermined pools qualify only with no reward mints). */
+export async function poolSupportsLimitOrders(pool: DLMMType): Promise<{ ok: boolean; reason: string }> {
+  const sdk = await loadSdk();
+  try {
+    const ok = sdk.isSupportLimitOrder(pool.lbPair);
+    const ft = poolFunctionType(pool);
+    if (ok) return { ok, reason: ft === 2 ? "Pool is in Limit Order mode." : "Pool mode is Undetermined with no liquidity-mining rewards, which the program treats as limit-order capable." };
+    return { ok, reason: ft === 1 ? "Pool is in Liquidity Mining mode; the program rejects native limit orders here." : "Pool has liquidity-mining reward mints configured, so native limit orders are unavailable." };
+  } catch {
+    return { ok: false, reason: "Unrecognised function mode — orders disabled." };
+  }
 }
