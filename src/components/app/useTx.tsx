@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import type { Signer, Transaction } from "@solana/web3.js";
-import { browserPendingStore, checkSignature, runSequence, summarize, TERMINAL_PHASES, type PendingTx, type TxStep } from "@/lib/tx";
+import { assertCluster, browserPendingStore, checkSignature, UNSUPPORTED_WALLET, runSequence, summarize, TERMINAL_PHASES, type PendingTx, type TxStep } from "@/lib/tx";
 import { explorerTx, shortAddr } from "@/lib/format";
 import { useSettings, type Cluster } from "@/lib/settings";
 import { cn } from "@/lib/utils";
@@ -13,26 +13,40 @@ export function useTxRunner() {
   const [steps, setSteps] = useState<TxStep[] | null>(null);
   const [running, setRunning] = useState(false);
   const lock = useRef(false);
+  const [ranCluster, setRanCluster] = useState<Cluster>(settings.cluster);
+  // live identity, read by the guard before every signature in a sequence
+  const live = useRef({ wallet: "", cluster: settings.cluster as string, rpc: "" });
+  live.current = { wallet: wallet.publicKey?.toBase58() ?? "", cluster: settings.cluster, rpc: settings.rpc[settings.cluster] ?? "" };
+  const canSign = !!wallet.publicKey && !!wallet.signTransaction;
   async function run(list: { label: string; tx: Transaction; signers?: Signer[] }[]): Promise<TxStep[]> {
-    if (!wallet.publicKey || !wallet.sendTransaction) throw new Error("Connect a wallet first");
+    if (!wallet.publicKey) throw new Error("Connect a wallet first");
+    if (!wallet.signTransaction) throw new Error(UNSUPPORTED_WALLET);
     if (lock.current) throw new Error("Another transaction is already in progress");
     if (list.length === 0) { setSteps([]); return []; }
     lock.current = true;
     setRunning(true);
+    const start = { ...live.current };
+    setRanCluster(settings.cluster);
     try {
       return await runSequence({
         connection,
-        wallet: { publicKey: wallet.publicKey, sendTransaction: wallet.sendTransaction, signTransaction: wallet.signTransaction },
+        wallet: { publicKey: wallet.publicKey, signTransaction: wallet.signTransaction },
         steps: list,
         onUpdate: setSteps,
-        ctx: { cluster: settings.cluster, rpc: settings.rpc[settings.cluster] ? "custom" : "relay", store: browserPendingStore },
+        ctx: { cluster: settings.cluster, rpc: settings.rpc[settings.cluster] ? "custom" : "relay", store: browserPendingStore,
+          identityGuard: () => {
+            const n = live.current;
+            if (n.wallet !== start.wallet) return "The connected wallet changed during this sequence, so remaining steps were stopped.";
+            if (n.cluster !== start.cluster || n.rpc !== start.rpc) return "The network or RPC changed during this sequence, so remaining steps were stopped.";
+            return null;
+          } },
       });
     } finally {
       lock.current = false;
       setRunning(false);
     }
   }
-  return { run, steps, running, reset: () => setSteps(null) };
+  return { run, steps, running, canSign, ranCluster, reset: () => setSteps(null) };
 }
 
 const PHASE_TEXT: Record<TxStep["phase"], string> = {
@@ -67,7 +81,7 @@ export function TxSteps({ steps }: { steps: TxStep[] | null }) {
               </span>
             </div>
             {s.signature && (
-              <a className="station-code text-amber underline" href={explorerTx(s.signature, settings.cluster)} target="_blank" rel="noreferrer">
+              <a className="station-code text-amber underline" href={explorerTx(s.signature, ((s.cluster ?? s.pending?.cluster) === "devnet" ? "devnet" : "mainnet-beta") as Cluster)} target="_blank" rel="noreferrer">
                 View on explorer ↗
               </a>
             )}
@@ -97,6 +111,8 @@ export function CheckStatus({ p, onResolved }: { p: PendingTx; onResolved?: () =
   async function check() {
     setBusy(true);
     try {
+      try { await assertCluster(connection, p.cluster); }
+      catch (e) { setState(e instanceof Error ? e.message : "Network check failed."); return; }
       const r = await checkSignature(connection, p.signature, p.lastValidBlockHeight);
       if (r.kind === "confirmed") {
         browserPendingStore.remove(p.signature);

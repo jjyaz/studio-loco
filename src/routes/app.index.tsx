@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { z } from "zod";
 import { zodValidator } from "@tanstack/zod-adapter";
 import { Btn, Cap, Field, Notice, PageHead, Spinner } from "@/components/kit";
-import { fetchPools, SORT_LABELS, v24, type ApiPool, type SortKey } from "@/lib/meteora-api";
+import { fetchPools, SORT_KEYS, SORT_LABELS, v24, type ApiPool, type SortKey } from "@/lib/meteora-api";
 import { practicePage } from "@/lib/practice-data";
 import { DASH, fmtPct, fmtUsd, isBase58Address, timeAgo } from "@/lib/format";
 import { redactUrls } from "@/lib/format";
@@ -13,7 +13,7 @@ import { cn } from "@/lib/utils";
 
 const search = z.object({
   q: z.string().optional().catch(undefined),
-  sort: z.enum(["tvl", "volume_24h", "fee_24h", "fee_tvl_ratio_24h", "bin_step"]).optional().catch(undefined),
+  sort: z.enum(SORT_KEYS).optional().catch(undefined),
   dir: z.enum(["asc", "desc"]).optional().catch(undefined),
   page: z.number().int().min(1).optional().catch(undefined),
   starred: z.boolean().optional().catch(undefined),
@@ -136,6 +136,10 @@ function Terminal() {
 
       {query.data && (
         <>
+          {sort === "fee_tvl_ratio_24h" && (
+            <p className="mb-2 text-xs text-cream/70">Fee/TVL is 24h fees ÷ TVL, shown as a percent as reported by Meteora. Pools with almost no liquidity can show enormous ratios — check TVL before reading anything into it.</p>
+          )}
+
           <div className="overflow-x-auto border border-line">
             <table className="w-full min-w-[860px] text-sm">
               <caption className="sr-only">DLMM pools</caption>
@@ -143,7 +147,7 @@ function Terminal() {
                 <tr className="border-b border-line text-left">
                   <th scope="col" className="w-10 p-3"><span className="sr-only">Star</span></th>
                   <th scope="col" className="station-code p-3 text-cream/70">Pool</th>
-                  {(["tvl", "volume_24h", "fee_24h", "fee_tvl_ratio_24h", "bin_step"] as SortKey[]).map((k) => (
+                  {SORT_KEYS.map((k) => (
                     <th key={k} scope="col" className="p-3 text-right" aria-sort={sort === k ? (dir === "desc" ? "descending" : "ascending") : "none"}>
                       <button type="button" onClick={() => setSort(k)} className={cn("station-code min-h-9 hover:text-amber", sort === k ? "text-amber" : "text-cream/70")}>
                         {SORT_LABELS[k]} {sort === k ? (dir === "desc" ? "↓" : "↑") : ""}

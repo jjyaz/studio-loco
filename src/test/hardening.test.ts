@@ -1,4 +1,7 @@
 // @vitest-environment node
+import { GENESIS, UNSUPPORTED_WALLET, withTimeout } from "@/lib/tx";
+import { SORT_KEYS, buildPoolsUrl, retryAfterMs, MAX_RETRY_WAIT_MS, sleep, fetchJson, normalizePool, feeTvlPct, normalizeCandles, OHLCV_FRAMES, fetchIndexedPortfolio } from "@/lib/meteora-api";
+import { readPositionHeader } from "@/components/app/positions";
 import { describe, expect, it, vi } from "vitest";
 import BN from "bn.js";
 import { Keypair, PublicKey, SystemProgram, Transaction, VersionedTransaction } from "@solana/web3.js";
@@ -46,10 +49,11 @@ function realTx(eph?: Keypair) {
   if (eph) tx.add(SystemProgram.createAccount({ fromPubkey: payer.publicKey, newAccountPubkey: eph.publicKey, lamports: 1, space: 0, programId: SystemProgram.programId }));
   return tx;
 }
-function conn(o: { simErr?: unknown; status?: unknown; statusThrows?: boolean; height?: number; sendThrows?: Error } = {}) {
+function conn(o: { simErr?: unknown; status?: unknown; statusThrows?: boolean; height?: number; sendThrows?: Error; genesis?: string } = {}) {
   const sims: VersionedTransaction[] = [];
   return {
     sims,
+    getGenesisHash: vi.fn().mockResolvedValue(o.genesis ?? GENESIS["devnet"]),
     getLatestBlockhash: vi.fn().mockResolvedValue({ blockhash: Keypair.generate().publicKey.toBase58(), lastValidBlockHeight: 100 }),
     simulateTransaction: vi.fn(async (vtx: VersionedTransaction, cfg: unknown) => { sims.push(vtx); expect(cfg).toMatchObject({ sigVerify: false, replaceRecentBlockhash: false }); return { value: { err: o.simErr ?? null, logs: ["log"] } }; }),
     sendRawTransaction: vi.fn(async () => { if (o.sendThrows) throw o.sendThrows; return "sig"; }),
@@ -59,7 +63,6 @@ function conn(o: { simErr?: unknown; status?: unknown; statusThrows?: boolean; h
 }
 const signer = () => ({
   publicKey: payer.publicKey,
-  sendTransaction: vi.fn(),
   signTransaction: vi.fn(async (t: Transaction) => { t.partialSign(payer); return t; }),
 });
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -217,5 +220,107 @@ describe("data truth helpers", () => {
     const parts = splitAmount(new BN("1000000001"), 3);
     expect(parts.reduce((a, b) => a.add(b), new BN(0)).toString()).toBe("1000000001");
     expect(splitAmount(new BN(5), 0)).toEqual([]);
+  });
+});
+
+describe("signing integrity (pass 3)", () => {
+  it("refuses wallets without signTransaction and never calls sendTransaction", async () => {
+    const send = vi.fn();
+    const c = conn();
+    await expect(runTransaction({ connection: asAny(c), wallet: asAny({ publicKey: payer.publicKey, sendTransaction: send }), tx: realTx(), ctx: ctx() })).rejects.toThrow(UNSUPPORTED_WALLET);
+    expect(send).not.toHaveBeenCalled();
+    expect(c.simulateTransaction).not.toHaveBeenCalled();
+  });
+  it("refuses to sign when the RPC genesis hash is a different cluster", async () => {
+    const w = signer();
+    const c = conn({ genesis: GENESIS["mainnet-beta"] });
+    await expect(runTransaction({ connection: asAny(c), wallet: asAny(w), tx: realTx(), ctx: ctx() })).rejects.toThrow(/genesis hash mismatch/);
+    expect(w.signTransaction).not.toHaveBeenCalled();
+  });
+  it("stops a sequence when wallet/cluster identity changes between steps", async () => {
+    let changed = false;
+    const w = { ...signer(), signTransaction: vi.fn(async (t: Transaction) => { t.partialSign(payer); changed = true; return t; }) };
+    const steps = await runSequence({
+      connection: asAny(conn()), wallet: asAny(w), onUpdate: () => {}, pollMs: 1,
+      steps: [{ label: "a", tx: realTx() }, { label: "b", tx: realTx() }],
+      ctx: { ...ctx(), identityGuard: () => (changed ? "The connected wallet changed" : null) },
+    });
+    expect(steps.map((s) => s.phase)).toEqual(["confirmed", "failed"]);
+    expect(steps[1]!.error).toMatch(/wallet changed/);
+    expect(w.signTransaction).toHaveBeenCalledTimes(1);
+    expect(steps[0]!.cluster).toBe("devnet");
+  });
+  it("bounds a hanging status RPC call", async () => {
+    await expect(withTimeout(new Promise(() => {}), 10, "Status lookup")).rejects.toThrow(/timed out/);
+  });
+});
+
+describe("Meteora API (pass 3)", () => {
+  it("uses the verified fee_24h sort key", () => {
+    expect(SORT_KEYS).toContain("fee_24h");
+    expect(SORT_KEYS as readonly string[]).not.toContain("fees_24h");
+    expect(buildPoolsUrl({ page: 1, pageSize: 5, sort: "fee_24h", dir: "desc" })).toContain("sort_by=fee_24h%3Adesc");
+  });
+  it("clamps Retry-After and handles HTTP dates", () => {
+    expect(retryAfterMs("3600", 500)).toBe(MAX_RETRY_WAIT_MS);
+    expect(retryAfterMs("2", 500)).toBe(2000);
+    expect(retryAfterMs("garbage", 500)).toBe(500);
+    expect(retryAfterMs(new Date(5_000).toUTCString(), 500, 0)).toBe(5000);
+    expect(retryAfterMs("-5", 500)).toBe(500);
+  });
+  it("abort interrupts a backoff wait immediately", async () => {
+    const ac = new AbortController();
+    const p = sleep(60_000, ac.signal);
+    ac.abort();
+    await expect(p).rejects.toMatchObject({ kind: "aborted" });
+  });
+  it("429 with huge Retry-After stops on final attempt instead of waiting an hour", async () => {
+    const f = vi.fn(async () => new Response("", { status: 429, headers: { "retry-after": "3600" } }));
+    const t0 = Date.now();
+    await expect(fetchJson("https://x", { retries: 0, fetchImpl: f as unknown as typeof fetch })).rejects.toMatchObject({ kind: "rate-limit" });
+    expect(Date.now() - t0).toBeLessThan(1000);
+  });
+  it("normalizes pools: drops bad addresses, non-finite numbers become undefined", () => {
+    const tok = { address: "So11111111111111111111111111111111111111112", symbol: "SOL", decimals: 9 };
+    expect(normalizePool({ address: "not-an-address", token_x: tok, token_y: tok })).toBeNull();
+    const p = normalizePool({ address: "DQ9weJhfiU4iL5LUoeshDrm5KxDHCMiSbnnKJz7buMcf", token_x: tok, token_y: { ...tok, decimals: 99 }, tvl: "12", fees: { "24h": Infinity, "1h": 2 } })!;
+    expect(p.tvl).toBeUndefined();
+    expect(p.fees).toEqual({ "1h": 2 });
+    expect(p.token_y.decimals).toBeUndefined();
+  });
+  it("fee_tvl_ratio is already a percent (live sample)", () => {
+    const p = normalizePool({ address: "DQ9weJhfiU4iL5LUoeshDrm5KxDHCMiSbnnKJz7buMcf", token_x: { address: "So11111111111111111111111111111111111111112" }, token_y: { address: "So11111111111111111111111111111111111111112" }, tvl: 37614365.15190429, fees: { "24h": 4.165403239560889 }, fee_tvl_ratio: { "24h": 1.1073969274076685e-5 } })!;
+    expect(feeTvlPct(p)!).toBeCloseTo((4.165403239560889 / 37614365.15190429) * 100, 12);
+  });
+  it("candles: validated, deduped, sorted; invalid rows dropped; bad shape errors", () => {
+    const c = normalizeCandles({ data: [
+      { timestamp: 20, open: 1, high: 2, low: 0.5, close: 1.5, volume: 3 },
+      { timestamp: 10, open: 1, high: 1, low: 1, close: 1, volume: 0 },
+      { timestamp: 30, open: 1, high: 0.9, low: 0.5, close: 1, volume: 1 },
+      { timestamp: 40, open: -1, high: 1, low: -2, close: 1 },
+      { timestamp: 20, open: 1, high: 2, low: 0.5, close: 1.6, volume: 3 },
+    ] });
+    expect(c.map((x) => x.t)).toEqual([10, 20]);
+    expect(c[1]!.c).toBe(1.6);
+    expect(() => normalizeCandles({ nope: 1 })).toThrow(/shape/);
+    expect(OHLCV_FRAMES).not.toContain("1m");
+  });
+  it("indexed portfolio paginates on hasNext and validates addresses", async () => {
+    const pool = (a: string) => ({ poolAddress: a, tokenXMint: "So11111111111111111111111111111111111111112", tokenYMint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", listPositions: ["DQ9weJhfiU4iL5LUoeshDrm5KxDHCMiSbnnKJz7buMcf", "bad!"], balances: "12.5" });
+    const pages = [{ hasNext: true, pools: [pool("DQ9weJhfiU4iL5LUoeshDrm5KxDHCMiSbnnKJz7buMcf")] }, { hasNext: false, totalPositions: 2, pools: [pool("bad"), pool("5rCf1DM8LjKTw4YqhnoLcngyZYeNnQqztScTogYHAS6")] }];
+    let i = 0;
+    const f = vi.fn(async () => Response.json(pages[i++]));
+    const r = await fetchIndexedPortfolio("11111111111111111111111111111111", undefined, f as unknown as typeof fetch);
+    expect(f).toHaveBeenCalledTimes(2);
+    expect(r.pools).toHaveLength(2);
+    expect(r.pools[0]!.listPositions).toHaveLength(1);
+    expect(r.pools[0]!.balances).toBe(12.5);
+    await expect(fetchIndexedPortfolio("nope")).rejects.toThrow(/valid/);
+  });
+  it("position header verification reads lb_pair and owner at fixed offsets", () => {
+    const d = new Uint8Array(100); d.fill(7, 8, 40); d.fill(9, 40, 72);
+    const h = readPositionHeader(d)!;
+    expect(h.lbPair.every((b) => b === 7) && h.owner.every((b) => b === 9)).toBe(true);
+    expect(readPositionHeader(new Uint8Array(10))).toBeNull();
   });
 });

@@ -7,6 +7,7 @@ import { zodValidator } from "@tanstack/zod-adapter";
 import BN from "bn.js";
 import type { Keypair, Transaction } from "@solana/web3.js";
 import { Btn, Cap, Field, Notice, Panel, Segmented, Spinner, Stat, Eyebrow } from "@/components/kit";
+import { PriceHistory } from "@/components/app/PriceHistory";
 import { RailMap } from "@/components/app/RailMap";
 import { TxSteps, useTxRunner } from "@/components/app/useTx";
 import { useBalance, usePoolSdk, usePoolSnapshot, type PoolSnapshot } from "@/components/app/pool-hooks";
@@ -129,6 +130,11 @@ function Overview({ address, api, snap, snapLoading, symX, symY, updatedAt, clus
         <div className="mt-5">
           {snap ? <RailMap bins={snap.bins} activeId={snap.activeId} decX={snap.decX} decY={snap.decY} symX={symX} symY={symY} /> : snapLoading ? <Spinner label="Reading bins" /> : <p className="text-sm text-cream/70">Bins unavailable.</p>}
         </div>
+      </Panel>
+      <Panel className="lg:col-span-2">
+        {cluster === "mainnet-beta"
+          ? <PriceHistory address={address} symX={symX} symY={symY} currentPrice={p?.current_price} />
+          : <p className="text-sm text-cream/75">Price history comes from Meteora's mainnet index, so it isn't shown on devnet.</p>}
       </Panel>
       <div className="flex flex-col gap-6">
         <Panel tone="cobalt">
@@ -621,7 +627,7 @@ function Orders({ address, snap, symX, symY }: { address: string; snap: PoolSnap
     <div className="grid gap-6 lg:grid-cols-[1fr_1.2fr]">
       <Panel>
         <div className="flex flex-wrap items-center justify-between gap-2"><h2 className="display text-2xl">Native limit orders</h2><Cap kind={support.data?.ok ? "live" : "handoff"} /></div>
-        <p className="mt-2 text-sm text-cream/80">Pool function mode (lbPair.parameters.functionType): <strong className="text-amber">{fnName(mode)}</strong></p>
+        <p className="mt-2 text-sm text-cream/80">Pool type: <strong className="text-amber">{fnName(mode)}</strong>. Native orders only work on pools set up to accept them; we check this on chain before showing the form.</p>
         {support.isPending && <Spinner label="Checking order support" />}
         {support.data && <p className={cn("mt-2 text-sm", support.data.ok ? "text-success" : "text-destructive")}>{support.data.reason}</p>}
         {support.data && !support.data.ok && <p className="mt-3 text-sm text-cream/75">One-sided liquidity (only {symX} above, or only {symY} below) is LP inventory, not a limit order — it is swapped back if price returns.</p>}

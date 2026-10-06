@@ -1,4 +1,6 @@
 import { PendingTxList } from "./useTx";
+import { useWallet } from "@solana/wallet-adapter-react";
+import { UNSUPPORTED_WALLET } from "@/lib/tx";
 import { Link } from "@tanstack/react-router";
 import { useState, type ReactNode } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
@@ -106,11 +108,22 @@ export function AppShell({ children }: { children: ReactNode }) {
           <button type="button" className="underline" onClick={() => update({ practice: false })}>Return to live data</button>
         </div>
       )}
-      <main id="app-main" className="mx-auto w-full max-w-[1500px] flex-1 px-4 py-8 md:px-8"><PendingTxList />{children}</main>
+      <main id="app-main" className="mx-auto w-full max-w-[1500px] flex-1 px-4 py-8 md:px-8"><UnsupportedWalletNotice /><PendingTxList />{children}</main>
       <footer className="border-t border-line px-4 py-5 text-center text-xs text-cream/55">
         Independent interface for Meteora DLMM · <Link to="/docs" hash="risk" className="underline">Risk information</Link> · <Link to="/network" className="underline">Status</Link> · <Link to="/docs" className="underline">Docs</Link>
       </footer>
       <SettingsDialog open={open} onOpenChange={setOpen} />
+    </div>
+  );
+}
+
+function UnsupportedWalletNotice() {
+  const { publicKey, signTransaction, wallet } = useWallet();
+  if (!publicKey || signTransaction) return null;
+  return (
+    <div role="alert" className="mb-6 border border-destructive p-4 text-sm">
+      <p className="station-code text-destructive">{wallet?.adapter.name ?? "This wallet"} can't be used for transactions</p>
+      <p className="mt-1 text-cream/85">{UNSUPPORTED_WALLET} You can still browse and read data.</p>
     </div>
   );
 }

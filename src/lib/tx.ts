@@ -1,4 +1,4 @@
-import type { Connection, Signer, Transaction, TransactionSignature, SendOptions } from "@solana/web3.js";
+import type { Connection, Signer, Transaction } from "@solana/web3.js";
 import bs58 from "bs58";
 import { redactUrls } from "./format";
 
@@ -51,11 +51,14 @@ export interface TxStep {
   error?: string;
   logs?: string[];
   pending?: PendingTx;
+  /** Network captured when the sequence started — explorer links use this, not current settings. */
+  cluster?: string;
 }
 
 export interface WalletSender {
   publicKey: { toBase58(): string } | null;
-  sendTransaction: (tx: Transaction, connection: Connection, options?: SendOptions & { signers?: Signer[] }) => Promise<TransactionSignature>;
+  sendTransaction?: unknown;
+  /** Required for money-moving flows: signed bytes are compared with the simulated bytes and broadcast by us. */
   signTransaction?: (tx: Transaction) => Promise<Transaction>;
 }
 
@@ -63,6 +66,39 @@ export interface TxContext {
   cluster: string;
   rpc: PendingTx["rpc"];
   store?: PendingStore;
+  /** Re-checked before every signature: returns a reason when wallet/cluster changed mid-flow. */
+  identityGuard?: () => string | null;
+}
+
+export const UNSUPPORTED_WALLET =
+  "This wallet can't return a signed transaction for verification, so Studio Loco won't use it to move funds. Use a wallet that supports transaction signing, such as Phantom or Solflare.";
+
+/** Known genesis hashes. A settings label does not prove an endpoint's network; this does. */
+export const GENESIS: Record<string, string> = {
+  "mainnet-beta": "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d",
+  devnet: "EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG",
+};
+
+/** Hard time limit for a single RPC wait. */
+export function withTimeout<T>(p: Promise<T>, ms: number, what: string): Promise<T> {
+  return new Promise<T>((res, rej) => {
+    const t = setTimeout(() => rej(new Error(`${what} timed out after ${Math.round(ms / 1000)}s`)), ms);
+    p.then((v) => { clearTimeout(t); res(v); }, (e) => { clearTimeout(t); rej(e); });
+  });
+}
+
+const genesisCache = new WeakMap<object, string>();
+/** Throws unless the connection's genesis hash matches the expected cluster. */
+export async function assertCluster(connection: Connection, cluster: string, timeoutMs = 10_000): Promise<void> {
+  const want = GENESIS[cluster];
+  if (!want) throw new TxError(`Unknown network "${cluster}"; refusing to continue.`, "sending");
+  let got = genesisCache.get(connection as object);
+  if (!got) {
+    try { got = await withTimeout(connection.getGenesisHash(), timeoutMs, "Network check"); }
+    catch (e) { throw new TxError(`Could not verify which network the RPC is on: ${e instanceof Error ? e.message : String(e)}`, "sending"); }
+    genesisCache.set(connection as object, got);
+  }
+  if (got !== want) throw new TxError(`The RPC endpoint is not on ${cluster} (genesis hash mismatch). Nothing was signed — check the RPC in Settings.`, "sending");
 }
 
 export class TxError extends Error {
@@ -153,8 +189,13 @@ export async function runTransaction(opts: {
   const { connection, wallet, tx, signers = [], onPhase, pollMs = 2000, maxWaitMs = 90_000 } = opts;
   const ctx: TxContext = opts.ctx ?? { cluster: "unknown", rpc: "public" };
   if (!wallet.publicKey) throw new TxError("Wallet not connected", "rejected");
+  if (!wallet.signTransaction) throw new TxError(UNSUPPORTED_WALLET, "sending");
+  const signFn = wallet.signTransaction;
+  const guard = () => { const r = ctx.identityGuard?.(); if (r) throw new TxError(r, "sending"); };
   onPhase?.("preparing");
-  const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash("confirmed");
+  guard();
+  if (ctx.cluster !== "unknown") await assertCluster(connection, ctx.cluster);
+  const { blockhash, lastValidBlockHeight } = await withTimeout(connection.getLatestBlockhash("confirmed"), 15_000, "Fetching a recent blockhash");
   tx.recentBlockhash = blockhash;
   tx.lastValidBlockHeight = lastValidBlockHeight;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -162,7 +203,7 @@ export async function runTransaction(opts: {
   const messageBytes = new Uint8Array(tx.serializeMessage());
 
   onPhase?.("simulating");
-  const sim = await simulateExact(connection, messageBytes);
+  const sim = await withTimeout(simulateExact(connection, messageBytes), 20_000, "Simulation");
   if (sim.value.err) {
     throw new TxError(`Simulation failed: ${JSON.stringify(sim.value.err)}`, "simulating", sim.value.logs ?? undefined);
   }
@@ -170,51 +211,40 @@ export async function runTransaction(opts: {
   onPhase?.("awaiting-signature");
   if (signers.length) tx.partialSign(...signers);
   let signature: string;
-  let pending: PendingTx | undefined;
+  let pending: PendingTx;
   const mkPending = (sig: string): PendingTx => ({
     signature: sig, blockhash, lastValidBlockHeight, cluster: ctx.cluster, rpc: ctx.rpc,
     wallet: wallet.publicKey!.toBase58(), label: opts.label ?? "Transaction", createdAt: Date.now(),
   });
 
-  if (wallet.signTransaction) {
-    let signed: Transaction;
-    try {
-      signed = await wallet.signTransaction(tx);
-    } catch (e) {
-      if (isUserRejection(e)) throw new TxError("You declined the request in your wallet", "rejected");
-      throw new TxError(`Wallet could not sign: ${e instanceof Error ? e.message : String(e)}`, "sending");
+  let signed: Transaction;
+  try {
+    guard();
+    signed = await signFn(tx);
+  } catch (e) {
+    if (isUserRejection(e)) throw new TxError("You declined the request in your wallet", "rejected");
+    throw new TxError(`Wallet could not sign: ${e instanceof Error ? e.message : String(e)}`, "sending");
+  }
+  if (!sameBytes(new Uint8Array(signed.serializeMessage()), messageBytes)) {
+    throw new TxError("Your wallet changed the transaction after simulation, so it was not sent. Review again.", "sending");
+  }
+  const sigBytes = signed.signature;
+  if (!sigBytes) throw new TxError("Wallet returned an unsigned transaction", "sending");
+  signature = bs58.encode(sigBytes);
+  pending = mkPending(signature);
+  ctx.store?.put(pending);
+  onPhase?.("sending", { signature, pending });
+  try {
+    await withTimeout(connection.sendRawTransaction(signed.serialize(), { skipPreflight: false, preflightCommitment: "confirmed", maxRetries: 3 }), 20_000, "Broadcast");
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    const logs = (e as { logs?: string[] })?.logs;
+    // A preflight rejection is definitive (the RPC refused it). Transport errors are not.
+    if (!/already been processed/i.test(msg) && /Transaction simulation failed|preflight|Blockhash not found/i.test(msg)) {
+      ctx.store?.remove(signature);
+      throw new TxError(`RPC rejected the transaction: ${msg}`, "failed", logs, signature);
     }
-    if (!sameBytes(new Uint8Array(signed.serializeMessage()), messageBytes)) {
-      throw new TxError("Your wallet changed the transaction after simulation, so it was not sent. Review again.", "sending");
-    }
-    const sigBytes = signed.signature;
-    if (!sigBytes) throw new TxError("Wallet returned an unsigned transaction", "sending");
-    signature = bs58.encode(sigBytes);
-    pending = mkPending(signature);
-    ctx.store?.put(pending);
-    onPhase?.("sending", { signature, pending });
-    try {
-      await connection.sendRawTransaction(signed.serialize(), { skipPreflight: false, preflightCommitment: "confirmed", maxRetries: 3 });
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      const logs = (e as { logs?: string[] })?.logs;
-      // A preflight rejection is definitive (the RPC refused it). Transport errors are not.
-      if (!/already been processed/i.test(msg) && /Transaction simulation failed|preflight|Blockhash not found/i.test(msg)) {
-        ctx.store?.remove(signature);
-        throw new TxError(`RPC rejected the transaction: ${msg}`, "failed", logs, signature);
-      }
-      // Unknown: it may or may not have reached the cluster. Fall through to status checks.
-    }
-  } else {
-    onPhase?.("sending");
-    try {
-      signature = await wallet.sendTransaction(tx, connection, { preflightCommitment: "confirmed", maxRetries: 3 });
-    } catch (e) {
-      if (isUserRejection(e)) throw new TxError("You declined the request in your wallet", "rejected");
-      throw new TxError(e instanceof Error ? e.message : "Wallet failed to send", "sending");
-    }
-    pending = mkPending(signature);
-    ctx.store?.put(pending);
+    // Unknown: it may or may not have reached the cluster. Fall through to status checks.
   }
 
   onPhase?.("confirming", { signature, pending });
@@ -244,7 +274,7 @@ export type Settlement =
 export async function checkSignature(connection: Connection, signature: string, lastValidBlockHeight: number): Promise<Settlement | { kind: "pending" }> {
   let st;
   try {
-    st = await connection.getSignatureStatuses([signature], { searchTransactionHistory: true });
+    st = await withTimeout(connection.getSignatureStatuses([signature], { searchTransactionHistory: true }), 10_000, "Status lookup");
   } catch (e) {
     return { kind: "unknown", reason: `status lookup failed (${e instanceof Error ? e.message.slice(0, 80) : "RPC error"})` };
   }
@@ -261,7 +291,7 @@ export async function checkSignature(connection: Connection, signature: string, 
   if (height > lastValidBlockHeight) {
     // Re-check history once more after observing expiry to avoid a race with late confirmation.
     try {
-      const again = await connection.getSignatureStatuses([signature], { searchTransactionHistory: true });
+      const again = await withTimeout(connection.getSignatureStatuses([signature], { searchTransactionHistory: true }), 10_000, "Status lookup");
       const a = again?.value?.[0];
       if (a && (a.confirmationStatus === "confirmed" || a.confirmationStatus === "finalized" || a.err)) return { kind: "confirmed", err: a.err, slot: a.slot };
       if (a) return { kind: "pending" };
@@ -307,7 +337,7 @@ export async function runSequence(opts: {
   pollMs?: number;
   maxWaitMs?: number;
 }): Promise<TxStep[]> {
-  const state: TxStep[] = opts.steps.map((s) => ({ label: s.label, phase: "idle" }));
+  const state: TxStep[] = opts.steps.map((s) => ({ label: s.label, phase: "idle", cluster: opts.ctx?.cluster }));
   const emit = () => opts.onUpdate(state.map((s) => ({ ...s })));
   emit();
   for (let i = 0; i < opts.steps.length; i++) {

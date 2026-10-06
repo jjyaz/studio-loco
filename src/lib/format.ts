@@ -23,6 +23,8 @@ export function fmtNum(n: unknown, digits = 4): string {
 
 export function fmtPct(n: unknown, digits = 2): string {
   if (!isNum(n)) return DASH;
+  // Tiny non-zero values keep significant digits instead of rounding to a misleading 0.0000%.
+  if (n !== 0 && Math.abs(n) < 10 ** -digits) return `${n.toPrecision(2)}%`;
   return `${n.toFixed(digits)}%`;
 }
 
