@@ -43,11 +43,11 @@ export interface PoolPage {
   total: number;
 }
 
-export type SortKey = "tvl" | "volume_24h" | "fees_24h" | "fee_tvl_ratio_24h" | "bin_step";
+export type SortKey = "tvl" | "volume_24h" | "fee_24h" | "fee_tvl_ratio_24h" | "bin_step";
 export const SORT_LABELS: Record<SortKey, string> = {
   tvl: "TVL",
   volume_24h: "Volume 24h",
-  fees_24h: "Fees 24h",
+  fee_24h: "Fees 24h",
   fee_tvl_ratio_24h: "Fee / TVL 24h",
   bin_step: "Bin step",
 };

@@ -40,7 +40,7 @@ export function practicePage(q: PoolQuery): PoolPage {
   const val = (p: ApiPool) =>
     q.sort === "tvl" ? p.tvl ?? 0
     : q.sort === "volume_24h" ? p.volume?.["24h"] ?? 0
-    : q.sort === "fees_24h" ? p.fees?.["24h"] ?? 0
+    : q.sort === "fee_24h" ? p.fees?.["24h"] ?? 0
     : q.sort === "fee_tvl_ratio_24h" ? p.fee_tvl_ratio?.["24h"] ?? 0
     : p.pool_config?.bin_step ?? 0;
   rows = [...rows].sort((a, b) => (q.dir === "desc" ? val(b) - val(a) : val(a) - val(b)));

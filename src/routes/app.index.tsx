@@ -13,7 +13,7 @@ import { cn } from "@/lib/utils";
 
 const search = z.object({
   q: z.string().optional().catch(undefined),
-  sort: z.enum(["tvl", "volume_24h", "fees_24h", "fee_tvl_ratio_24h", "bin_step"]).optional().catch(undefined),
+  sort: z.enum(["tvl", "volume_24h", "fee_24h", "fee_tvl_ratio_24h", "bin_step"]).optional().catch(undefined),
   dir: z.enum(["asc", "desc"]).optional().catch(undefined),
   page: z.number().int().min(1).optional().catch(undefined),
   starred: z.boolean().optional().catch(undefined),
@@ -143,7 +143,7 @@ function Terminal() {
                 <tr className="border-b border-line text-left">
                   <th scope="col" className="w-10 p-3"><span className="sr-only">Star</span></th>
                   <th scope="col" className="station-code p-3 text-cream/70">Pool</th>
-                  {(["tvl", "volume_24h", "fees_24h", "fee_tvl_ratio_24h", "bin_step"] as SortKey[]).map((k) => (
+                  {(["tvl", "volume_24h", "fee_24h", "fee_tvl_ratio_24h", "bin_step"] as SortKey[]).map((k) => (
                     <th key={k} scope="col" className="p-3 text-right" aria-sort={sort === k ? (dir === "desc" ? "descending" : "ascending") : "none"}>
                       <button type="button" onClick={() => setSort(k)} className={cn("station-code min-h-9 hover:text-amber", sort === k ? "text-amber" : "text-cream/70")}>
                         {SORT_LABELS[k]} {sort === k ? (dir === "desc" ? "↓" : "↑") : ""}
