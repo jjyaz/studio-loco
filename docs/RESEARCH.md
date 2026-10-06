@@ -32,18 +32,22 @@ educational coordination lab. It is **not** a fork or port of The Interfold's cr
 
 ## Implementation status
 Single source of truth: `src/lib/capabilities.ts` (rendered on `/network`). Summary:
-- **Live (real API/chain/SDK):** pool list, pool detail + Rail Map, direct swap (swapQuote/swap), add liquidity (initializePositionAndAddLiquidityByStrategy, ephemeral keypair in memory), portfolio (getAllLbPairPositionsByUser), claim (claimSwapFee, claimAllRewardsByPosition), withdraw/remove/close (removeLiquidity, closePosition), Signal Box polling + two-step rebalance, Fee Weather, Launch Station (getAllPresetParameters → createLbPair2 with derived-address duplicate check), network observatory.
+- **Live (real API/chain/SDK):** pool list, pool detail + Rail Map, direct swap (swapQuote/swap), add liquidity (initializePositionAndAddLiquidityByStrategy, ephemeral keypair in memory), portfolio (mainnet: Meteora index + on-chain verification of program, PositionV2 discriminator, pool and owner, with watch-only mode; devnet: getAllLbPairPositionsByUser), native limit orders (place/cancel/close; mainnet indexed discovery + verified SDK getLimitOrder), mainnet OHLCV price history, claim (claimSwapFee, claimAllRewardsByPosition), withdraw/remove/close (removeLiquidity, closePosition), Signal Box polling + two-step rebalance, Fee Weather, Launch Station (getAllPresetParameters → createLbPair2 with derived-address duplicate check), network observatory.
 - **Simulation:** Practice mode data, Studio shape previews/scenarios, Lab, governance room, token worksheet.
-- **Handoff only:** native limit orders (mode detected onchain; adapter not built), DBC / DAMM v2 / Alpha Vault.
+- **Handoff only:** DBC / DAMM v2 / Alpha Vault.
 - **Not deployed:** confidential compute network, ciphernodes, LOCO token, DAO.
 
 ## Engineering notes
 - Public Solana RPC returns 403 to browser origins, so `/api/public/rpc/$cluster` relays an allowlist of JSON-RPC methods (no secrets). Users can set their own HTTPS RPC in Settings, which bypasses the relay. `getProgramAccounts` (portfolio, presets) is often throttled on public RPC — a dedicated RPC is recommended.
+- Signing requires the wallet's signTransaction (no sendTransaction fallback); the RPC genesis hash must match the selected cluster; wallet/network identity is re-checked after approval and before broadcast; unresolved signatures are persisted (public metadata only) for Check status reconciliation.
 - Confirmation polls `getSignatureStatuses` and fails when block height passes `lastValidBlockHeight`; success is shown only after `confirmed` without error.
 - All amounts are parsed from decimal strings into BN base units (`src/lib/amount.ts`).
 
 ## Next operational requirements
 1. Funded mainnet/devnet wallet QA for swap, add liquidity, claim, withdraw, close, and pool creation (not performed in this build; no wallet/funds in CI).
 2. Dedicated RPC provider for production (rate limits, getProgramAccounts).
-3. Native limit-order adapter with tests before enabling the Orders tab.
+3. Funded signing of native limit orders (implemented and simulated only).
 4. Any confidential feature requires a deployed, audited MPC/FHE program — out of scope.
+
+## Funded testing blocker
+The devnet faucet returned `429 — airdrop limit reached today or faucet dry` for fresh throwaway keypairs, and a later devnet probe timed out before funding. No funded transaction has been signed or confirmed on any network. There is no LOCO token, private committee, DAO or audit.
