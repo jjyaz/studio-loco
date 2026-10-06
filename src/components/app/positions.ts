@@ -12,38 +12,54 @@ export function readPositionHeader(data: Uint8Array): { lbPair: Uint8Array; owne
   if (data.length < 72) return null;
   return { lbPair: data.slice(8, 40), owner: data.slice(40, 72) };
 }
-const eq = (a: Uint8Array, b: Uint8Array) => a.length === b.length && a.every((v, i) => v === b[i]);
+export { verifyDlmmAccount, chunk } from "@/lib/account-verify";
+
+export interface HydrationReport {
+  rows: PositionRow[];
+  rejected: number;
+  /** Index reported more positions than it returned (page cap reached). */
+  truncated: boolean;
+  indexedTotal?: number;
+  indexedAt: number;
+}
 
 /**
  * Mainnet: discover via Meteora's indexed portfolio API, then hydrate each position by address
- * with the SDK (getPosition) and VERIFY on chain that the account belongs to the DLMM program,
- * the claimed pool and this owner. Anything that fails verification is dropped and reported.
+ * and VERIFY on chain: DLMM program owner, PositionV2 discriminator (from the SDK IDL), pool and
+ * owner. Reads are chunked to ≤100 accounts. Rejections and index truncation are reported.
  */
-export async function hydrateIndexedPositions(connection: Connection, owner: PublicKey, signal?: AbortSignal): Promise<{ rows: PositionRow[]; rejected: number; indexedAt: number }> {
+export async function hydrateIndexedPositions(connection: Connection, owner: PublicKey, signal?: AbortSignal): Promise<HydrationReport> {
   const { PublicKey } = await import("@solana/web3.js");
+  const sdk = await loadSdk();
+  const disc = Uint8Array.from(sdk.getAccountDiscriminator("positionV2"));
   const idx = await fetchIndexedPortfolio(owner.toBase58(), signal);
   const rows: PositionRow[] = [];
   let rejected = 0;
+  const abort = () => { if (signal?.aborted) throw new DOMException("Aborted", "AbortError"); };
   for (const ip of idx.pools) {
+    abort();
     const pool = await getPool(connection, ip.poolAddress, "mainnet-beta");
-    const poolKey = pool.pubkey.toBytes();
     const keys = ip.listPositions.map((k) => new PublicKey(k));
-    const infos = keys.length ? await connection.getMultipleAccountsInfo(keys, "confirmed") : [];
-    for (let i = 0; i < keys.length; i++) {
-      const acc = infos[i];
-      const h = acc && acc.owner.toBase58() === DLMM_PROGRAM_ID ? readPositionHeader(new Uint8Array(acc.data)) : null;
-      if (!h || !eq(h.lbPair, poolKey) || !eq(h.owner, owner.toBytes())) { rejected++; continue; }
-      const pos = await pool.getPosition(keys[i]!);
-      rows.push({
-        pair: ip.poolAddress, position: pos, key: keys[i]!.toBase58(),
-        activeId: pool.lbPair.activeId, binStep: pool.lbPair.binStep,
-        mintX: pool.tokenX.publicKey.toBase58(), mintY: pool.tokenY.publicKey.toBase58(),
-        decX: pool.tokenX.mint.decimals, decY: pool.tokenY.mint.decimals,
-        lower: pos.positionData.lowerBinId, upper: pos.positionData.upperBinId,
-      });
+    for (const part of chunk(keys, 100)) {
+      abort();
+      const infos = await connection.getMultipleAccountsInfo(part, "confirmed");
+      for (let i = 0; i < part.length; i++) {
+        abort();
+        if (!verifyDlmmAccount(infos[i], { programId: DLMM_PROGRAM_ID, discriminator: disc, lbPair: pool.pubkey.toBytes(), owner: owner.toBytes() })) { rejected++; continue; }
+        const pos = await pool.getPosition(part[i]!);
+        rows.push({
+          pair: ip.poolAddress, position: pos, key: part[i]!.toBase58(),
+          activeId: pool.lbPair.activeId, binStep: pool.lbPair.binStep,
+          mintX: pool.tokenX.publicKey.toBase58(), mintY: pool.tokenY.publicKey.toBase58(),
+          decX: pool.tokenX.mint.decimals, decY: pool.tokenY.mint.decimals,
+          lower: pos.positionData.lowerBinId, upper: pos.positionData.upperBinId,
+        });
+      }
     }
   }
-  return { rows, rejected, indexedAt: idx.fetchedAt };
+  const listed = idx.pools.reduce((n, p) => n + p.listPositions.length, 0);
+  const truncated = idx.truncated || (idx.totalPositions !== undefined && idx.totalPositions > listed);
+  return { rows, rejected, truncated, indexedTotal: idx.totalPositions, indexedAt: idx.fetchedAt };
 }
 
 /** Read-only indexed readings for any address (watch-only). Mainnet index; never used for tx amounts. */
