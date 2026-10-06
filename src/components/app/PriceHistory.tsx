@@ -117,8 +117,8 @@ function Chart({ candles, long, symX, symY, currentPrice }: { candles: Candle[];
           );
         })}
         {hover !== null && <line x1={x(hover)} x2={x(hover)} y1={P.t} y2={H - P.b} stroke="var(--amber)" strokeOpacity={0.6} />}
-        {[0, Math.floor(candles.length / 2), candles.length - 1].map((i) => (
-          <text key={i} x={x(i)} y={H - 6} fontSize={15} textAnchor="middle" fill="var(--cream)" fillOpacity={0.65} fontFamily="Space Mono, monospace">{fmtT(candles[i]!.t, long)}</text>
+        {[0, Math.floor(candles.length / 2), candles.length - 1].map((i, k) => (
+          <text key={`${k}-${i}`} x={k === 0 ? P.l : k === 2 ? W - P.r : x(i)} y={H - 6} fontSize={15} textAnchor={k === 0 ? "start" : k === 2 ? "end" : "middle"} fill="var(--cream)" fillOpacity={0.65} fontFamily="Space Mono, monospace">{fmtT(candles[i]!.t, long)}</text>
         ))}
       </svg>
       <figcaption className="mt-2 text-xs text-cream/60">
