@@ -11,8 +11,21 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AppRouteImport } from './routes/app'
+import { Route as DocsRouteImport } from './routes/docs'
+import { Route as GovernanceRouteImport } from './routes/governance'
+import { Route as NetworkRouteImport } from './routes/network'
+import { Route as TokenRouteImport } from './routes/token'
 import { Route as AppIndexRouteImport } from './routes/app.index'
+import { Route as AppLaunchRouteImport } from './routes/app.launch'
+import { Route as AppPortfolioRouteImport } from './routes/app.portfolio'
+import { Route as AppSignalsRouteImport } from './routes/app.signals'
+import { Route as AppStudioRouteImport } from './routes/app.studio'
+import { Route as JournalIndexRouteImport } from './routes/journal.index'
+import { Route as JournalSlugRouteImport } from './routes/journal.$slug'
+import { Route as LabIndexRouteImport } from './routes/lab.index'
+import { Route as LabArchitectureRouteImport } from './routes/lab.architecture'
 import { Route as AppPoolAddressRouteImport } from './routes/app.pool.$address'
+import { Route as ApiPublicRpcClusterRouteImport } from './routes/api/public/rpc.$cluster'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -24,46 +37,210 @@ const AppRoute = AppRouteImport.update({
   path: '/app',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DocsRoute = DocsRouteImport.update({
+  id: '/docs',
+  path: '/docs',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const GovernanceRoute = GovernanceRouteImport.update({
+  id: '/governance',
+  path: '/governance',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const NetworkRoute = NetworkRouteImport.update({
+  id: '/network',
+  path: '/network',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TokenRoute = TokenRouteImport.update({
+  id: '/token',
+  path: '/token',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AppIndexRoute = AppIndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => AppRoute,
+} as any)
+const AppLaunchRoute = AppLaunchRouteImport.update({
+  id: '/launch',
+  path: '/launch',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppPortfolioRoute = AppPortfolioRouteImport.update({
+  id: '/portfolio',
+  path: '/portfolio',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppSignalsRoute = AppSignalsRouteImport.update({
+  id: '/signals',
+  path: '/signals',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppStudioRoute = AppStudioRouteImport.update({
+  id: '/studio',
+  path: '/studio',
+  getParentRoute: () => AppRoute,
+} as any)
+const JournalIndexRoute = JournalIndexRouteImport.update({
+  id: '/journal/',
+  path: '/journal/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const JournalSlugRoute = JournalSlugRouteImport.update({
+  id: '/journal/$slug',
+  path: '/journal/$slug',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LabIndexRoute = LabIndexRouteImport.update({
+  id: '/lab/',
+  path: '/lab/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LabArchitectureRoute = LabArchitectureRouteImport.update({
+  id: '/lab/architecture',
+  path: '/lab/architecture',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const AppPoolAddressRoute = AppPoolAddressRouteImport.update({
   id: '/pool/$address',
   path: '/pool/$address',
   getParentRoute: () => AppRoute,
 } as any)
+const ApiPublicRpcClusterRoute = ApiPublicRpcClusterRouteImport.update({
+  id: '/api/public/rpc/$cluster',
+  path: '/api/public/rpc/$cluster',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/app': typeof AppRouteWithChildren
+  '/docs': typeof DocsRoute
+  '/governance': typeof GovernanceRoute
+  '/network': typeof NetworkRoute
+  '/token': typeof TokenRoute
+  '/app/launch': typeof AppLaunchRoute
+  '/app/portfolio': typeof AppPortfolioRoute
+  '/app/signals': typeof AppSignalsRoute
+  '/app/studio': typeof AppStudioRoute
+  '/journal/$slug': typeof JournalSlugRoute
+  '/lab/architecture': typeof LabArchitectureRoute
   '/app/': typeof AppIndexRoute
+  '/journal/': typeof JournalIndexRoute
+  '/lab/': typeof LabIndexRoute
   '/app/pool/$address': typeof AppPoolAddressRoute
+  '/api/public/rpc/$cluster': typeof ApiPublicRpcClusterRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/docs': typeof DocsRoute
+  '/governance': typeof GovernanceRoute
+  '/network': typeof NetworkRoute
+  '/token': typeof TokenRoute
+  '/app/launch': typeof AppLaunchRoute
+  '/app/portfolio': typeof AppPortfolioRoute
+  '/app/signals': typeof AppSignalsRoute
+  '/app/studio': typeof AppStudioRoute
+  '/journal/$slug': typeof JournalSlugRoute
+  '/lab/architecture': typeof LabArchitectureRoute
   '/app': typeof AppIndexRoute
+  '/journal': typeof JournalIndexRoute
+  '/lab': typeof LabIndexRoute
   '/app/pool/$address': typeof AppPoolAddressRoute
+  '/api/public/rpc/$cluster': typeof ApiPublicRpcClusterRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/app': typeof AppRouteWithChildren
+  '/docs': typeof DocsRoute
+  '/governance': typeof GovernanceRoute
+  '/network': typeof NetworkRoute
+  '/token': typeof TokenRoute
+  '/app/launch': typeof AppLaunchRoute
+  '/app/portfolio': typeof AppPortfolioRoute
+  '/app/signals': typeof AppSignalsRoute
+  '/app/studio': typeof AppStudioRoute
+  '/journal/$slug': typeof JournalSlugRoute
+  '/lab/architecture': typeof LabArchitectureRoute
   '/app/': typeof AppIndexRoute
+  '/journal/': typeof JournalIndexRoute
+  '/lab/': typeof LabIndexRoute
   '/app/pool/$address': typeof AppPoolAddressRoute
+  '/api/public/rpc/$cluster': typeof ApiPublicRpcClusterRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/app' | '/app/' | '/app/pool/$address'
+  fullPaths:
+    | '/'
+    | '/app'
+    | '/docs'
+    | '/governance'
+    | '/network'
+    | '/token'
+    | '/app/launch'
+    | '/app/portfolio'
+    | '/app/signals'
+    | '/app/studio'
+    | '/journal/$slug'
+    | '/lab/architecture'
+    | '/app/'
+    | '/journal/'
+    | '/lab/'
+    | '/app/pool/$address'
+    | '/api/public/rpc/$cluster'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/app' | '/app/pool/$address'
-  id: '__root__' | '/' | '/app' | '/app/' | '/app/pool/$address'
+  to:
+    | '/'
+    | '/docs'
+    | '/governance'
+    | '/network'
+    | '/token'
+    | '/app/launch'
+    | '/app/portfolio'
+    | '/app/signals'
+    | '/app/studio'
+    | '/journal/$slug'
+    | '/lab/architecture'
+    | '/app'
+    | '/journal'
+    | '/lab'
+    | '/app/pool/$address'
+    | '/api/public/rpc/$cluster'
+  id:
+    | '__root__'
+    | '/'
+    | '/app'
+    | '/docs'
+    | '/governance'
+    | '/network'
+    | '/token'
+    | '/app/launch'
+    | '/app/portfolio'
+    | '/app/signals'
+    | '/app/studio'
+    | '/journal/$slug'
+    | '/lab/architecture'
+    | '/app/'
+    | '/journal/'
+    | '/lab/'
+    | '/app/pool/$address'
+    | '/api/public/rpc/$cluster'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AppRoute: typeof AppRouteWithChildren
+  DocsRoute: typeof DocsRoute
+  GovernanceRoute: typeof GovernanceRoute
+  NetworkRoute: typeof NetworkRoute
+  TokenRoute: typeof TokenRoute
+  JournalSlugRoute: typeof JournalSlugRoute
+  LabArchitectureRoute: typeof LabArchitectureRoute
+  JournalIndexRoute: typeof JournalIndexRoute
+  LabIndexRoute: typeof LabIndexRoute
+  ApiPublicRpcClusterRoute: typeof ApiPublicRpcClusterRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -82,12 +259,96 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/docs': {
+      id: '/docs'
+      path: '/docs'
+      fullPath: '/docs'
+      preLoaderRoute: typeof DocsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/governance': {
+      id: '/governance'
+      path: '/governance'
+      fullPath: '/governance'
+      preLoaderRoute: typeof GovernanceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/network': {
+      id: '/network'
+      path: '/network'
+      fullPath: '/network'
+      preLoaderRoute: typeof NetworkRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/token': {
+      id: '/token'
+      path: '/token'
+      fullPath: '/token'
+      preLoaderRoute: typeof TokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/app/': {
       id: '/app/'
       path: '/'
       fullPath: '/app/'
       preLoaderRoute: typeof AppIndexRouteImport
       parentRoute: typeof AppRoute
+    }
+    '/app/launch': {
+      id: '/app/launch'
+      path: '/launch'
+      fullPath: '/app/launch'
+      preLoaderRoute: typeof AppLaunchRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/portfolio': {
+      id: '/app/portfolio'
+      path: '/portfolio'
+      fullPath: '/app/portfolio'
+      preLoaderRoute: typeof AppPortfolioRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/signals': {
+      id: '/app/signals'
+      path: '/signals'
+      fullPath: '/app/signals'
+      preLoaderRoute: typeof AppSignalsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/studio': {
+      id: '/app/studio'
+      path: '/studio'
+      fullPath: '/app/studio'
+      preLoaderRoute: typeof AppStudioRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/journal/': {
+      id: '/journal/'
+      path: '/journal'
+      fullPath: '/journal/'
+      preLoaderRoute: typeof JournalIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/journal/$slug': {
+      id: '/journal/$slug'
+      path: '/journal/$slug'
+      fullPath: '/journal/$slug'
+      preLoaderRoute: typeof JournalSlugRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/lab/': {
+      id: '/lab/'
+      path: '/lab'
+      fullPath: '/lab/'
+      preLoaderRoute: typeof LabIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/lab/architecture': {
+      id: '/lab/architecture'
+      path: '/lab/architecture'
+      fullPath: '/lab/architecture'
+      preLoaderRoute: typeof LabArchitectureRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/app/pool/$address': {
       id: '/app/pool/$address'
@@ -96,15 +357,30 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppPoolAddressRouteImport
       parentRoute: typeof AppRoute
     }
+    '/api/public/rpc/$cluster': {
+      id: '/api/public/rpc/$cluster'
+      path: '/api/public/rpc/$cluster'
+      fullPath: '/api/public/rpc/$cluster'
+      preLoaderRoute: typeof ApiPublicRpcClusterRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 interface AppRouteChildren {
+  AppLaunchRoute: typeof AppLaunchRoute
+  AppPortfolioRoute: typeof AppPortfolioRoute
+  AppSignalsRoute: typeof AppSignalsRoute
+  AppStudioRoute: typeof AppStudioRoute
   AppIndexRoute: typeof AppIndexRoute
   AppPoolAddressRoute: typeof AppPoolAddressRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
+  AppLaunchRoute: AppLaunchRoute,
+  AppPortfolioRoute: AppPortfolioRoute,
+  AppSignalsRoute: AppSignalsRoute,
+  AppStudioRoute: AppStudioRoute,
   AppIndexRoute: AppIndexRoute,
   AppPoolAddressRoute: AppPoolAddressRoute,
 }
@@ -114,6 +390,15 @@ const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AppRoute: AppRouteWithChildren,
+  DocsRoute: DocsRoute,
+  GovernanceRoute: GovernanceRoute,
+  NetworkRoute: NetworkRoute,
+  TokenRoute: TokenRoute,
+  JournalSlugRoute: JournalSlugRoute,
+  LabArchitectureRoute: LabArchitectureRoute,
+  JournalIndexRoute: JournalIndexRoute,
+  LabIndexRoute: LabIndexRoute,
+  ApiPublicRpcClusterRoute: ApiPublicRpcClusterRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

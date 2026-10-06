@@ -50,8 +50,9 @@ export async function runTransaction(opts: {
   tx: Transaction;
   signers?: Signer[];
   onPhase?: (p: TxPhase, info?: { signature?: string }) => void;
+  pollMs?: number;
 }): Promise<{ signature: string; slot?: number }> {
-  const { connection, wallet, tx, signers = [], onPhase } = opts;
+  const { connection, wallet, tx, signers = [], onPhase, pollMs = 2000 } = opts;
   if (!wallet.publicKey) throw new TxError("Wallet not connected", "rejected");
   onPhase?.("preparing");
   const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash("confirmed");
@@ -75,12 +76,33 @@ export async function runTransaction(opts: {
     throw new TxError(e instanceof Error ? e.message : "Wallet failed to send", "sending");
   }
   onPhase?.("confirming", { signature });
-  const conf = await connection.confirmTransaction({ signature, blockhash, lastValidBlockHeight }, "confirmed");
-  if (conf.value.err) {
-    throw new TxError(`Transaction failed onchain: ${JSON.stringify(conf.value.err)}`, "confirming", undefined, signature);
+  const conf = await confirmByPolling(connection, signature, lastValidBlockHeight, pollMs);
+  if (conf.err) {
+    throw new TxError(`Transaction failed onchain: ${JSON.stringify(conf.err)}`, "confirming", undefined, signature);
   }
   onPhase?.("confirmed", { signature });
-  return { signature, slot: conf.context.slot };
+  return { signature, slot: conf.slot };
+}
+
+/**
+ * Confirmation without websockets: poll signature status until confirmed/finalized,
+ * or fail once the chain passes lastValidBlockHeight (blockhash expired).
+ */
+export async function confirmByPolling(connection: Connection, signature: string, lastValidBlockHeight: number, pollMs = 2000): Promise<{ err: unknown; slot?: number }> {
+  for (;;) {
+    const st = await connection.getSignatureStatuses([signature], { searchTransactionHistory: false }).catch(() => null);
+    const v = st?.value[0];
+    if (v && (v.confirmationStatus === "confirmed" || v.confirmationStatus === "finalized")) return { err: v.err, slot: v.slot };
+    if (v?.err) return { err: v.err, slot: v.slot };
+    const height = await connection.getBlockHeight("confirmed").catch(() => null);
+    if (height !== null && height > lastValidBlockHeight) {
+      const last = await connection.getSignatureStatuses([signature], { searchTransactionHistory: true }).catch(() => null);
+      const lv = last?.value[0];
+      if (lv && (lv.confirmationStatus === "confirmed" || lv.confirmationStatus === "finalized")) return { err: lv.err, slot: lv.slot };
+      throw new TxError("Blockhash expired before confirmation. The transaction did not land; it is safe to retry.", "confirming", undefined, signature);
+    }
+    await new Promise((r) => setTimeout(r, pollMs));
+  }
 }
 
 /**
@@ -97,28 +119,30 @@ export async function runSequence(opts: {
   const emit = () => opts.onUpdate(state.map((s) => ({ ...s })));
   emit();
   for (let i = 0; i < opts.steps.length; i++) {
+    const cur = state[i]!;
+    const step = opts.steps[i]!;
     try {
       const { signature } = await runTransaction({
         connection: opts.connection,
         wallet: opts.wallet,
-        tx: opts.steps[i].tx,
-        signers: opts.steps[i].signers,
+        tx: step.tx,
+        signers: step.signers,
         onPhase: (p, info) => {
-          state[i].phase = p;
-          if (info?.signature) state[i].signature = info.signature;
+          cur.phase = p;
+          if (info?.signature) cur.signature = info.signature;
           emit();
         },
       });
-      state[i].signature = signature;
-      state[i].phase = "confirmed";
+      cur.signature = signature;
+      cur.phase = "confirmed";
       emit();
     } catch (e) {
       const te = e instanceof TxError ? e : null;
-      state[i].phase = te?.phase === "rejected" ? "rejected" : "failed";
-      state[i].error = e instanceof Error ? e.message : String(e);
-      state[i].logs = te?.logs;
-      if (te?.signature) state[i].signature = te.signature;
-      for (let j = i + 1; j < state.length; j++) state[j].phase = "skipped";
+      cur.phase = te?.phase === "rejected" ? "rejected" : "failed";
+      cur.error = e instanceof Error ? e.message : String(e);
+      cur.logs = te?.logs;
+      if (te?.signature) cur.signature = te.signature;
+      for (let j = i + 1; j < state.length; j++) state[j]!.phase = "skipped";
       emit();
       break;
     }
