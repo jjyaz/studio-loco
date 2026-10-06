@@ -18,7 +18,7 @@ export function useTxRunner() {
   const live = useRef({ wallet: "", cluster: settings.cluster as string, rpc: "" });
   live.current = { wallet: wallet.publicKey?.toBase58() ?? "", cluster: settings.cluster, rpc: settings.rpc[settings.cluster] ?? "" };
   const canSign = !!wallet.publicKey && !!wallet.signTransaction;
-  async function run(list: { label: string; tx: Transaction; signers?: Signer[] }[]): Promise<TxStep[]> {
+  async function run(list: { label: string; tx: Transaction; signers?: Signer[] }[], extra: { semanticGuard?: () => string | null; maxFeeLamports?: number } = {}): Promise<TxStep[]> {
     if (!wallet.publicKey) throw new Error("Connect a wallet first");
     if (!wallet.signTransaction) throw new Error(UNSUPPORTED_WALLET);
     if (lock.current) throw new Error("Another transaction is already in progress");
@@ -33,7 +33,7 @@ export function useTxRunner() {
         wallet: { publicKey: wallet.publicKey, signTransaction: wallet.signTransaction },
         steps: list,
         onUpdate: setSteps,
-        ctx: { cluster: settings.cluster, rpc: settings.rpc[settings.cluster] ? "custom" : "relay", store: browserPendingStore,
+        ctx: { cluster: settings.cluster, rpc: settings.rpc[settings.cluster] ? "custom" : "relay", store: browserPendingStore, ...extra,
           identityGuard: () => {
             const n = live.current;
             if (n.wallet !== start.wallet) return "The connected wallet changed during this sequence, so remaining steps were stopped.";

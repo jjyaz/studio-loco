@@ -68,6 +68,10 @@ export interface TxContext {
   store?: PendingStore;
   /** Re-checked before every signature: returns a reason when wallet/cluster changed mid-flow. */
   identityGuard?: () => string | null;
+  /** Optional caller-specific check (quote age, config generation…). Same call sites as identityGuard. */
+  semanticGuard?: () => string | null;
+  /** When set, the fresh message's getFeeForMessage must be known and <= this many lamports, or nothing is signed. */
+  maxFeeLamports?: number;
 }
 
 export const UNSUPPORTED_WALLET =
@@ -191,7 +195,7 @@ export async function runTransaction(opts: {
   if (!wallet.publicKey) throw new TxError("Wallet not connected", "rejected");
   if (!wallet.signTransaction) throw new TxError(UNSUPPORTED_WALLET, "sending");
   const signFn = wallet.signTransaction;
-  const guard = () => { const r = ctx.identityGuard?.(); if (r) throw new TxError(r, "sending"); };
+  const guard = () => { const r = ctx.identityGuard?.() ?? ctx.semanticGuard?.(); if (r) throw new TxError(r, "sending"); };
   onPhase?.("preparing");
   guard();
   if (ctx.cluster !== "unknown") await assertCluster(connection, ctx.cluster);
@@ -201,6 +205,14 @@ export async function runTransaction(opts: {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   tx.feePayer = wallet.publicKey as any;
   const messageBytes = new Uint8Array(tx.serializeMessage());
+  if (ctx.maxFeeLamports !== undefined) {
+    let fee: number | null;
+    try { fee = (await withTimeout(connection.getFeeForMessage(tx.compileMessage(), "confirmed"), 10_000, "Fee lookup")).value; }
+    catch (e) { throw new TxError(`Network fee unknown (${e instanceof Error ? e.message : String(e)}); nothing was signed.`, "sending"); }
+    if (fee === null || !Number.isSafeInteger(fee)) throw new TxError("Network fee unknown for the fresh message; nothing was signed.", "sending");
+    if (fee > ctx.maxFeeLamports) throw new TxError(`Network fee rose to ${fee} lamports, above the reviewed ${ctx.maxFeeLamports}; nothing was signed.`, "sending");
+  }
+  guard();
 
   onPhase?.("simulating");
   const sim = await withTimeout(simulateExact(connection, messageBytes), 20_000, "Simulation");
