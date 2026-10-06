@@ -47,18 +47,17 @@ const mobileWalletServerStub = {
   },
 };
 
-// bn.js maps "buffer" to false in its package "browser" field. In the production client build
-// Rolldown applied that empty stub to every `buffer` import, so safe-buffer/bs58/web3.js crashed
-// with "Cannot read properties of undefined (reading 'from')" and the page never hydrated.
-// Drop bn.js's optional require (it already falls back without Buffer) so the stub never exists.
-const bnBufferStubFix = {
-  name: "studio-loco:bn-buffer-stub-fix",
+// In the production client build every `buffer` import arrives as `node:buffer` and Vite resolves
+// it to its empty "__vite-browser-external" stub, so safe-buffer/bs58/web3.js crashed with
+// "Cannot read properties of undefined (reading 'from')" and the page never hydrated.
+// Resolve it to the real npm `buffer` package for the browser. Must run before other plugins.
+const browserBufferPackage = {
+  name: "studio-loco:browser-buffer-package",
   enforce: "pre" as const,
-  transform(this: { environment?: { name: string } }, code: string, id: string) {
+  resolveId(this: { environment?: { name: string } }, source: string) {
     if (this.environment?.name !== "client") return;
-    if (!/[\\/]bn\.js[\\/]lib[\\/]bn\.js$/.test(id.split("?")[0])) return;
-    const next = code.replace("require('buffer').Buffer", "undefined");
-    return next === code ? undefined : { code: next, map: null };
+    if (!/^(node:)?buffer\/?$/.test(source)) return;
+    return createRequire(import.meta.url).resolve("buffer/index.js");
   },
 };
 
@@ -69,7 +68,7 @@ export default defineConfig({
     server: { entry: "server" },
   },
   vite: {
-    plugins: [workerBrowserFallback, anchorBrowserEntry, mobileWalletServerStub, bnBufferStubFix],
+    plugins: [browserBufferPackage, workerBrowserFallback, anchorBrowserEntry, mobileWalletServerStub],
     // Resolve these before the final server bundling stage; never externalize them.
     ssr: { noExternal: [/^@solana\/wallet-adapter-react$/, /^@meteora-ag\/dlmm$/, /^@coral-xyz\/anchor$/] },
   },
