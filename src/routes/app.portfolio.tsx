@@ -6,7 +6,9 @@ import BN from "bn.js";
 import { Btn, Cap, Notice, PageHead, Panel, Spinner } from "@/components/kit";
 import { WalletButton } from "@/components/wallet/WalletButton";
 import { TxSteps, useTxRunner } from "@/components/app/useTx";
-import { usePositions, rangeState, type PositionRow } from "@/components/app/positions";
+import { usePositions, rangeState, useIndexedPortfolio, type PositionRow } from "@/components/app/positions";
+import { Field } from "@/components/kit";
+import { fmtUsd } from "@/lib/format";
 import { formatUnits } from "@/lib/amount";
 import { getPool, invalidatePool } from "@/lib/dlmm";
 import { shortAddr, timeAgo } from "@/lib/format";
@@ -73,14 +75,14 @@ function Portfolio() {
 
   return (
     <div>
-      <PageHead code="ST-04 · Portfolio" title="Your carriages." intro="DLMM positions owned by your connected wallet, read directly from chain." cap={["live"]}>
+      <PageHead code="ST-04 · Portfolio" title="Your carriages." intro="DLMM positions owned by your connected wallet. On mainnet they are found through Meteora's index, then every position is checked on chain before any action is offered." cap={["live"]}>
         {publicKey && <div className="flex items-center gap-3"><span className="station-code text-cream/70">{q.dataUpdatedAt ? `Updated ${timeAgo(q.dataUpdatedAt)}` : "—"}</span><Btn size="sm" variant="line" onClick={() => q.refetch()} disabled={q.isFetching}>{q.isFetching ? "Refreshing…" : "Refresh"}</Btn></div>}
       </PageHead>
       {!publicKey && <Panel><p className="mb-4 text-cream/80">Connect a wallet to read your positions. Nothing is shown until you do.</p><WalletButton /></Panel>}
       {publicKey && q.isPending && <Spinner label="Scanning DLMM positions" />}
       {q.isError && (
         <Notice tone="error" title="Couldn't read positions" action={<Btn size="sm" onClick={() => q.refetch()}>Retry</Btn>}>
-          {redactUrls(String(((q.error) as Error)?.message ?? ""))}. Position scans use getProgramAccounts, which public RPCs often restrict — set a dedicated RPC in Settings. This is an error, not an empty portfolio.
+          {redactUrls(String(((q.error) as Error)?.message ?? ""))}. {settings.cluster === "mainnet-beta" ? "Mainnet positions are found through Meteora's index, then each one is checked on chain." : "Devnet positions are found by scanning the chain, which some RPCs restrict — try a dedicated RPC in Settings."} This is an error, not an empty portfolio.
         </Notice>
       )}
       {q.data && q.data.length === 0 && <Panel><p className="text-cream/80">No DLMM positions found for {shortAddr(publicKey?.toBase58())} on this cluster.</p><Link to="/app" className="mt-3 inline-block underline">Find a pool →</Link></Panel>}
@@ -97,7 +99,59 @@ function Portfolio() {
       )}
       {err && <div className="mt-4"><Notice tone="error" title="Couldn't prepare transactions">{err}</Notice></div>}
       <TxSteps steps={runner.steps} />
+      {settings.cluster === "mainnet-beta" && <WatchIndexed connected={publicKey?.toBase58() ?? null} />}
     </div>
+  );
+}
+
+const B58 = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+
+/** Indexed public readings for any address. Read-only: no actions, never feeds transaction amounts. */
+function WatchIndexed({ connected }: { connected: string | null }) {
+  const [input, setInput] = useState("");
+  const [addr, setAddr] = useState<string | null>(null);
+  const target = addr ?? connected;
+  const q = useIndexedPortfolio(target);
+  const bad = input.trim() !== "" && !B58.test(input.trim());
+  return (
+    <section className="mt-10" aria-labelledby="watch-h">
+      <h2 id="watch-h" className="display text-2xl">Indexed readings</h2>
+      <p className="mt-1 max-w-2xl text-sm text-cream/75">Approximate values from Meteora's public mainnet index. Read-only: you can't act on them here, and they're never used to work out transaction amounts. Enter any address to watch it.</p>
+      <form className="mt-4 flex flex-wrap items-end gap-3" onSubmit={(e) => { e.preventDefault(); if (!bad && input.trim()) setAddr(input.trim()); }}>
+        <div className="min-w-0 flex-1 sm:max-w-md"><Field label="Watch address (read-only)" value={input} onChange={(e) => setInput(e.target.value)} placeholder="Solana address" spellCheck={false} /></div>
+        <Btn size="sm" type="submit" disabled={bad || !input.trim()}>Watch</Btn>
+        {addr && connected && <Btn size="sm" variant="line" type="button" onClick={() => { setAddr(null); setInput(""); }}>Back to my wallet</Btn>}
+      </form>
+      {bad && <p role="alert" className="mt-2 text-sm text-destructive">That isn't a valid Solana address.</p>}
+      {!target && <p className="mt-4 text-sm text-cream/70">Connect a wallet or enter an address.</p>}
+      {target && q.isPending && <Spinner label="Reading the index" />}
+      {q.isError && <div className="mt-4"><Notice tone="error" title="Index unavailable" action={<Btn size="sm" onClick={() => q.refetch()}>Retry</Btn>}>{redactUrls((q.error as Error).message)}</Notice></div>}
+      {q.data && (
+        <div className="mt-4">
+          <p className="station-code text-cream/65">{shortAddr(target)} · {addr ? "watch-only" : "your wallet"} · indexed {timeAgo(q.data.fetchedAt)} · {q.data.totalPositions ?? "—"} open positions</p>
+          {q.data.pools.length === 0 ? <p className="mt-3 text-sm text-cream/75">The index lists no open DLMM positions for this address.</p> : (
+            <div className="mt-3 overflow-x-auto border border-line">
+              <table className="w-full min-w-[640px] text-sm">
+                <thead><tr className="border-b border-line text-left station-code text-cream/70"><th className="p-3">Pool</th><th className="p-3 text-right">Positions</th><th className="p-3 text-right">Out of range</th><th className="p-3 text-right">Balance ≈</th><th className="p-3 text-right">Unclaimed fees ≈</th><th className="p-3 text-right">PnL ≈</th></tr></thead>
+                <tbody>
+                  {q.data.pools.map((p) => (
+                    <tr key={p.poolAddress} className="border-b border-line/60">
+                      <td className="p-3"><Link to="/app/pool/$address" params={{ address: p.poolAddress }} className="hover:text-amber">{p.tokenX && p.tokenY ? `${p.tokenX}-${p.tokenY}` : shortAddr(p.poolAddress)}</Link>{p.poolStateUpdatedAtBlockTime ? <span className="block station-code text-cream/55">pool state {timeAgo(p.poolStateUpdatedAtBlockTime * 1000)}</span> : null}</td>
+                      <td className="p-3 text-right font-mono">{p.openPositionCount ?? p.listPositions.length}</td>
+                      <td className="p-3 text-right font-mono">{p.positionsOutOfRange ?? "—"}</td>
+                      <td className="p-3 text-right font-mono">{fmtUsd(p.balances)}</td>
+                      <td className="p-3 text-right font-mono">{fmtUsd(p.unclaimedFees)}</td>
+                      <td className="p-3 text-right font-mono">{fmtUsd(p.pnl)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          <div className="mt-3"><Cap kind="live" /></div>
+        </div>
+      )}
+    </section>
   );
 }
 
