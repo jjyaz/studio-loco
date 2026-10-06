@@ -6,7 +6,7 @@ import { Btn } from "@/components/kit";
 import { shortAddr } from "@/lib/format";
 
 export function WalletButton({ compact = false }: { compact?: boolean }) {
-  const { wallets, select, connect, disconnect, publicKey, connecting, wallet } = useWallet();
+  const { wallets, select, disconnect, publicKey, connecting, wallet } = useWallet();
   const [open, setOpen] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -72,8 +72,6 @@ export function WalletButton({ compact = false }: { compact?: boolean }) {
             )}
           </ul>
           {err && <p role="alert" className="text-sm text-destructive">{err}</p>}
-          {/* connect is exposed for adapters that need it after select */}
-          <span className="hidden">{String(!!connect)}</span>
         </DialogContent>
       </Dialog>
     </>
