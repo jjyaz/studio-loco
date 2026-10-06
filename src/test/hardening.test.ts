@@ -53,7 +53,7 @@ function conn(o: { simErr?: unknown; status?: unknown; statusThrows?: boolean; h
   const sims: VersionedTransaction[] = [];
   return {
     sims,
-    getGenesisHash: vi.fn().mockResolvedValue(o.genesis ?? GENESIS.devnet),
+    getGenesisHash: vi.fn().mockResolvedValue(o.genesis ?? GENESIS["devnet"]),
     getLatestBlockhash: vi.fn().mockResolvedValue({ blockhash: Keypair.generate().publicKey.toBase58(), lastValidBlockHeight: 100 }),
     simulateTransaction: vi.fn(async (vtx: VersionedTransaction, cfg: unknown) => { sims.push(vtx); expect(cfg).toMatchObject({ sigVerify: false, replaceRecentBlockhash: false }); return { value: { err: o.simErr ?? null, logs: ["log"] } }; }),
     sendRawTransaction: vi.fn(async () => { if (o.sendThrows) throw o.sendThrows; return "sig"; }),
