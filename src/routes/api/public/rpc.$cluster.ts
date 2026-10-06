@@ -6,8 +6,14 @@ import { createFileRoute } from "@tanstack/react-router";
  * validated params, bounded request/response sizes, upstream timeout, no secrets, no logging
  * of request bodies. Users can bypass it entirely with their own RPC in Settings.
  */
+// Default upstreams. Mainnet uses PublicNode's free keyless endpoint because
+// api.mainnet-beta.solana.com 403s both browser origins and hosted-Worker IPs;
+// PublicNode was verified against the real mainnet genesis hash, live slots and
+// DLMM program/pool account reads (2026-10-06). Devnet stays on the public
+// Solana endpoint — no verified keyless devnet alternative; users can set a
+// custom RPC in Settings. Server env overrides always win.
 const UPSTREAM: Record<string, string> = {
-  mainnet: "https://api.mainnet-beta.solana.com",
+  mainnet: "https://solana-rpc.publicnode.com",
   devnet: "https://api.devnet.solana.com",
 };
 
