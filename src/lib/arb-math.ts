@@ -65,22 +65,22 @@ export type Validated = { ok: true; cfg: ArbConfig; inLamports: BN; minProfit: B
 export function validateConfig(raw: unknown): Validated {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return { ok: false, error: "Config must be an object" };
   const o = raw as Record<string, unknown>;
-  if (o.v !== 1) return { ok: false, error: "Unsupported config version (expected v: 1)" };
+  if (o["v"] !== 1) return { ok: false, error: "Unsupported config version (expected v: 1)" };
   if (Object.keys(o).sort().join(",") !== KEYS) return { ok: false, error: `Config keys must be exactly: ${KEYS}` };
   for (const k of ["inputSol", "minProfitSol", "priorityFeeSol"] as const) if (typeof o[k] !== "string") return { ok: false, error: `${k} must be a decimal string` };
   for (const [k, [lo, hi]] of Object.entries(LIMITS)) {
     const v = o[k];
     if (typeof v !== "number" || !Number.isFinite(v) || !Number.isInteger(v) || v < lo || v > hi) return { ok: false, error: `${k} must be a whole number ${lo}–${hi}` };
   }
-  const a = parseUnits(o.inputSol as string, 9);
+  const a = parseUnits(o["inputSol"] as string, 9);
   if (!a.ok) return { ok: false, error: `Input SOL: ${a.error}` };
   if (a.raw.isZero()) return { ok: false, error: "Input SOL must be greater than 0" };
   if (a.raw.gt(MAX_INPUT)) return { ok: false, error: "Input SOL is capped at 1,000,000" };
-  const p = parseUnits(o.minProfitSol as string, 9);
+  const p = parseUnits(o["minProfitSol"] as string, 9);
   if (!p.ok) return { ok: false, error: `Minimum net profit: ${p.error}` };
   if (p.raw.isZero()) return { ok: false, error: "Minimum net profit must be greater than 0" };
   if (p.raw.gt(MAX_INPUT)) return { ok: false, error: "Minimum net profit is too large" };
-  const f = parseUnits(o.priorityFeeSol as string, 9);
+  const f = parseUnits(o["priorityFeeSol"] as string, 9);
   if (!f.ok) return { ok: false, error: `Priority fee budget: ${f.error}` };
   if (f.raw.gt(new BN(100_000_000))) return { ok: false, error: "Priority fee budget is capped at 0.1 SOL" };
   return { ok: true, cfg: o as unknown as ArbConfig, inLamports: a.raw, minProfit: p.raw, priorityBudget: f.raw };

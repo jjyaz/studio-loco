@@ -10,10 +10,11 @@ import { explorerAccount, explorerTx, fmtPct, redactUrls, shortAddr } from "@/li
 import { useLocalState, useSettings } from "@/lib/settings";
 import { cn } from "@/lib/utils";
 import {
-  DEFAULT_CONFIG, QUOTE_TTL_MS, USDC_MINT, WSOL_MINT, checkConfig, evaluateRoute, parseConfig, realizedDeltas,
+  DEFAULT_CONFIG, DECIMALS, QUOTE_TTL_MS, USDC_MINT, WSOL_MINT, evaluateRoute, realizedDeltas, splitFee, strictInt, validateConfig,
   type ArbConfig, type Costs, type TxMetaLike,
 } from "@/lib/arb-math";
 import type { BuiltArb, QuotedLeg, RouteResult, ScanResult, WalletAccounts } from "@/lib/arb";
+import { browserPendingStore } from "@/lib/tx";
 
 export const Route = createFileRoute("/app/dispatch")({
   head: () => ({
@@ -30,20 +31,28 @@ export const Route = createFileRoute("/app/dispatch")({
 });
 
 const SOL = (v: BN | null | undefined) => (v ? `${formatUnits(v, 9)} SOL` : "—");
+const FEE = (v: BN, mint: string) => `${formatUnits(v, DECIMALS[mint] ?? 0)} ${mint === WSOL_MINT ? "SOL" : mint === USDC_MINT ? "USDC" : "?"}`;
+const ARB_LABEL = "Round trip";
+type Draft = Record<"inputSol" | "minProfitSol" | "priorityFeeSol" | "slippageBps" | "computeUnits" | "intervalSec" | "maxPools", string>;
+const toDraft = (c: ArbConfig): Draft => ({ inputSol: c.inputSol, minProfitSol: c.minProfitSol, priorityFeeSol: c.priorityFeeSol, slippageBps: String(c.slippageBps), computeUnits: String(c.computeUnits), intervalSec: String(c.intervalSec), maxPools: String(c.maxPools) });
+const fromDraft = (d: Draft) => ({ v: 1, inputSol: d.inputSol, minProfitSol: d.minProfitSol, priorityFeeSol: d.priorityFeeSol, slippageBps: strictInt(d.slippageBps), computeUnits: strictInt(d.computeUnits), intervalSec: strictInt(d.intervalSec), maxPools: strictInt(d.maxPools) });
 const USDC = (v: BN | null | undefined) => (v ? `${formatUnits(v, 6)} USDC` : "—");
 type Log = { at: number; tone: "info" | "warn" | "error" | "ok"; text: string };
 
 interface Review {
   at: number; key: string; route: RouteResult; a: QuotedLeg; b: QuotedLeg; w: WalletAccounts;
   costs: Costs; floor: BN; conservativeProfit: BN; expectedProfit: BN; residualUsdc: BN; built: BuiltArb;
+  gen: number; quotedAt: number; wallet: string;
 }
 
 function Dispatch() {
   const { connection } = useConnection();
   const { publicKey } = useWallet();
   const { settings } = useSettings();
-  const [cfg, setCfg] = useLocalState<ArbConfig>("studio-loco:dispatch:v1", DEFAULT_CONFIG, (r) => { try { return parseConfig(r); } catch { return DEFAULT_CONFIG; } });
-  const chk = checkConfig(cfg);
+  const [cfg, setCfg] = useLocalState<ArbConfig>("studio-loco:dispatch:v1", DEFAULT_CONFIG, (r) => { const v = validateConfig(r); return v.ok ? v.cfg : DEFAULT_CONFIG; });
+  const [draft, setDraft] = useState<Draft>(() => toDraft(DEFAULT_CONFIG));
+  useEffect(() => { setDraft(toDraft(cfg)); }, [cfg]);
+  const chk = validateConfig(fromDraft(draft));
   const [scan, setScan] = useState<ScanResult | null>(null);
   const [scanErr, setScanErr] = useState<string | null>(null);
   const [scanning, setScanning] = useState(false);
@@ -59,10 +68,15 @@ function Dispatch() {
   const abort = useRef<AbortController | null>(null);
   const busy = useRef(false);
   const failures = useRef(0);
+  /** Monotonic: bumps on every identity/config/practice change, pause, hide and unmount. Never reused (no ABA). */
+  const gen = useRef(0);
+  const mounted = useRef(true);
 
   const mainnet = settings.cluster === "mainnet-beta";
   const blocked = !mainnet ? "Dispatch supports mainnet SOL/USDC only. Switch the cluster in Settings." : settings.practice ? "Practice mode is on — Dispatch never uses practice data. Turn it off to scan real pools." : null;
-  const envKey = `${publicKey?.toBase58() ?? "-"}|${settings.cluster}|${settings.rpc[settings.cluster] ?? ""}|${settings.practice}|${JSON.stringify(cfg)}`;
+  const envKey = `${publicKey?.toBase58() ?? "-"}|${settings.cluster}|${settings.rpc[settings.cluster] ?? ""}|${settings.practice}|${JSON.stringify(fromDraft(draft))}`;
+  const live = useRef({ envKey, practice: settings.practice });
+  live.current = { envKey, practice: settings.practice };
   const push = (tone: Log["tone"], text: string) => setLog((l) => [{ at: Date.now(), tone, text: redactUrls(text) }, ...l].slice(0, 200));
 
   // any identity/settings change invalidates review and stops monitoring
@@ -70,14 +84,16 @@ function Dispatch() {
   useEffect(() => {
     if (prevKey.current === envKey) return;
     prevKey.current = envKey;
+    gen.current++;
     abort.current?.abort();
     setReview(null);
+    setScan(null);
     setMonitor((m) => { if (m) push("warn", "Monitoring paused: wallet, network, RPC, practice or configuration changed."); return false; });
   }, [envKey]);
-  useEffect(() => () => abort.current?.abort(), []);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; gen.current++; abort.current?.abort(); }; }, []);
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, []);
   useEffect(() => {
-    const vis = () => { if (document.hidden) setMonitor((m) => { if (m) push("warn", "Monitoring paused: tab hidden."); return false; }); };
+    const vis = () => { if (document.hidden) { gen.current++; abort.current?.abort(); } if (document.hidden) setMonitor((m) => { if (m) push("warn", "Monitoring paused: tab hidden."); return false; }); };
     document.addEventListener("visibilitychange", vis);
     return () => document.removeEventListener("visibilitychange", vis);
   }, []);
@@ -86,92 +102,120 @@ function Dispatch() {
     if (busy.current || blocked || !chk.ok) return;
     busy.current = true; setScanning(true); setScanErr(null);
     const ac = new AbortController(); abort.current = ac;
+    const myGen = gen.current; const c = chk.cfg;
     try {
-      const { scanRoutes } = await import("@/lib/arb");
-      const rent = await connection.getMinimumBalanceForRentExemption(165, "confirmed");
-      const { priorityFeeLamports, priorityPrice, BASE_FEE_PER_SIGNATURE } = await import("@/lib/arb-math");
-      // Read-only worst case: assumes a new USDC account must be created and kept.
-      const costs: Costs = { baseFee: new BN(BASE_FEE_PER_SIGNATURE), priorityFee: priorityFeeLamports(priorityPrice(chk.priorityBudget, cfg.computeUnits), cfg.computeUnits), nonRefundableRent: new BN(rent), refundableRent: new BN(rent) };
-      const r = await scanRoutes(connection, { inLamports: chk.inLamports, minProfit: chk.minProfit, slippageBps: cfg.slippageBps, maxPools: cfg.maxPools, costs, signal: ac.signal, log: (m) => push("info", m) });
-      if (ac.signal.aborted) return;
+      const { scanRoutes, estimateFee, priorityFeeLamports, priorityPrice } = await import("@/lib/arb");
+      const { withTimeout } = await import("@/lib/tx");
+      const rent = await withTimeout(connection.getMinimumBalanceForRentExemption(165, "confirmed"), 10_000, "Rent read");
+      const micro = priorityPrice(chk.priorityBudget, c.computeUnits);
+      const fee = await estimateFee(connection, micro, c.computeUnits);
+      if (gen.current !== myGen) return;
+      // Read-only: RPC-backed fee ESTIMATE for a representative message, and assumes a new kept USDC account.
+      const costs: Costs = { networkFee: fee, priorityPart: priorityFeeLamports(micro, c.computeUnits), feeSource: "estimate", nonRefundableRent: new BN(rent), refundableRent: new BN(rent) };
+      const r = await scanRoutes(connection, { inLamports: chk.inLamports, minProfit: chk.minProfit, slippageBps: c.slippageBps, maxPools: c.maxPools, costs, signal: ac.signal, log: (m) => push("info", m) });
+      if (ac.signal.aborted || gen.current !== myGen) return;
       setScan(r); failures.current = 0;
       const prof = r.routes.filter((x) => x.verdict.kind === "profitable").length;
       const errs = r.pools.filter((p) => p.status !== "ok" || p.reason).length;
-      push(prof ? "ok" : "info", `${source === "monitor" ? "Monitor" : "Scan"}: ${r.routes.length} routes quoted, ${prof} meet the net-profit floor${errs ? `, ${errs} pool(s) rejected or errored` : ""}.`);
+      push(prof ? "ok" : r.complete ? "info" : "warn", `${source === "monitor" ? "Monitor" : "Scan"}: ${r.routes.length} routes quoted, ${prof} meet the net-profit floor${errs ? `, ${errs} pool(s) rejected or errored` : ""}${r.complete ? "" : " — partial evidence"}.`);
     } catch (e) {
       if (ac.signal.aborted) { push("warn", "Scan cancelled."); return; }
       failures.current++;
       const m = redactUrls(e instanceof Error ? e.message : String(e));
       setScanErr(m); push("error", `Scan failed: ${m}`);
-    } finally { busy.current = false; setScanning(false); }
+    } finally { busy.current = false; if (mounted.current) setScanning(false); }
   }
 
   // monitoring loop: sequential, no overlap, exponential backoff on failure, proposals only
   useEffect(() => {
-    if (!monitor) return;
+    if (!monitor || review || runner.running) return;
     let stop = false; let t: ReturnType<typeof setTimeout>;
     const tick = async () => {
       if (stop) return;
       await scanOnce("monitor");
       if (stop) return;
-      const back = Math.min(300, cfg.intervalSec * 2 ** Math.min(failures.current, 4));
+      const back = Math.min(600, cfg.intervalSec * 2 ** Math.min(failures.current, 4));
       t = setTimeout(tick, back * 1000);
     };
     push("info", `Monitoring started (every ${cfg.intervalSec}s, this tab only, discovers proposals — never signs).`);
     void tick();
     return () => { stop = true; clearTimeout(t); abort.current?.abort(); };
-  }, [monitor]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [monitor, !!review, runner.running]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function requote(route: RouteResult) {
-    if (!publicKey || !chk.ok || blocked || reviewing) return;
+    if (!publicKey || !chk.ok || blocked || reviewing || !route.b) return;
+    if (browserPendingStore.list().some((p) => p.label.startsWith(ARB_LABEL))) { setRevErr("An earlier round-trip signature is unresolved. Check its status above before starting another."); return; }
     setReviewing(true); setRevErr(null); setReview(null);
-    const key = envKey + "|" + route.a.pool + ">" + (route.b?.pool ?? "");
+    const key = envKey + "|" + route.a.pool + ">" + route.b.pool;
+    const myGen = gen.current; const c = chk.cfg;
+    const cur = () => { if (gen.current !== myGen || !mounted.current) throw new Error("Cancelled: inputs changed during requote"); };
     try {
       const arb = await import("@/lib/arb");
       const { getPool, invalidatePool } = await import("@/lib/dlmm");
       const [poolA, poolB] = await Promise.all([route.a.pool, route.b!.pool].map(async (p) => { invalidatePool(p); const x = await getPool(connection, p, "mainnet-beta"); await x.refetchStates(); return x; }));
       for (const p of [poolA!, poolB!]) { const bad = await arb.verifyPool(connection, p); if (bad) throw new Error(`${shortAddr(p.pubkey.toBase58())}: ${bad}`); }
       const mintErr = await arb.verifyMints(connection); if (mintErr) throw new Error(mintErr);
+      cur();
       const w = await arb.readWalletAccounts(connection, publicKey);
-      const costs = arb.walletCosts(w, chk.priorityBudget, cfg.computeUnits);
-      const a = await arb.quoteLeg(poolA!, WSOL_MINT, chk.inLamports, cfg.slippageBps);
+      const micro = arb.priorityPrice(chk.priorityBudget, c.computeUnits);
+      const quotedAt = Date.now();
+      const a = await arb.quoteLeg(poolA!, WSOL_MINT, chk.inLamports, c.slippageBps);
       if (!a.consumed.eq(a.requested)) throw new Error("Leg A would be a partial fill — rejected");
-      const b = await arb.quoteLeg(poolB!, USDC_MINT, a.min, cfg.slippageBps);
+      const b = await arb.quoteLeg(poolB!, USDC_MINT, a.min, c.slippageBps);
+      cur();
+      if (b.min.isZero()) throw new Error("Leg B minimum is zero");
+      // Build with the quote minimum as the on-chain floor, then read the ACTUAL fee for this message.
+      const built = await arb.buildArbTx({ user: publicKey, poolA: poolA!, poolB: poolB!, a, b, floor: b.min, w, microLamports: micro, computeUnits: c.computeUnits });
+      const fee = await arb.messageFee(connection, built.tx);
+      cur();
+      const costs: Costs = { networkFee: fee, priorityPart: arb.priorityFeeLamports(micro, c.computeUnits), feeSource: "exact", nonRefundableRent: w.usdcExists ? new BN(0) : w.ataRent, refundableRent: w.wsolExists ? new BN(0) : w.ataRent };
       const v = evaluateRoute(a, b, chk.minProfit, costs);
       if (v.kind !== "profitable") throw new Error(v.kind === "invalid" ? v.reason : `No profitable route right now: ${v.reason}. Expected net ${v.expectedProfit ? SOL(v.expectedProfit) : "—"}.`);
       // Balance: input + fees + every rent deposit (refundable WSOL rent is still needed up front)
       const need = chk.inLamports.add(v.costs).add(costs.refundableRent ?? new BN(0));
       if (w.lamports.lt(need)) throw new Error(`Insufficient SOL: need ${SOL(need)}, wallet has ${SOL(w.lamports)}`);
-      const built = await arb.buildArbTx({ user: publicKey, poolA: poolA!, poolB: poolB!, a, b, floor: v.floor, w, microLamports: costs.microLamports, computeUnits: cfg.computeUnits });
-      setReview({ at: Date.now(), key, route, a, b, w, costs, floor: v.floor, conservativeProfit: v.conservativeProfit, expectedProfit: v.expectedProfit, residualUsdc: v.residualUsdc, built });
+      cur();
+      setReview({ at: quotedAt, quotedAt, gen: myGen, wallet: publicKey.toBase58(), key, route, a, b, w, costs, floor: v.floor, conservativeProfit: v.conservativeProfit, expectedProfit: v.expectedProfit, residualUsdc: v.residualUsdc, built });
       push("info", `Review ready: ${route.nameA} → ${route.nameB}, ${built.bytes} bytes, quote valid ${QUOTE_TTL_MS / 1000}s.`);
     } catch (e) {
+      if (!mounted.current) return;
       const m = redactUrls(e instanceof Error ? e.message : String(e));
       setRevErr(m); push("warn", `Requote: ${m}`);
-    } finally { setReviewing(false); }
+    } finally { if (mounted.current) setReviewing(false); }
   }
 
   const expired = review ? now - review.at > QUOTE_TTL_MS : false;
   const stale = review ? !review.key.startsWith(envKey + "|") : false;
 
   async function approve() {
-    if (!review || expired || stale || runner.running || !publicKey) return;
+    if (!review || stale || runner.running || !publicKey || Date.now() - review.quotedAt > QUOTE_TTL_MS) return;
+    if (browserPendingStore.list().some((p) => p.label.startsWith(ARB_LABEL))) { setRevErr("An earlier round-trip signature is unresolved — check it first."); return; }
     const r = review;
     setReview(null); // single use: never re-sent
     push("info", "Sending to wallet for approval (one atomic transaction)…");
     try {
-      const steps = await runner.run([{ label: `Round trip ${r.route.nameA} → ${r.route.nameB}`, tx: r.built.tx }]);
+      const semanticGuard = () => {
+        if (!mounted.current) return "Page closed — transaction discarded.";
+        if (gen.current !== r.gen) return "Inputs, network or practice mode changed — transaction discarded.";
+        if (live.current.practice) return "Practice mode is on — transaction discarded.";
+        if (!r.key.startsWith(live.current.envKey + "|")) return "Configuration changed — transaction discarded.";
+        if (Date.now() - r.quotedAt > QUOTE_TTL_MS) return "Quote expired — transaction discarded. Requote to try again.";
+        return null;
+      };
+      const steps = await runner.run([{ label: `${ARB_LABEL} ${r.route.nameA} → ${r.route.nameB}`, tx: r.built.tx }], { semanticGuard, maxFeeLamports: Number(r.costs.networkFee!.toString()) });
       const s = steps[0];
       push(s?.phase === "confirmed" ? "ok" : "warn", `Transaction ${s?.phase ?? "not run"}${s?.signature ? ` · ${shortAddr(s.signature, 6)}` : ""}${s?.error ? `: ${s.error}` : ""}`);
       if (s?.phase === "confirmed" && s.signature) {
         try {
-          const tx = await connection.getTransaction(s.signature, { commitment: "confirmed", maxSupportedTransactionVersion: 0 });
+          const { withTimeout } = await import("@/lib/tx");
+          const tx = await withTimeout(connection.getTransaction(s.signature, { commitment: "confirmed", maxSupportedTransactionVersion: 0 }), 15_000, "Receipt read");
           if (!tx?.meta) { setRealized({ sig: s.signature, text: ["Confirmed, but transaction metadata is not available from this RPC yet — realized deltas unknown."] }); return; }
           const d = realizedDeltas(tx.meta as unknown as TxMetaLike, publicKey.toBase58());
           setRealized({ sig: s.signature, text: [
             `Network fee charged: ${SOL(d.fee)}`, `Native SOL change (incl. fee, rent): ${SOL(d.lamports)}`,
             `WSOL token change: ${SOL(d.wsol)}`, `USDC change (residual dust): ${USDC(d.usdc)}`,
-            `Realized net SOL (native + WSOL): ${SOL(d.netSol)}`,
+            `Realized net SOL (native + WSOL): ${d.netSol ? SOL(d.netSol) : "UNKNOWN"}`,
+            ...(d.failed ? ["Metadata reports the transaction FAILED."] : []),
           ] });
         } catch (e) { setRealized({ sig: s.signature, text: [`Confirmed; metadata read failed: ${redactUrls(e instanceof Error ? e.message : String(e))}`] }); }
       }
@@ -183,10 +227,10 @@ function Dispatch() {
     const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "studio-loco-dispatch.json"; a.click(); URL.revokeObjectURL(a.href);
   }
   function importCfg() {
-    try { setCfg(parseConfig(JSON.parse(importText))); setImportText(""); push("ok", "Configuration imported."); }
+    try { const v = validateConfig(JSON.parse(importText)); if (!v.ok) throw new Error(v.error); setCfg(v.cfg); setImportText(""); push("ok", "Configuration imported."); }
     catch (e) { push("error", `Import rejected: ${e instanceof Error ? e.message : String(e)}`); }
   }
-  const set = (k: keyof ArbConfig, v: string) => setCfg({ ...cfg, [k]: typeof DEFAULT_CONFIG[k] === "number" ? Math.round(Number(v)) : v });
+  const set = (k: keyof Draft, v: string) => { const d = { ...draft, [k]: v }; setDraft(d); const r = validateConfig(fromDraft(d)); if (r.ok) setCfg(r.cfg); };
 
   const routes = scan?.routes ?? [];
   const best = useMemo(() => routes.find((r) => r.verdict.kind === "profitable") ?? null, [routes]);
@@ -206,15 +250,14 @@ function Dispatch() {
               <dt className="station-code mt-2 text-cream/65">USDC mint</dt><dd className="break-all font-mono"><a className="underline" href={explorerAccount(USDC_MINT, "mainnet-beta")} target="_blank" rel="noreferrer">{USDC_MINT}</a></dd>
             </dl>
             <div className="mt-4 flex flex-col gap-3">
-              <Field label="Input" suffix="SOL" inputMode="decimal" value={cfg.inputSol} onChange={(e) => set("inputSol", e.target.value)} />
-              <Field label="Minimum net profit" suffix="SOL" inputMode="decimal" value={cfg.minProfitSol} onChange={(e) => set("minProfitSol", e.target.value)} />
-              <Field label="Slippage per leg" suffix="bps" inputMode="numeric" value={String(cfg.slippageBps)} onChange={(e) => set("slippageBps", e.target.value)} hint="1–300 bps. Applied to each leg's minimum output." />
-              <Field label="Priority-fee budget" suffix="SOL" inputMode="decimal" value={cfg.priorityFeeSol} onChange={(e) => set("priorityFeeSol", e.target.value)} />
-              <Field label="Compute-unit limit" inputMode="numeric" value={String(cfg.computeUnits)} onChange={(e) => set("computeUnits", e.target.value)} />
-              <Field label="Monitor interval" suffix="s" inputMode="numeric" value={String(cfg.intervalSec)} onChange={(e) => set("intervalSec", e.target.value)} hint="10–600 s; backs off after errors." />
-              <Field label="Pools to compare" inputMode="numeric" value={String(cfg.maxPools)} onChange={(e) => set("maxPools", e.target.value)} hint="2–5 highest-TVL exact SOL/USDC pools." />
+              <Field label="Input" suffix="SOL" inputMode="decimal" value={draft.inputSol} onChange={(e) => set("inputSol", e.target.value)} />
+              <Field label="Minimum net profit" suffix="SOL" inputMode="decimal" value={draft.minProfitSol} onChange={(e) => set("minProfitSol", e.target.value)} />
+              <Field label="Slippage per leg" suffix="bps" inputMode="numeric" value={draft.slippageBps} onChange={(e) => set("slippageBps", e.target.value)} hint="1–300 bps. Applied to each leg's minimum output." />
+              <Field label="Priority-fee budget" suffix="SOL" inputMode="decimal" value={draft.priorityFeeSol} onChange={(e) => set("priorityFeeSol", e.target.value)} />
+              <Field label="Compute-unit limit" inputMode="numeric" value={draft.computeUnits} onChange={(e) => set("computeUnits", e.target.value)} />
+              <Field label="Monitor interval" suffix="s" inputMode="numeric" value={draft.intervalSec} onChange={(e) => set("intervalSec", e.target.value)} hint="30–600 s (default 60); backs off after errors." />
+              <Field label="Pools to compare" inputMode="numeric" value={draft.maxPools} onChange={(e) => set("maxPools", e.target.value)} hint="2–5 highest-TVL exact SOL/USDC pools." />
               {!chk.ok && <p role="alert" className="text-sm text-destructive">{chk.error}</p>}
-              {chk.ok && (() => { try { parseConfig(cfg); return null; } catch (e) { return <p role="alert" className="text-sm text-destructive">{(e as Error).message}</p>; } })()}
             </div>
             <div className="mt-4 flex flex-wrap gap-2">
               <Btn size="sm" variant="line" onClick={exportCfg}>Export JSON</Btn>
@@ -251,7 +294,10 @@ function Dispatch() {
           {scan && (
             <Panel>
               <h2 className="display text-2xl">Routes</h2>
-              {!best && <p className="mt-2 text-sm text-cream/80" role="status">No profitable route: none of the {routes.length} quoted round trips cover input + fees + kept rent + your minimum net profit. That is the normal result.</p>}
+              {!best && scan.complete && <p className="mt-2 text-sm text-cream/80" role="status">No profitable route: none of the {routes.length} quoted round trips cover input + estimated fee + assumed new-account rent + your minimum net profit. That is the normal result.</p>}
+              {!best && !scan.complete && <p className="mt-2 text-sm text-amber" role="status">Insufficient evidence: some pools or quotes failed, so this scan cannot say whether a profitable route exists.</p>}
+              {scan.discoveryRejected.length > 0 && <p className="mt-2 text-xs text-cream/70">Discovery rejected: {scan.discoveryRejected.join("; ")}</p>}
+              <p className="mt-2 text-xs text-cream/65">Scan fee is an RPC estimate ({SOL(scan.costs.networkFee)}); the review reads the exact fee for your transaction.</p>
               <div className="mt-4 overflow-x-auto">
                 <table className="w-full min-w-[720px] text-left text-sm">
                   <caption className="sr-only">Quoted round-trip routes</caption>
@@ -264,7 +310,7 @@ function Dispatch() {
                         <td className="font-mono">{r.b ? `${formatUnits(r.b.out, 9)} / ${formatUnits(r.b.min, 9)}` : "—"}</td>
                         <td className="font-mono">{r.verdict.kind === "profitable" ? SOL(r.verdict.expectedProfit) : r.verdict.kind === "unprofitable" ? SOL(r.verdict.expectedProfit) : "—"}</td>
                         <td className={cn("text-xs", r.verdict.kind === "profitable" ? "text-success" : r.verdict.kind === "invalid" ? "text-destructive" : "text-cream/75")}>{r.verdict.kind === "profitable" ? "Meets floor" : r.verdict.reason}</td>
-                        <td>{r.verdict.kind === "profitable" && (publicKey ? <Btn size="sm" onClick={() => requote(r)} disabled={reviewing || runner.running}>{reviewing ? "Requoting…" : "Requote & Review"}</Btn> : <span className="text-xs text-cream/70">Connect wallet to review</span>)}</td>
+                        <td>{r.b && r.verdict.kind !== "invalid" && (publicKey ? <Btn size="sm" onClick={() => requote(r)} disabled={reviewing || runner.running}>{reviewing ? "Requoting…" : "Requote & Review"}</Btn> : <span className="text-xs text-cream/70">Connect wallet to review</span>)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -283,14 +329,14 @@ function Dispatch() {
                 <dt className="text-cream/70">Leg A pool</dt><dd className="font-mono">{review.route.nameA} · {shortAddr(review.a.pool, 5)}</dd>
                 <dt className="text-cream/70">Input consumed</dt><dd className="font-mono">{SOL(review.a.consumed)}</dd>
                 <dt className="text-cream/70">Leg A expected / min</dt><dd className="font-mono">{USDC(review.a.out)} / {USDC(review.a.min)}</dd>
-                <dt className="text-cream/70">Leg A DLMM fee (in quote)</dt><dd className="font-mono">{SOL(review.a.fee)} · impact {fmtPct(Number(review.a.impactPct))}</dd>
+                <dt className="text-cream/70">Leg A DLMM fee (in quote)</dt><dd className="font-mono">{FEE(review.a.fee, review.a.feeMint)} (protocol share {FEE(review.a.protocolFee, review.a.feeMint)}) · impact {fmtPct(Number(review.a.impactPct))}</dd>
                 <dt className="text-cream/70">Leg B pool</dt><dd className="font-mono">{review.route.nameB} · {shortAddr(review.b.pool, 5)}</dd>
                 <dt className="text-cream/70">Leg B input (= A min)</dt><dd className="font-mono">{USDC(review.b.consumed)}</dd>
                 <dt className="text-cream/70">Leg B expected / quote min</dt><dd className="font-mono">{SOL(review.b.out)} / {SOL(review.b.min)}</dd>
-                <dt className="text-cream/70">Leg B DLMM fee (in quote)</dt><dd className="font-mono">{USDC(review.b.fee)} · impact {fmtPct(Number(review.b.impactPct))}</dd>
+                <dt className="text-cream/70">Leg B DLMM fee (in quote)</dt><dd className="font-mono">{FEE(review.b.fee, review.b.feeMint)} (protocol share {FEE(review.b.protocolFee, review.b.feeMint)}) · impact {fmtPct(Number(review.b.impactPct))}</dd>
                 <dt className="text-cream/70">Enforced SOL floor</dt><dd className="font-mono text-amber">{SOL(BN.max(review.floor, review.b.min))}</dd>
-                <dt className="text-cream/70">Base network fee</dt><dd className="font-mono">{SOL(review.costs.baseFee)}</dd>
-                <dt className="text-cream/70">Priority fee (max)</dt><dd className="font-mono">{SOL(review.costs.priorityFee)}</dd>
+                <dt className="text-cream/70">Network fee (exact, incl. priority)</dt><dd className="font-mono">{SOL(review.costs.networkFee)}</dd>
+                <dt className="text-cream/70">· of which base / priority</dt><dd className="font-mono">{(() => { const f = splitFee(review.costs.networkFee, review.costs.priorityPart ?? new BN(0)); return `${SOL(f.base)} / ${SOL(f.priority)}`; })()}</dd>
                 <dt className="text-cream/70">New USDC account rent (kept)</dt><dd className="font-mono">{SOL(review.costs.nonRefundableRent)}</dd>
                 <dt className="text-cream/70">Temporary WSOL rent (returned)</dt><dd className="font-mono">{SOL(review.costs.refundableRent)}</dd>
                 <dt className="text-cream/70">Residual USDC dust (expected)</dt><dd className="font-mono">{USDC(review.residualUsdc)}</dd>
