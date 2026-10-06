@@ -16,6 +16,7 @@ export function usePoolSdk(address: string) {
       const pool = await getPool(connection, address, settings.cluster);
       return pool;
     },
+    enabled: /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(address),
     retry: 1,
     staleTime: 20_000,
   });

@@ -20,8 +20,8 @@ export function RailMap({ bins, activeId, decX, decY, symX, symY, range }: { bin
   const H = 220;
   const bw = W / bins.length;
   const active = bins.find((b) => b.binId === activeId);
-  const first = bins[0];
-  const last = bins[bins.length - 1];
+  const first = bins[0]!;
+  const last = bins[bins.length - 1]!;
   return (
     <figure>
       <svg viewBox={`0 0 ${W} ${H + 50}`} className="w-full" role="img" aria-label={`Rail map of ${bins.length} bins around active bin ${activeId}`}>
@@ -33,7 +33,7 @@ export function RailMap({ bins, activeId, decX, decY, symX, symY, range }: { bin
           return z > a ? <rect x={a * bw} y={0} width={(z - a) * bw} height={H} fill="var(--ultramarine)" opacity={0.55} /> : null;
         })()}
         {bins.map((b, i) => {
-          const h = (vals[i] / max) * (H - 20);
+          const h = ((vals[i] ?? 0) / max) * (H - 20);
           const isActive = b.binId === activeId;
           const above = b.binId > activeId;
           return (

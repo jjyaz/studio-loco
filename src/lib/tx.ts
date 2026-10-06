@@ -97,28 +97,30 @@ export async function runSequence(opts: {
   const emit = () => opts.onUpdate(state.map((s) => ({ ...s })));
   emit();
   for (let i = 0; i < opts.steps.length; i++) {
+    const cur = state[i]!;
+    const step = opts.steps[i]!;
     try {
       const { signature } = await runTransaction({
         connection: opts.connection,
         wallet: opts.wallet,
-        tx: opts.steps[i].tx,
-        signers: opts.steps[i].signers,
+        tx: step.tx,
+        signers: step.signers,
         onPhase: (p, info) => {
-          state[i].phase = p;
-          if (info?.signature) state[i].signature = info.signature;
+          cur.phase = p;
+          if (info?.signature) cur.signature = info.signature;
           emit();
         },
       });
-      state[i].signature = signature;
-      state[i].phase = "confirmed";
+      cur.signature = signature;
+      cur.phase = "confirmed";
       emit();
     } catch (e) {
       const te = e instanceof TxError ? e : null;
-      state[i].phase = te?.phase === "rejected" ? "rejected" : "failed";
-      state[i].error = e instanceof Error ? e.message : String(e);
-      state[i].logs = te?.logs;
-      if (te?.signature) state[i].signature = te.signature;
-      for (let j = i + 1; j < state.length; j++) state[j].phase = "skipped";
+      cur.phase = te?.phase === "rejected" ? "rejected" : "failed";
+      cur.error = e instanceof Error ? e.message : String(e);
+      cur.logs = te?.logs;
+      if (te?.signature) cur.signature = te.signature;
+      for (let j = i + 1; j < state.length; j++) state[j]!.phase = "skipped";
       emit();
       break;
     }

@@ -90,7 +90,7 @@ function PoolPage() {
       <div role="tablist" aria-label="Pool sections" className="mb-6 flex flex-wrap border-b border-line">
         {(["overview", "add", "swap", "orders"] as const).map((t) => (
           <button key={t} role="tab" aria-selected={tab === t} type="button" onClick={() => navigate({ to: ".", search: (p) => ({ ...p, tab: t }) })} className={cn("station-code min-h-11 border-b-2 px-4", tab === t ? "border-amber text-amber" : "border-transparent text-cream/75 hover:text-cream")}>
-            {t === "add" ? "Add Liquidity" : t[0].toUpperCase() + t.slice(1)}
+            {t === "add" ? "Add Liquidity" : t.charAt(0).toUpperCase() + t.slice(1)}
           </button>
         ))}
       </div>
@@ -366,7 +366,7 @@ function Swap({ address, snap, symX, symY }: { address: string; snap: PoolSnapsh
   const runner = useTxRunner();
   const [xToY, setXToY] = useState(true);
   const [amt, setAmt] = useState("");
-  const [quote, setQuote] = useState<null | { at: number; inRaw: BN; out: BN; min: BN; fee: BN; impact: string; binArrays: unknown[] }>(null);
+  const [quote, setQuote] = useState<null | { at: number; inRaw: BN; out: BN; min: BN; fee: BN; impact: string; binArrays: import("@solana/web3.js").PublicKey[] }>(null);
   const [qErr, setQErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [now, setNow] = useState(Date.now());
