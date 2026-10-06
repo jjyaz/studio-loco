@@ -31,3 +31,8 @@ Not production-ready: no funded wallet has signed any transaction built by this 
 - Portfolio: PositionV2 discriminator + program + pool + owner verified; reads chunked ≤100; abort honoured; rejected rows and index truncation shown.
 - Orders: mainnet indexed `/wallets/{w}/limit_orders/open/pools/{p}` (page_size 50, ≤5 pages, truncation shown), each address verified on chain then read with SDK `getLimitOrder`; devnet/custom RPC keep the SDK scan.
 - Funded tests: devnet faucet 429 and devnet probe timeout — no funded operation executed.
+
+## Pass 7 — client hydration (2026-10-06)
+- Root cause: the production client build resolved every `node:buffer` import to Vite's empty `__vite-browser-external` stub; safe-buffer read `undefined.from` while loading, so no page hydrated.
+- Fix: `studio-loco:browser-buffer-package` plugin (client only, first in plugin order) resolves to the npm `buffer` package.
+- Verified on the built Worker (wrangler dev): /app loaded live pools, wallet dialog opened on Enter and closed on Escape, homepage FAQ opened, bin explainer slider responded, no page errors. Hosted image paths 404 locally only (served by hosting).
