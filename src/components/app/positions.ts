@@ -12,7 +12,8 @@ export function readPositionHeader(data: Uint8Array): { lbPair: Uint8Array; owne
   if (data.length < 72) return null;
   return { lbPair: data.slice(8, 40), owner: data.slice(40, 72) };
 }
-export { verifyDlmmAccount, chunk } from "@/lib/account-verify";
+import { verifyDlmmAccount, chunk } from "@/lib/account-verify";
+export { verifyDlmmAccount, chunk };
 
 export interface HydrationReport {
   rows: PositionRow[];
