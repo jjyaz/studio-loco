@@ -42,5 +42,5 @@ export const CAPABILITIES: CapabilityEntry[] = [
   { id: "network", area: "Network", name: "Cluster & DLMM observatory", status: "live", notes: "RPC slot, block height, version, program account." },
   { id: "ciphernodes", area: "Network", name: "Ciphernode operator network", status: "not-deployed", notes: "Separate future protocol." },
   { id: "governance", area: "Governance", name: "Decision room", status: "simulation", notes: "Local proposals only. No DAO." },
-  { id: "token", area: "Token", name: "LOCO token", status: "not-deployed", notes: "No mint, no sale, no tokenomics." },
+  { id: "token", area: "Token", name: "LOCO planning worksheet", status: "simulation", notes: "Local hypothetical allocation worksheet; not an official distribution or commitment." },
 ];
