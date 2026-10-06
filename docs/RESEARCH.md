@@ -38,7 +38,7 @@ Single source of truth: `src/lib/capabilities.ts` (rendered on `/network`). Summ
 - **Not deployed:** confidential compute network, ciphernodes, LOCO token, DAO.
 
 ## Engineering notes
-- Public Solana RPC returns 403 to browser origins, so `/api/public/rpc/$cluster` relays an allowlist of JSON-RPC methods (no secrets). Users can set their own HTTPS RPC in Settings, which bypasses the relay. `getProgramAccounts` (portfolio, presets) is often throttled on public RPC — a dedicated RPC is recommended.
+- Public Solana RPC returns 403 to browser origins, so `/api/public/rpc/$cluster` relays an allowlist of JSON-RPC methods (no secrets). Mainnet defaults to PublicNode's free keyless endpoint (`solana-rpc.publicnode.com`), verified 2026-10-06 against the real mainnet genesis hash, live slots and DLMM program/pool account reads; server env `SOLANA_MAINNET_RPC_URL`/`SOLANA_DEVNET_RPC_URL` overrides take priority when set. Devnet stays on the public Solana endpoint (no verified keyless alternative). Users can set their own HTTPS RPC in Settings, which bypasses the relay. `getProgramAccounts` (portfolio, presets) can be throttled on free RPC — a dedicated RPC is recommended for heavy use.
 - Signing requires the wallet's signTransaction (no sendTransaction fallback); the RPC genesis hash must match the selected cluster; wallet/network identity is re-checked after approval and before broadcast; unresolved signatures are persisted (public metadata only) for Check status reconciliation.
 - Confirmation polls `getSignatureStatuses` and fails when block height passes `lastValidBlockHeight`; success is shown only after `confirmed` without error.
 - All amounts are parsed from decimal strings into BN base units (`src/lib/amount.ts`).

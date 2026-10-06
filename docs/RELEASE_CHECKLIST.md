@@ -26,6 +26,7 @@ Not production-ready: no funded wallet has signed any transaction built by this 
 
 ## Pass 5 (2026-10-06)
 - Live site 500 root cause (worker logs): `@solana-mobile/wallet-adapter-mobile` crashed at import (`superCtor.prototype` undefined) in the Worker. Server builds now resolve it to a stub; the browser keeps the real package. Built server verified in workerd (wrangler dev): `/`, `/app`, `/app/portfolio`, `/lab`, `/docs`, `/favicon.png` → 200; RPC relay forwards (upstream returned 403 to the sandbox IP).
+- Default mainnet upstream switched to PublicNode's free keyless endpoint after `api.mainnet-beta.solana.com` 403d hosted-Worker IPs. Verified from the sandbox 2026-10-06: `getGenesisHash` = `5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d` (exact mainnet match), `getSlot` live, DLMM program and top-TVL pool `getAccountInfo` return real data. `SOLANA_MAINNET_RPC_URL` server override still takes priority; devnet unchanged (public Solana endpoint, custom RPC in Settings as fallback). Deployed-relay behavior not yet verified from production — check after publish.
 - tx: block-height lookup bounded (10s → unknown); identity re-checked after wallet approval, before persist/broadcast.
 - Portfolio: PositionV2 discriminator + program + pool + owner verified; reads chunked ≤100; abort honoured; rejected rows and index truncation shown.
 - Orders: mainnet indexed `/wallets/{w}/limit_orders/open/pools/{p}` (page_size 50, ≤5 pages, truncation shown), each address verified on chain then read with SDK `getLimitOrder`; devnet/custom RPC keep the SDK scan.
