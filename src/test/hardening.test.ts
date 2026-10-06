@@ -1,7 +1,8 @@
 // @vitest-environment node
 import { GENESIS, UNSUPPORTED_WALLET, withTimeout } from "@/lib/tx";
-import { SORT_KEYS, buildPoolsUrl, retryAfterMs, MAX_RETRY_WAIT_MS, sleep, fetchJson, normalizePool, feeTvlPct, normalizeCandles, OHLCV_FRAMES, fetchIndexedPortfolio } from "@/lib/meteora-api";
+import { SORT_KEYS, buildPoolsUrl, retryAfterMs, MAX_RETRY_WAIT_MS, sleep, fetchJson, normalizePool, feeTvlPct, normalizeCandles, OHLCV_FRAMES, fetchIndexedPortfolio, fetchIndexedOpenOrders } from "@/lib/meteora-api";
 import { readPositionHeader } from "@/components/app/positions";
+import { verifyDlmmAccount, chunk } from "@/lib/account-verify";
 import { describe, expect, it, vi } from "vitest";
 import BN from "bn.js";
 import { Keypair, PublicKey, SystemProgram, Transaction, VersionedTransaction } from "@solana/web3.js";
@@ -239,9 +240,9 @@ describe("signing integrity (pass 3)", () => {
   });
   it("stops a sequence when wallet/cluster identity changes between steps", async () => {
     let changed = false;
-    const w = { ...signer(), signTransaction: vi.fn(async (t: Transaction) => { t.partialSign(payer); changed = true; return t; }) };
+    const w = signer();
     const steps = await runSequence({
-      connection: asAny(conn()), wallet: asAny(w), onUpdate: () => {}, pollMs: 1,
+      connection: asAny(conn()), wallet: asAny(w), onUpdate: (s) => { if (s[0]?.phase === "confirmed") changed = true; }, pollMs: 1,
       steps: [{ label: "a", tx: realTx() }, { label: "b", tx: realTx() }],
       ctx: { ...ctx(), identityGuard: () => (changed ? "The connected wallet changed" : null) },
     });
@@ -249,6 +250,27 @@ describe("signing integrity (pass 3)", () => {
     expect(steps[1]!.error).toMatch(/wallet changed/);
     expect(w.signTransaction).toHaveBeenCalledTimes(1);
     expect(steps[0]!.cluster).toBe("devnet");
+  });
+  it("discards a signed transaction when identity changes during wallet approval", async () => {
+    let changed = false;
+    const store = memoryPendingStore();
+    const put = vi.spyOn(store, "put");
+    const w = { ...signer(), signTransaction: vi.fn(async (t: Transaction) => { t.partialSign(payer); changed = true; return t; }) };
+    const c = conn();
+    await expect(runTransaction({ connection: asAny(c), wallet: asAny(w), tx: realTx(), ctx: { ...ctx(store), identityGuard: () => (changed ? "Network changed during approval" : null) } })).rejects.toThrow(/Network changed/);
+    expect(w.signTransaction).toHaveBeenCalledTimes(1);
+    expect(c.sendRawTransaction).not.toHaveBeenCalled();
+    expect(put).not.toHaveBeenCalled();
+  });
+  it("checkSignature reports unknown (not expired) when block height hangs", async () => {
+    vi.useFakeTimers();
+    try {
+      const c = { ...conn({ status: null }), getBlockHeight: vi.fn(() => new Promise(() => {})) };
+      const p = checkSignature(asAny(c), "s", 100);
+      await vi.advanceTimersByTimeAsync(10_001);
+      const r = await p;
+      expect(r).toEqual({ kind: "unknown", reason: "block height lookup failed" });
+    } finally { vi.useRealTimers(); }
   });
   it("bounds a hanging status RPC call", async () => {
     await expect(withTimeout(new Promise(() => {}), 10, "Status lookup")).rejects.toThrow(/timed out/);
@@ -322,5 +344,44 @@ describe("Meteora API (pass 3)", () => {
     const h = readPositionHeader(d)!;
     expect(h.lbPair.every((b) => b === 7) && h.owner.every((b) => b === 9)).toBe(true);
     expect(readPositionHeader(new Uint8Array(10))).toBeNull();
+  });
+});
+
+describe("indexed account verification", () => {
+  const prog = Keypair.generate().publicKey; const pool = Keypair.generate().publicKey; const owner = Keypair.generate().publicKey;
+  const disc = Uint8Array.from([1, 2, 3, 4, 5, 6, 7, 8]);
+  const acct = (o: { prog?: PublicKey; disc?: Uint8Array; pool?: PublicKey; owner?: PublicKey }) => ({
+    owner: o.prog ?? prog,
+    data: Uint8Array.from([...(o.disc ?? disc), ...(o.pool ?? pool).toBytes(), ...(o.owner ?? owner).toBytes(), 0, 0]),
+  });
+  const want = { programId: prog.toBase58(), discriminator: disc, lbPair: pool.toBytes(), owner: owner.toBytes() };
+  it("accepts only matching program, discriminator, pool and owner", () => {
+    expect(verifyDlmmAccount(acct({}), want)).toBe(true);
+    expect(verifyDlmmAccount(acct({ prog: Keypair.generate().publicKey }), want)).toBe(false);
+    expect(verifyDlmmAccount(acct({ disc: Uint8Array.from([9, 9, 9, 9, 9, 9, 9, 9]) }), want)).toBe(false);
+    expect(verifyDlmmAccount(acct({ pool: Keypair.generate().publicKey }), want)).toBe(false);
+    expect(verifyDlmmAccount(acct({ owner: Keypair.generate().publicKey }), want)).toBe(false);
+    expect(verifyDlmmAccount(null, want)).toBe(false);
+  });
+  it("uses the SDK IDL discriminators", async () => {
+    const sdk = await import("@meteora-ag/dlmm");
+    expect(Array.from(sdk.getAccountDiscriminator("positionV2"))).toHaveLength(8);
+    expect(Array.from(sdk.getAccountDiscriminator("limitOrder"))).not.toEqual(Array.from(sdk.getAccountDiscriminator("positionV2")));
+  }, 30_000);
+  it("chunks account reads to at most 100", () => {
+    const parts = chunk(Array.from({ length: 250 }, (_, i) => i), 100);
+    expect(parts.map((p) => p.length)).toEqual([100, 100, 50]);
+  });
+  it("paginates indexed open orders with explicit caps", async () => {
+    const A = Keypair.generate().publicKey.toBase58();
+    const f = vi.fn(async (url: string) => {
+      const page = Number(new URL(url).searchParams.get("page"));
+      return new Response(JSON.stringify({ data: page === 1 ? [{ limit_order_address: A }, { junk: 1 }] : [], total: 999, pages: 9, current_page: page, page_size: 50 }), { status: 200, headers: { "content-type": "application/json" } });
+    });
+    const r = await fetchIndexedOpenOrders(owner.toBase58(), pool.toBase58(), undefined, asAny(f));
+    expect(f).toHaveBeenCalledTimes(5);
+    expect(r.addresses).toEqual([A]);
+    expect(r.dropped).toBe(1);
+    expect(r.truncated).toBe(true);
   });
 });
