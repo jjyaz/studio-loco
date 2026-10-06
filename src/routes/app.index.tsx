@@ -136,6 +136,10 @@ function Terminal() {
 
       {query.data && (
         <>
+          {sort === "fee_tvl_ratio_24h" && (
+            <p className="mb-2 text-xs text-cream/70">Fee/TVL is 24h fees ÷ TVL, shown as a percent as reported by Meteora. Pools with almost no liquidity can show enormous ratios — check TVL before reading anything into it.</p>
+          )}
+
           <div className="overflow-x-auto border border-line">
             <table className="w-full min-w-[860px] text-sm">
               <caption className="sr-only">DLMM pools</caption>
