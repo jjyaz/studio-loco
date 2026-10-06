@@ -15,3 +15,11 @@ Not production-ready: no funded wallet has signed any transaction built by this 
 | Devnet integration (create/add/swap/withdraw/close/orders) | **Not run** | no disposable devnet wallet run was performed this pass |
 | Funded wallet signing (all flows incl. native orders) | **Not run** | requires human approval |
 | Confidential protocol | **Not deployed** | educational simulation only |
+
+## Pass 4 (2026-10-06 12:06 UTC)
+- Add Liquidity review now shows SDK `quoteCreatePosition` estimates (position + realloc, new bin arrays, bitmap extension, SOL) plus network fee; token-account rent noted as excluded; exact simulation enforces affordability. Max SOL wording no longer implies 0.05 SOL covers all rent.
+- Swap price impact: verified in installed SDK — `priceImpact = |start−end|/start × 100`, i.e. already a percent; displayed with fmtPct unchanged.
+- Fee rates below 0.0001% now show significant digits instead of 0.0000%.
+- Price-history chart labels enlarged for 390px; edge dates anchored to avoid clipping.
+- Devnet faucet retried with a fresh in-memory keypair: still `429 — airdrop limit reached today or faucet dry`. No funded devnet operations executed.
+- Indexed open limit orders listing (`/wallets/{w}/limit_orders/open/pools/{p}`) not yet wired; orders are read on chain via the SDK.
