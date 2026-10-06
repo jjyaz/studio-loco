@@ -25,6 +25,7 @@ import { Route as JournalSlugRouteImport } from './routes/journal.$slug'
 import { Route as LabIndexRouteImport } from './routes/lab.index'
 import { Route as LabArchitectureRouteImport } from './routes/lab.architecture'
 import { Route as AppPoolAddressRouteImport } from './routes/app.pool.$address'
+import { Route as ApiPublicRpcClusterRouteImport } from './routes/api/public/rpc.$cluster'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -106,6 +107,11 @@ const AppPoolAddressRoute = AppPoolAddressRouteImport.update({
   path: '/pool/$address',
   getParentRoute: () => AppRoute,
 } as any)
+const ApiPublicRpcClusterRoute = ApiPublicRpcClusterRouteImport.update({
+  id: '/api/public/rpc/$cluster',
+  path: '/api/public/rpc/$cluster',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -124,6 +130,7 @@ export interface FileRoutesByFullPath {
   '/journal/': typeof JournalIndexRoute
   '/lab/': typeof LabIndexRoute
   '/app/pool/$address': typeof AppPoolAddressRoute
+  '/api/public/rpc/$cluster': typeof ApiPublicRpcClusterRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -141,6 +148,7 @@ export interface FileRoutesByTo {
   '/journal': typeof JournalIndexRoute
   '/lab': typeof LabIndexRoute
   '/app/pool/$address': typeof AppPoolAddressRoute
+  '/api/public/rpc/$cluster': typeof ApiPublicRpcClusterRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -160,6 +168,7 @@ export interface FileRoutesById {
   '/journal/': typeof JournalIndexRoute
   '/lab/': typeof LabIndexRoute
   '/app/pool/$address': typeof AppPoolAddressRoute
+  '/api/public/rpc/$cluster': typeof ApiPublicRpcClusterRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -180,6 +189,7 @@ export interface FileRouteTypes {
     | '/journal/'
     | '/lab/'
     | '/app/pool/$address'
+    | '/api/public/rpc/$cluster'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -197,6 +207,7 @@ export interface FileRouteTypes {
     | '/journal'
     | '/lab'
     | '/app/pool/$address'
+    | '/api/public/rpc/$cluster'
   id:
     | '__root__'
     | '/'
@@ -215,6 +226,7 @@ export interface FileRouteTypes {
     | '/journal/'
     | '/lab/'
     | '/app/pool/$address'
+    | '/api/public/rpc/$cluster'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -228,6 +240,7 @@ export interface RootRouteChildren {
   LabArchitectureRoute: typeof LabArchitectureRoute
   JournalIndexRoute: typeof JournalIndexRoute
   LabIndexRoute: typeof LabIndexRoute
+  ApiPublicRpcClusterRoute: typeof ApiPublicRpcClusterRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -344,6 +357,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppPoolAddressRouteImport
       parentRoute: typeof AppRoute
     }
+    '/api/public/rpc/$cluster': {
+      id: '/api/public/rpc/$cluster'
+      path: '/api/public/rpc/$cluster'
+      fullPath: '/api/public/rpc/$cluster'
+      preLoaderRoute: typeof ApiPublicRpcClusterRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -378,6 +398,7 @@ const rootRouteChildren: RootRouteChildren = {
   LabArchitectureRoute: LabArchitectureRoute,
   JournalIndexRoute: JournalIndexRoute,
   LabIndexRoute: LabIndexRoute,
+  ApiPublicRpcClusterRoute: ApiPublicRpcClusterRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
