@@ -5,7 +5,7 @@ import { Keypair, PublicKey, SystemProgram, Transaction, TransactionInstruction 
 import { getAssociatedTokenAddressSync } from "@solana/spl-token";
 import { GENESIS, memoryPendingStore, runTransaction } from "@/lib/tx";
 import { buildArbTx, messageFee, type QuotedLeg, type WalletAccounts } from "@/lib/arb";
-import { DLMM_PROGRAM_ID } from "@/lib/chain";
+import { DLMM_PROGRAM_ID } from "@/lib/dlmm";
 import { USDC_MINT, WSOL_MINT, realizedDeltas } from "@/lib/arb-math";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -80,7 +80,8 @@ describe("runner semantic guard + fee cap", () => {
   it("messageFee returns null (unknown) on RPC null or error, never 0", async () => {
     expect(await messageFee(asAny(conn({ fee: null })), tx())).toBeNull();
     expect(await messageFee(asAny(conn({ feeThrows: true })), tx())).toBeNull();
-    expect((await messageFee(asAny(conn({ fee: 7000 })), tx()))?.toString()).toBe("7000");
+    const t7 = tx(); t7.feePayer = payer.publicKey;
+    expect((await messageFee(asAny(conn({ fee: 7000 })), t7))?.toString()).toBe("7000");
   });
 });
 
