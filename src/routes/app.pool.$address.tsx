@@ -278,7 +278,7 @@ function AddLiquidity({ address, snap, symX, symY, prefill }: { address: string;
       ]);
       job.commit({ tx, signer: positionKp, feeLamports: fee, rentLamports: rent, position: positionKp.publicKey.toBase58(), sim: simText(sim), strategy, minBin, maxBin, x: xRaw, y: yRaw, slippageBps, activeId: snap.activeId });
     } catch (e) {
-      if (job.isCurrent()) setPrepErr(e instanceof Error ? e.message : String(e));
+      if (job.isCurrent()) setPrepErr(redactUrls(e instanceof Error ? e.message : String(e)));
     } finally {
       setPreparing(false);
     }
@@ -380,7 +380,7 @@ function AddLiquidity({ address, snap, symX, symY, prefill }: { address: string;
 
 function BalanceHint({ q, mint, dec, sym, onMax }: { q: ReturnType<typeof useBalance>; mint: string; dec: number; sym: string; onMax: (v: string) => void }) {
   if (q.isPending) return <>Reading balance…</>;
-  if (q.isError) return <span className="text-destructive">Balance unavailable ({(q.error as Error).message.slice(0, 60)})</span>;
+  if (q.isError) return <span className="text-destructive">Balance unavailable ({redactUrls((q.error as Error).message).slice(0, 60)})</span>;
   const max = spendable(mint, q.data!);
   const v = formatUnits(max, dec).replace(/,/g, "");
   return (
@@ -433,7 +433,7 @@ function Swap({ address, snap, symX, symY }: { address: string; snap: PoolSnapsh
       const q = sdk.data.swapQuote(parsed.raw, xToY, new BN(slippageBps), arrays);
       job.commit({ at: Date.now(), xToY, requested: parsed.raw, inRaw: q.consumedInAmount, out: q.outAmount, min: q.minOutAmount, fee: q.fee, impact: q.priceImpact.toString(), binArrays: q.binArraysPubkey, slippageBps, inSym, outSym, inDec, outDec });
     } catch (e) {
-      if (job.isCurrent()) setQErr(e instanceof Error ? e.message : String(e));
+      if (job.isCurrent()) setQErr(redactUrls(e instanceof Error ? e.message : String(e)));
     } finally {
       setBusy(false);
     }
@@ -462,7 +462,7 @@ function Swap({ address, snap, symX, symY }: { address: string; snap: PoolSnapsh
         qc.invalidateQueries({ queryKey: ["dlmm-snap"] });
       }
     } catch (e) {
-      setQErr(e instanceof Error ? e.message : String(e));
+      setQErr(redactUrls(e instanceof Error ? e.message : String(e)));
     } finally {
       setBusy(false);
     }
@@ -591,7 +591,7 @@ function Orders({ address, snap, symX, symY }: { address: string; snap: PoolSnap
       ]);
       job.commit({ tx, signer: orderKp, order: orderKp.publicKey.toBase58(), isAsk, bins, total: parsed.raw, cost, sim: simText(sim), activeId: sdk.data.lbPair.activeId, feeLamports: fee });
     } catch (e) {
-      if (job.isCurrent()) setErr(e instanceof Error ? e.message : String(e));
+      if (job.isCurrent()) setErr(redactUrls(e instanceof Error ? e.message : String(e)));
     } finally { setBusy(false); }
   }
 
@@ -621,7 +621,7 @@ function Orders({ address, snap, symX, symY }: { address: string; snap: PoolSnap
         : await sdk.data.closeLimitOrderIfEmpty({ limitOrder: pk, owner: publicKey, rentReceiver: publicKey });
       const res = await runner.run([{ label: kind === "cancel" ? `Cancel / withdraw ${binIdsToCancel.length} order bin(s)` : "Close empty limit order (reclaim rent)", tx }]);
       if (res.length && res.every((x) => x.phase === "confirmed")) refresh();
-    } catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
+    } catch (e) { setErr(redactUrls(e instanceof Error ? e.message : String(e))); }
   }
 
   const mode = snap.functionType;

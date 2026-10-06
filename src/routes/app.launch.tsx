@@ -72,7 +72,7 @@ function Launch() {
       if (xAddr.trim() === yAddr.trim()) throw new Error("Base and quote mints must differ");
       const [a, b] = await Promise.all([fetchMint(connection, xAddr).catch((e) => { throw new Error(`Base: ${e.message}`); }), fetchMint(connection, yAddr).catch((e) => { throw new Error(`Quote: ${e.message}`); })]);
       setMx(a); setMy(b);
-    } catch (e) { setMintErr(e instanceof Error ? e.message : String(e)); } finally { setChecking(false); }
+    } catch (e) { setMintErr(redactUrls(e instanceof Error ? e.message : String(e))); } finally { setChecking(false); }
   }
 
   const sel = presets.data?.find((p) => p.key === preset);
@@ -101,7 +101,7 @@ function Launch() {
       tx.recentBlockhash = blockhash; tx.feePayer = publicKey;
       const sim = await simulateExact(connection, tx.serializeMessage());
       job.commit({ ...frozen, tx, pair: pair.toBase58(), activeId, actualPrice: uiPriceFromBin(activeId, sel.binStep, mx.decimals, my.decimals), sim: sim.value.err ? `${JSON.stringify(sim.value.err)} — ${(sim.value.logs ?? []).slice(-3).join(" | ")}` : null });
-    } catch (e) { if (job.isCurrent()) setErr(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
+    } catch (e) { if (job.isCurrent()) setErr(redactUrls(e instanceof Error ? e.message : String(e))); } finally { setBusy(false); }
   }
 
   return (

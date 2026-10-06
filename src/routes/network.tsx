@@ -78,7 +78,7 @@ function Network() {
             <Stat label="Account found" value={rpc.data ? (rpc.data.program ? "Yes" : "No") : "…"} />
             <Stat label="Executable" value={rpc.data?.program ? (rpc.data.program.executable ? "Yes" : "No") : "—"} />
             <Stat label="Loader" value={rpc.data?.program ? `${rpc.data.program.owner.slice(0, 10)}…` : "—"} />
-            <Stat label="Data API" value={settings.cluster !== "mainnet-beta" ? "Mainnet only" : api.isError ? "Error" : api.data ? `OK · ${api.data.latency} ms` : "…"} sub={api.data ? `${api.data.total.toLocaleString()} pools indexed` : api.isError ? (api.error as Error).message : undefined} />
+            <Stat label="Data API" value={settings.cluster !== "mainnet-beta" ? "Mainnet only" : api.isError ? "Error" : api.data ? `OK · ${api.data.latency} ms` : "…"} sub={api.data ? `${api.data.total.toLocaleString()} pools indexed` : api.isError ? redactUrls((api.error as Error).message) : undefined} />
           </div>
         </Panel>
         <Panel tone="cobalt">

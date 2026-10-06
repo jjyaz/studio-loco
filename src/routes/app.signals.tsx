@@ -132,7 +132,7 @@ function Rebalance({ r, onClose }: { r: PositionRow; onClose: () => void }) {
       qc.invalidateQueries({ queryKey: ["positions"] });
       qc.invalidateQueries({ queryKey: ["bal"] });
     } catch (e) {
-      setErr(e instanceof Error ? e.message : String(e));
+      setErr(redactUrls(e instanceof Error ? e.message : String(e)));
     }
   }
 

@@ -65,7 +65,7 @@ function Portfolio() {
       if (steps.length === 0) { setErr("Nothing to do for the selected positions."); return; }
       await runner.run(steps);
     } catch (e) {
-      setErr(e instanceof Error ? e.message : String(e));
+      setErr(redactUrls(e instanceof Error ? e.message : String(e)));
     } finally {
       qc.invalidateQueries({ queryKey: ["positions"] });
     }
