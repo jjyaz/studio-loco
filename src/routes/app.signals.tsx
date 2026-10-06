@@ -15,6 +15,7 @@ import { redactUrls } from "@/lib/format";
 import { useLocalState, useSettings } from "@/lib/settings";
 import { cn } from "@/lib/utils";
 import { MAX_UI_BINS } from "@/lib/strategy";
+import { skyOf } from "@/lib/derive";
 
 export const Route = createFileRoute("/app/signals")({
   head: () => ({
@@ -162,11 +163,6 @@ function Rebalance({ r, onClose }: { r: PositionRow; onClose: () => void }) {
   );
 }
 
-/** Observation label only. Requires both readings. */
-export function skyOf(dynamicPct: number, basePct: number): "Storm" | "Breezy" | "Calm" {
-  return dynamicPct > basePct * 0.5 ? "Storm" : dynamicPct > 0 ? "Breezy" : "Calm";
-}
-
 function Weather() {
   const q = useQuery({ queryKey: ["weather"], queryFn: ({ signal }) => fetchPools({ page: 1, pageSize: 24, sort: "volume_24h", dir: "desc", hideBlacklisted: true }, signal), refetchInterval: 60_000, retry: false });
   if (q.isPending) return <Spinner label="Reading the sky" />;
@@ -182,7 +178,7 @@ function Weather() {
           const h24 = v24(p.volume);
           const pace = h1 !== undefined && h24 ? (h1 * 24) / h24 : undefined;
           // Missing observations are "Unavailable", never Calm.
-          const sky = dyn === undefined || base === undefined ? "Unavailable" : skyOf(dyn, base);
+          const sky = skyOf(dyn, base);
           return (
             <Link key={p.address} to="/app/pool/$address" params={{ address: p.address }} className="ticket block p-4 hover:bg-cobalt">
               <div className="flex justify-between"><span className="font-medium">{p.name}</span><span className={cn("station-code", sky === "Storm" ? "text-ochre" : sky === "Breezy" ? "text-amber" : "text-cream/70")}>{sky === "Unavailable" ? "— Unavailable" : sky}</span></div>

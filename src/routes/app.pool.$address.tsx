@@ -20,6 +20,7 @@ import { MAX_UI_BINS, STRATEGIES, STRATEGY_TYPE_VALUE, distribute, type Strategy
 import { useSettings, useStars } from "@/lib/settings";
 import { loadSdk, poolSupportsLimitOrders } from "@/lib/dlmm";
 import { planKey, usePlan } from "@/lib/plan";
+import { splitAmount } from "@/lib/derive";
 import { simulateExact } from "@/lib/tx";
 import { spendable, WSOL_MINT, SOL_RESERVE_LAMPORTS } from "@/lib/chain";
 import { cn } from "@/lib/utils";
@@ -507,15 +508,6 @@ function Swap({ address, snap, symX, symY }: { address: string; snap: PoolSnapsh
 
 const LO_STATUS = ["Not filled", "Partially filled", "Filled"];
 const MAX_UI_ORDER_BINS = 10;
-
-/** Split an exact integer amount across n bins; remainder goes to the last bin. */
-export function splitAmount(total: BN, n: number): BN[] {
-  if (n < 1) return [];
-  const each = total.divn(n);
-  const out = Array.from({ length: n }, () => each.clone());
-  out[n - 1] = out[n - 1]!.add(total.sub(each.muln(n)));
-  return out;
-}
 
 function Orders({ address, snap, symX, symY }: { address: string; snap: PoolSnapshot; symX: string; symY: string }) {
   const { publicKey } = useWallet();
