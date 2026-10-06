@@ -383,7 +383,7 @@ function AddLiquidity({ address, snap, symX, symY, prefill }: { address: string;
                 <dt className="text-cream/70">SDK estimate · position</dt><dd className="font-mono">{fmtNum(review.cost.positionCost + review.cost.positionReallocCost, 6)} SOL</dd>
                 <dt className="text-cream/70">New bin arrays ({review.cost.binArraysCount})</dt><dd className="font-mono">{fmtNum(review.cost.binArrayCost, 6)} SOL (not refundable)</dd>
                 <dt className="text-cream/70">Bitmap extension</dt><dd className="font-mono">{fmtNum(review.cost.bitmapExtensionCost, 6)} SOL</dd>
-                <dt className="text-cream/70">Estimated total + network fee</dt><dd className="font-mono">{fmtNum(review.cost.positionCost + review.cost.positionReallocCost + review.cost.binArrayCost + review.cost.bitmapExtensionCost + (review.feeLamports ?? 0) / 1e9, 6)} SOL</dd>
+                <dt className="text-cream/70">Estimated total + network fee</dt><dd className="font-mono">{review.feeLamports !== null ? `${fmtNum(review.cost.positionCost + review.cost.positionReallocCost + review.cost.binArrayCost + review.cost.bitmapExtensionCost + review.feeLamports / 1e9, 6)} SOL` : DASH}</dd>
               </dl>
             ) : <p className="mt-3 text-xs text-cream/70">Full cost estimate unavailable — {DASH}.</p>}
             <p className="mt-2 text-xs text-cream/70">Estimates exclude any new token-account rent (~0.002 SOL each). The exact simulation above checks you can afford it; the wallet preview shows the final amount.</p>
