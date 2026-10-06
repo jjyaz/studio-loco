@@ -165,8 +165,8 @@ function Dispatch() {
       cur();
       if (b.min.isZero()) throw new Error("Leg B minimum is zero");
       // Build with the quote minimum as the on-chain floor, then read the ACTUAL fee for this message.
-      const built = await arb.buildArbTx({ user: publicKey, poolA: poolA!, poolB: poolB!, a, b, floor: b.min, w, microLamports: micro, computeUnits: c.computeUnits });
-      const fee = await arb.messageFee(connection, built.tx);
+      const probe = await arb.buildArbTx({ user: publicKey, poolA: poolA!, poolB: poolB!, a, b, floor: b.min, w, microLamports: micro, computeUnits: c.computeUnits });
+      const fee = await arb.messageFee(connection, probe.tx);
       cur();
       const costs: Costs = { networkFee: fee, priorityPart: arb.priorityFeeLamports(micro, c.computeUnits), feeSource: "exact", nonRefundableRent: w.usdcExists ? new BN(0) : w.ataRent, refundableRent: w.wsolExists ? new BN(0) : w.ataRent };
       const v = evaluateRoute(a, b, chk.minProfit, costs);
@@ -174,7 +174,12 @@ function Dispatch() {
       // Balance: input + fees + every rent deposit (refundable WSOL rent is still needed up front)
       const need = chk.inLamports.add(v.costs).add(costs.refundableRent ?? new BN(0));
       if (w.lamports.lt(need)) throw new Error(`Insufficient SOL: need ${SOL(need)}, wallet has ${SOL(w.lamports)}`);
+      // Rebuild with the ENFORCED floor (input + exact fee + kept rent + min profit) and re-read its fee.
+      const final = await arb.buildArbTx({ user: publicKey, poolA: poolA!, poolB: poolB!, a, b, floor: v.floor, w, microLamports: micro, computeUnits: c.computeUnits });
+      const fee2 = await arb.messageFee(connection, final.tx);
       cur();
+      if (!fee2 || !fee || fee2.gt(fee)) throw new Error("Network fee is unknown or changed for the final message — review blocked.");
+      const built = final;
       setReview({ at: quotedAt, quotedAt, gen: myGen, wallet: publicKey.toBase58(), key, route, a, b, w, costs, floor: v.floor, conservativeProfit: v.conservativeProfit, expectedProfit: v.expectedProfit, residualUsdc: v.residualUsdc, built });
       push("info", `Review ready: ${route.nameA} → ${route.nameB}, ${built.bytes} bytes, quote valid ${QUOTE_TTL_MS / 1000}s.`);
     } catch (e) {
