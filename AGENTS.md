@@ -13,7 +13,7 @@
 - Live data services (`src/lib/meteora-api.ts`, SDK in `src/lib/dlmm.ts`) and practice fixtures (`src/lib/practice-data.ts`) stay separate; never fall back to fixtures on error — honesty requirement.
 - Every wallet transaction goes through `src/lib/tx.ts` (simulate → sign → poll confirmation) — success must mean confirmed.
 - The DLMM SDK is loaded lazily via `loadSdk()` — keeps public pages light and SSR-safe.
-- Default RPC goes through the allowlisted relay `src/routes/api/public/rpc.$cluster.ts` because public Solana RPC rejects browser origins; custom RPCs bypass it.
+- Default RPC goes through the allowlisted relay `src/routes/api/public/rpc.$cluster.ts` (browser origins are rejected by public RPC); the relay uses server env SOLANA_MAINNET_RPC_URL/SOLANA_DEVNET_RPC_URL when set because public RPC also 403s hosted-Worker IPs; custom RPCs bypass it.
 - Feature truth lives in `src/lib/capabilities.ts`; update it when a feature's status changes.
 - `exactOptionalPropertyTypes` is disabled — SDK and router types are incompatible with it.
 - Server (Worker) build environments add the "browser" resolve condition via a plugin in vite.config.ts — some Solana deps export only browser/node conditions.
