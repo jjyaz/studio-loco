@@ -22,3 +22,5 @@
 - Browser globals (Buffer/global/process) are installed by calling `installNodeGlobals()` explicitly, never by side-effect import — `"sideEffects": false` lets the bundler drop bare imports.
 - The relay splits default-mainnet `getMultipleAccounts` calls into ≤10-key chunks — PublicNode blocks larger ones.
 - Arbitrage math lives in `src/lib/arb-math.ts` (pure, exact BN) and chain composition in `src/lib/arb.ts`; round trips are one atomic tx built from raw `swap2` instructions, never the SDK `swap()` helper, because that helper unwraps/closes the WSOL account between legs.
+
+- Money-moving flows with time- or input-sensitive reviews pass `semanticGuard` (and `maxFeeLamports` when the floor depends on the fee) to the shared runner — identity checks alone cannot catch expired quotes or config changes during wallet approval.

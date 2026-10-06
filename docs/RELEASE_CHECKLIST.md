@@ -49,3 +49,16 @@ Not production-ready: no funded wallet has signed any transaction built by this 
 - [x] Production build in the Worker engine: /app/dispatch 200, nav link, Scan once -> 12 routes, monitor start/pause, input validation, no page errors.
 - [ ] Funded mainnet signature with a real wallet - not performed.
 - [ ] Approval-time identity change / rejection / simulation-failure paths are covered by shared runner tests, not exercised with a real wallet on this page.
+
+### Corrective pass (review of 7e60d5b) — 6 Oct 2026, 22:06 UTC
+- [x] Shared runner: optional `semanticGuard` checked before simulation, before wallet prompt and AFTER approval before persisting/broadcast (signed bytes discarded); `maxFeeLamports` re-reads getFeeForMessage for the fresh message and blocks on null/error/increase before signing.
+- [x] Dispatch guard binds a monotonic generation (bumped on wallet/cluster/RPC/practice/config change, hide, unmount — no ABA), practice state, full config key and Date.now() quote age (20 s).
+- [x] Monitoring pauses during review/signing; an unresolved round-trip signature blocks new reviews/approvals until reconciled.
+- [x] One `validateConfig` for storage, import, form and every disabled state: version, unknown keys, integer/finite/bounded numerics (interval 30–600 s, default 60), exact decimals, u64.
+- [x] Review: exact getFeeForMessage for the actual message (incl. priority; base/priority split for display only), wallet-specific rent (existing accounts not charged), final tx rebuilt with the enforced floor and fee re-checked; balance check. Rent-only-failing scan routes can be re-reviewed.
+- [x] Scan: RPC-estimated fee labelled as estimate; old results cleared on any input change; partial scans say "insufficient evidence"; discovery rejections shown.
+- [x] WSOL ATA to be closed is created with the non-idempotent instruction (fails if it appeared after our read); pre-existing ATAs decoded (mint/owner/initialized/frozen/close authority) and never closed.
+- [x] Fee mint per leg from SDK fee mode, protocol share shown, never subtracted twice; receipts show UNKNOWN for missing/unsafe metadata.
+- [x] Tests: 93/93 (`src/test/arb.test.ts`, new `src/test/arb-guards.test.ts`: expiry/ABA/practice during approval, pre-sign guard, fee null/error/increase, sim failure, rejection, composition order + encoded amounts, no intermediate close, strict vs idempotent create, floor, bindings, reversed orientation, oversize, receipts). Typecheck clean; `vite build` exit 0.
+- [x] Built Worker (wrangler dev, server RPC override): /, /app, /app/dispatch 200, unknown 404; relay getGenesisHash = mainnet. Browser: live scan 4 pools / 12 routes, best -0.002024791 SOL on 0.1 SOL → "no profitable route"; monitor start/pause; invalid input disables Scan and clears results; 10 s interval disables Start; no page errors; no horizontal overflow at 390 px and 1280 px.
+- [ ] Not exercised: review/approval with a real connected wallet (none available headless), funded signature. No funds used.
