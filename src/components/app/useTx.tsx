@@ -81,7 +81,7 @@ export function TxSteps({ steps }: { steps: TxStep[] | null }) {
               </span>
             </div>
             {s.signature && (
-              <a className="station-code text-amber underline" href={explorerTx(s.signature, (s.pending?.cluster as Cluster | undefined) ?? cluster)} target="_blank" rel="noreferrer">
+              <a className="station-code text-amber underline" href={explorerTx(s.signature, ((s.cluster ?? s.pending?.cluster) === "devnet" ? "devnet" : "mainnet-beta") as Cluster)} target="_blank" rel="noreferrer">
                 View on explorer ↗
               </a>
             )}

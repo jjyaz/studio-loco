@@ -51,6 +51,8 @@ export interface TxStep {
   error?: string;
   logs?: string[];
   pending?: PendingTx;
+  /** Network captured when the sequence started — explorer links use this, not current settings. */
+  cluster?: string;
 }
 
 export interface WalletSender {
@@ -335,7 +337,7 @@ export async function runSequence(opts: {
   pollMs?: number;
   maxWaitMs?: number;
 }): Promise<TxStep[]> {
-  const state: TxStep[] = opts.steps.map((s) => ({ label: s.label, phase: "idle" }));
+  const state: TxStep[] = opts.steps.map((s) => ({ label: s.label, phase: "idle", cluster: opts.ctx?.cluster }));
   const emit = () => opts.onUpdate(state.map((s) => ({ ...s })));
   emit();
   for (let i = 0; i < opts.steps.length; i++) {
