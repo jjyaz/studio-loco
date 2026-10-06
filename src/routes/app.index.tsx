@@ -202,7 +202,7 @@ function PoolRow({ p, practice, starred, onStar }: { p: ApiPool; practice: boole
       <td className="p-3 text-right font-mono tabular">{fmtUsd(p.tvl)}</td>
       <td className="p-3 text-right font-mono tabular">{fmtUsd(v24(p.volume))}</td>
       <td className="p-3 text-right font-mono tabular">{fmtUsd(v24(p.fees))}</td>
-      <td className="p-3 text-right font-mono tabular">{fmtPct(v24(p.fee_tvl_ratio) !== undefined ? v24(p.fee_tvl_ratio)! * 100 : undefined, 3)}</td>
+      <td className="p-3 text-right font-mono tabular">{fmtPct(v24(p.fee_tvl_ratio), 4)}</td>
       <td className="p-3 text-right font-mono tabular">{p.pool_config?.bin_step ?? DASH}</td>
       <td className="p-3 text-right font-mono tabular">{fmtPct(p.pool_config?.base_fee_pct)} / {fmtPct(p.dynamic_fee_pct)}</td>
     </tr>
