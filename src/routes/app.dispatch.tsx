@@ -15,6 +15,7 @@ import {
 } from "@/lib/arb-math";
 import type { BuiltArb, QuotedLeg, RouteResult, ScanResult, WalletAccounts } from "@/lib/arb";
 import { browserPendingStore } from "@/lib/tx";
+import { JobCancelled, JobControl, JobTimeout } from "@/lib/job-control";
 
 export const Route = createFileRoute("/app/dispatch")({
   head: () => ({
@@ -65,12 +66,13 @@ function Dispatch() {
   const [now, setNow] = useState(() => Date.now());
   const [importText, setImportText] = useState("");
   const runner = useTxRunner();
-  const abort = useRef<AbortController | null>(null);
-  const busy = useRef(false);
+  const ctl = useRef<JobControl>(null as unknown as JobControl);
+  if (!ctl.current) ctl.current = new JobControl();
+  const [, bump] = useState(0);
+  useEffect(() => ctl.current.subscribe(() => bump((x) => x + 1)), []);
+  const jobBusy = ctl.current.busy;
+  const draining = ctl.current.draining && !ctl.current.running;
   const failures = useRef(0);
-  /** Monotonic: bumps on every identity/config/practice change, pause, hide and unmount. Never reused (no ABA). */
-  const gen = useRef(0);
-  const mounted = useRef(true);
 
   const mainnet = settings.cluster === "mainnet-beta";
   const blocked = !mainnet ? "Dispatch supports mainnet SOL/USDC only. Switch the cluster in Settings." : settings.practice ? "Practice mode is on — Dispatch never uses practice data. Turn it off to scan real pools." : null;
@@ -78,57 +80,71 @@ function Dispatch() {
   const live = useRef({ envKey, practice: settings.practice });
   live.current = { envKey, practice: settings.practice };
   const push = (tone: Log["tone"], text: string) => setLog((l) => [{ at: Date.now(), tone, text: redactUrls(text) }, ...l].slice(0, 200));
+  /** Cancel every scan/requote job, invalidate reviews and stop monitoring. */
+  const cancelAll = (why: string | null) => {
+    ctl.current.invalidate();
+    setReview(null); setReviewing(false); setScanning(false);
+    setMonitor((m) => { if (m && why) push("warn", why); return false; });
+  };
 
   // any identity/settings change invalidates review and stops monitoring
   const prevKey = useRef(envKey);
   useEffect(() => {
     if (prevKey.current === envKey) return;
     prevKey.current = envKey;
-    gen.current++;
-    abort.current?.abort();
-    setReview(null);
+    cancelAll("Monitoring paused: wallet, network, RPC, practice or configuration changed.");
     setScan(null);
-    setMonitor((m) => { if (m) push("warn", "Monitoring paused: wallet, network, RPC, practice or configuration changed."); return false; });
-  }, [envKey]);
-  useEffect(() => { mounted.current = true; return () => { mounted.current = false; gen.current++; abort.current?.abort(); }; }, []);
+  }, [envKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { ctl.current.mounted = true; return () => ctl.current.unmount(); }, []);
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, []);
   useEffect(() => {
-    const vis = () => { if (document.hidden) { gen.current++; abort.current?.abort(); } if (document.hidden) setMonitor((m) => { if (m) push("warn", "Monitoring paused: tab hidden."); return false; }); };
+    const vis = () => { if (document.hidden) cancelAll("Monitoring paused: tab hidden."); };
     document.addEventListener("visibilitychange", vis);
     return () => document.removeEventListener("visibilitychange", vis);
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const gen = { get current() { return ctl.current.gen; } };
+  const mounted = { get current() { return ctl.current.mounted; } };
+  const reportErr = (e: unknown, what: string) => {
+    if (e instanceof JobCancelled) return null;
+    const m = redactUrls(e instanceof Error ? e.message : String(e));
+    push(e instanceof JobTimeout ? "warn" : "error", `${what}: ${m}`);
+    return m;
+  };
 
   async function scanOnce(source: "manual" | "monitor") {
-    if (busy.current || blocked || !chk.ok) return;
-    busy.current = true; setScanning(true); setScanErr(null);
-    const ac = new AbortController(); abort.current = ac;
-    const myGen = gen.current; const c = chk.cfg;
+    if (blocked || !chk.ok || reviewing || review || runner.running) return;
+    const job = ctl.current.begin();
+    if (!job) { if (source === "manual") push("warn", ctl.current.draining ? "Waiting for a timed-out request to drain." : "Another job is running."); return; }
+    setScanning(true); setScanErr(null);
+    const c = chk.cfg;
     try {
-      const { scanRoutes, estimateFee, priorityFeeLamports, priorityPrice } = await import("@/lib/arb");
-      const { withTimeout } = await import("@/lib/tx");
-      const rent = await withTimeout(connection.getMinimumBalanceForRentExemption(165, "confirmed"), 10_000, "Rent read");
+      const { scanRoutes, estimateFee, priorityFeeLamports, priorityPrice } = await job.step(import("@/lib/arb"), 30_000, "Load");
+      const rent = await job.step(connection.getMinimumBalanceForRentExemption(165, "confirmed"), 10_000, "Rent read");
       const micro = priorityPrice(chk.priorityBudget, c.computeUnits);
-      const fee = await estimateFee(connection, micro, c.computeUnits);
-      if (gen.current !== myGen) return;
+      const fee = await job.step(estimateFee(connection, micro, c.computeUnits), 25_000, "Fee estimate");
       // Read-only: RPC-backed fee ESTIMATE for a representative message, and assumes a new kept USDC account.
       const costs: Costs = { networkFee: fee, priorityPart: priorityFeeLamports(micro, c.computeUnits), feeSource: "estimate", nonRefundableRent: new BN(rent), refundableRent: new BN(rent) };
-      const r = await scanRoutes(connection, { inLamports: chk.inLamports, minProfit: chk.minProfit, slippageBps: c.slippageBps, maxPools: c.maxPools, costs, signal: ac.signal, log: (m) => push("info", m) });
-      if (ac.signal.aborted || gen.current !== myGen) return;
+      const r = await job.step(scanRoutes(connection, { inLamports: chk.inLamports, minProfit: chk.minProfit, slippageBps: c.slippageBps, maxPools: c.maxPools, costs, signal: job.signal, log: (m) => { if (job.alive()) push("info", m); } }), 180_000, "Scan");
       setScan(r); failures.current = 0;
       const prof = r.routes.filter((x) => x.verdict.kind === "profitable").length;
       const errs = r.pools.filter((p) => p.status !== "ok" || p.reason).length;
       push(prof ? "ok" : r.complete ? "info" : "warn", `${source === "monitor" ? "Monitor" : "Scan"}: ${r.routes.length} routes quoted, ${prof} meet the net-profit floor${errs ? `, ${errs} pool(s) rejected or errored` : ""}${r.complete ? "" : " — partial evidence"}.`);
     } catch (e) {
-      if (ac.signal.aborted) { push("warn", "Scan cancelled."); return; }
+      if (!job.alive() && !(e instanceof JobTimeout)) return;
       failures.current++;
-      const m = redactUrls(e instanceof Error ? e.message : String(e));
-      setScanErr(m); push("error", `Scan failed: ${m}`);
-    } finally { busy.current = false; if (mounted.current) setScanning(false); }
+      const m = reportErr(e, "Scan failed");
+      if (m && job.alive()) setScanErr(m);
+    } finally {
+      const own = job.alive();
+      ctl.current.end(job);
+      if (own) setScanning(false);
+    }
   }
 
   // monitoring loop: sequential, no overlap, exponential backoff on failure, proposals only
   useEffect(() => {
-    if (!monitor || review || runner.running) return;
+    if (!monitor || review || reviewing || runner.running) return;
     let stop = false; let t: ReturnType<typeof setTimeout>;
     const tick = async () => {
       if (stop) return;
@@ -139,35 +155,43 @@ function Dispatch() {
     };
     push("info", `Monitoring started (every ${cfg.intervalSec}s, this tab only, discovers proposals — never signs).`);
     void tick();
-    return () => { stop = true; clearTimeout(t); abort.current?.abort(); };
-  }, [monitor, !!review, runner.running]); // eslint-disable-line react-hooks/exhaustive-deps
+    return () => { stop = true; clearTimeout(t); };
+  }, [monitor, !!review, reviewing, runner.running]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function toggleMonitor() {
+    if (monitor) { cancelAll(null); push("info", "Monitoring paused by you; in-flight work cancelled."); return; }
+    if (jobBusy || reviewing || review || runner.running) return;
+    push("info", "Monitoring requested."); setMonitor(true);
+  }
 
   async function requote(route: RouteResult) {
-    if (!publicKey || !chk.ok || blocked || reviewing || !route.b) return;
+    if (!publicKey || !chk.ok || blocked || reviewing || runner.running || !route.b) return;
     if (browserPendingStore.list().some((p) => p.label.startsWith(ARB_LABEL))) { setRevErr("An earlier round-trip signature is unresolved. Check its status above before starting another."); return; }
+    // Stop monitoring and cancel any scan before taking the lock.
+    if (monitor || ctl.current.running) { cancelAll(monitor ? "Monitoring paused for review." : null); }
+    const job = ctl.current.begin();
+    if (!job) { setRevErr(ctl.current.draining ? "Waiting for a timed-out request to finish draining — try again shortly." : "Another job is running."); return; }
     setReviewing(true); setRevErr(null); setReview(null);
     const key = envKey + "|" + route.a.pool + ">" + route.b.pool;
-    const myGen = gen.current; const c = chk.cfg;
-    const cur = () => { if (gen.current !== myGen || !mounted.current) throw new Error("Cancelled: inputs changed during requote"); };
+    const myGen = job.gen; const c = chk.cfg; const user = publicKey;
+    const S = job.step;
     try {
-      const arb = await import("@/lib/arb");
-      const { getPool, invalidatePool } = await import("@/lib/dlmm");
-      const [poolA, poolB] = await Promise.all([route.a.pool, route.b!.pool].map(async (p) => { invalidatePool(p); const x = await getPool(connection, p, "mainnet-beta"); await x.refetchStates(); return x; }));
-      for (const p of [poolA!, poolB!]) { const bad = await arb.verifyPool(connection, p); if (bad) throw new Error(`${shortAddr(p.pubkey.toBase58())}: ${bad}`); }
-      const mintErr = await arb.verifyMints(connection); if (mintErr) throw new Error(mintErr);
-      cur();
-      const w = await arb.readWalletAccounts(connection, publicKey);
+      const arb = await S(import("@/lib/arb"), 30_000, "Load");
+      const { getPool, invalidatePool } = await S(import("@/lib/dlmm"), 30_000, "Load SDK");
+      const load = async (p: string) => { invalidatePool(p); const x = await S(getPool(connection, p, "mainnet-beta"), 20_000, "SDK pool load"); await S(x.refetchStates(), 15_000, "Pool refresh"); return x; };
+      const [poolA, poolB] = await Promise.all([load(route.a.pool), load(route.b.pool)]);
+      for (const p of [poolA, poolB]) { const bad = await S(arb.verifyPool(connection, p), 15_000, "Pool verification"); if (bad) throw new Error(`${shortAddr(p.pubkey.toBase58())}: ${bad}`); }
+      const mintErr = await S(arb.verifyMints(connection), 15_000, "Mint verification"); if (mintErr) throw new Error(mintErr);
+      const w = await S(arb.readWalletAccounts(connection, user), 15_000, "Wallet accounts");
       const micro = arb.priorityPrice(chk.priorityBudget, c.computeUnits);
       const quotedAt = Date.now();
-      const a = await arb.quoteLeg(poolA!, WSOL_MINT, chk.inLamports, c.slippageBps);
+      const a = await S(arb.quoteLeg(poolA, WSOL_MINT, chk.inLamports, c.slippageBps), 15_000, "Leg A quote");
       if (!a.consumed.eq(a.requested)) throw new Error("Leg A would be a partial fill — rejected");
-      const b = await arb.quoteLeg(poolB!, USDC_MINT, a.min, c.slippageBps);
-      cur();
+      const b = await S(arb.quoteLeg(poolB, USDC_MINT, a.min, c.slippageBps), 15_000, "Leg B quote");
       if (b.min.isZero()) throw new Error("Leg B minimum is zero");
       // Build with the quote minimum as the on-chain floor, then read the ACTUAL fee for this message.
-      const probe = await arb.buildArbTx({ user: publicKey, poolA: poolA!, poolB: poolB!, a, b, floor: b.min, w, microLamports: micro, computeUnits: c.computeUnits });
-      const fee = await arb.messageFee(connection, probe.tx);
-      cur();
+      const probe = await S(arb.buildArbTx({ user, poolA, poolB, a, b, floor: b.min, w, microLamports: micro, computeUnits: c.computeUnits }), 15_000, "Build");
+      const fee = await S(arb.messageFee(connection, probe.tx), 25_000, "Fee read");
       const costs: Costs = { networkFee: fee, priorityPart: arb.priorityFeeLamports(micro, c.computeUnits), feeSource: "exact", nonRefundableRent: w.usdcExists ? new BN(0) : w.ataRent, refundableRent: w.wsolExists ? new BN(0) : w.ataRent };
       const v = evaluateRoute(a, b, chk.minProfit, costs);
       if (v.kind !== "profitable") throw new Error(v.kind === "invalid" ? v.reason : `No profitable route right now: ${v.reason}. Expected net ${v.expectedProfit ? SOL(v.expectedProfit) : "—"}.`);
@@ -175,18 +199,22 @@ function Dispatch() {
       const need = chk.inLamports.add(v.costs).add(costs.refundableRent ?? new BN(0));
       if (w.lamports.lt(need)) throw new Error(`Insufficient SOL: need ${SOL(need)}, wallet has ${SOL(w.lamports)}`);
       // Rebuild with the ENFORCED floor (input + exact fee + kept rent + min profit) and re-read its fee.
-      const final = await arb.buildArbTx({ user: publicKey, poolA: poolA!, poolB: poolB!, a, b, floor: v.floor, w, microLamports: micro, computeUnits: c.computeUnits });
-      const fee2 = await arb.messageFee(connection, final.tx);
-      cur();
+      const final = await S(arb.buildArbTx({ user, poolA, poolB, a, b, floor: v.floor, w, microLamports: micro, computeUnits: c.computeUnits }), 15_000, "Build");
+      const fee2 = await S(arb.messageFee(connection, final.tx), 25_000, "Fee read");
       if (!fee2 || !fee || fee2.gt(fee)) throw new Error("Network fee is unknown or changed for the final message — review blocked.");
-      const built = final;
-      setReview({ at: quotedAt, quotedAt, gen: myGen, wallet: publicKey.toBase58(), key, route, a, b, w, costs, floor: v.floor, conservativeProfit: v.conservativeProfit, expectedProfit: v.expectedProfit, residualUsdc: v.residualUsdc, built });
-      push("info", `Review ready: ${route.nameA} → ${route.nameB}, ${built.bytes} bytes, quote valid ${QUOTE_TTL_MS / 1000}s.`);
+      job.check();
+      setReview({ at: quotedAt, quotedAt, gen: myGen, wallet: user.toBase58(), key, route, a, b, w, costs, floor: v.floor, conservativeProfit: v.conservativeProfit, expectedProfit: v.expectedProfit, residualUsdc: v.residualUsdc, built: final });
+      push("info", `Review ready: ${route.nameA} → ${route.nameB}, ${final.bytes} bytes, quote valid ${QUOTE_TTL_MS / 1000}s.`);
     } catch (e) {
-      if (!mounted.current) return;
-      const m = redactUrls(e instanceof Error ? e.message : String(e));
-      setRevErr(m); push("warn", `Requote: ${m}`);
-    } finally { if (mounted.current) setReviewing(false); }
+      // obsolete jobs never overwrite newer state; a timeout of the CURRENT job is reported
+      if (!job.alive()) return;
+      const m = reportErr(e, "Requote");
+      if (m) setRevErr(m);
+    } finally {
+      const own = job.alive();
+      ctl.current.end(job);
+      if (own) setReviewing(false);
+    }
   }
 
   const expired = review ? now - review.at > QUOTE_TTL_MS : false;
@@ -266,7 +294,7 @@ function Dispatch() {
             </div>
             <div className="mt-4 flex flex-wrap gap-2">
               <Btn size="sm" variant="line" onClick={exportCfg}>Export JSON</Btn>
-              <Btn size="sm" variant="quiet" onClick={() => setCfg(DEFAULT_CONFIG)}>Reset</Btn>
+              <Btn size="sm" variant="quiet" onClick={() => { setCfg(DEFAULT_CONFIG); setDraft(toDraft(DEFAULT_CONFIG)); }}>Reset</Btn>
             </div>
             <label className="mt-3 block text-sm"><span className="station-code text-cream/70">Import config (v1 JSON)</span>
               <textarea className="mt-1 h-20 w-full border border-line bg-midnight p-2 font-mono text-xs" value={importText} onChange={(e) => setImportText(e.target.value)} />
@@ -278,8 +306,8 @@ function Dispatch() {
         <div className="flex flex-col gap-6">
           <Panel tone="cobalt">
             <div className="flex flex-wrap items-center gap-3">
-              <Btn onClick={() => scanOnce("manual")} disabled={scanning || !!blocked || !chk.ok}>{scanning ? "Scanning…" : "Scan once"}</Btn>
-              <Btn variant="line" onClick={() => setMonitor((m) => { push("info", m ? "Monitoring paused by you." : "Monitoring requested."); return !m; })} disabled={!!blocked || !chk.ok} aria-pressed={monitor}>{monitor ? "Pause monitoring" : "Start monitoring"}</Btn>
+              <Btn onClick={() => scanOnce("manual")} disabled={jobBusy || scanning || reviewing || !!review || runner.running || !!blocked || !chk.ok}>{draining ? "Draining…" : scanning ? "Scanning…" : "Scan once"}</Btn>
+              <Btn variant="line" onClick={toggleMonitor} disabled={!monitor && (jobBusy || reviewing || !!review || runner.running || !!blocked || !chk.ok)} aria-pressed={monitor}>{monitor ? "Pause monitoring" : "Start monitoring"}</Btn>
               <span className="station-code text-cream/75" role="status">{monitor ? "● Monitoring this tab" : "Monitoring off"}{scan ? ` · last scan ${Math.round((now - scan.at) / 1000)}s ago` : ""}</span>
             </div>
             {scanErr && <div className="mt-4"><Notice tone="error" title="Scan failed">{scanErr}</Notice></div>}
@@ -315,7 +343,7 @@ function Dispatch() {
                         <td className="font-mono">{r.b ? `${formatUnits(r.b.out, 9)} / ${formatUnits(r.b.min, 9)}` : "—"}</td>
                         <td className="font-mono">{r.verdict.kind === "profitable" ? SOL(r.verdict.expectedProfit) : r.verdict.kind === "unprofitable" ? SOL(r.verdict.expectedProfit) : "—"}</td>
                         <td className={cn("text-xs", r.verdict.kind === "profitable" ? "text-success" : r.verdict.kind === "invalid" ? "text-destructive" : "text-cream/75")}>{r.verdict.kind === "profitable" ? "Meets floor" : r.verdict.reason}</td>
-                        <td>{r.b && r.verdict.kind !== "invalid" && (publicKey ? <Btn size="sm" onClick={() => requote(r)} disabled={reviewing || runner.running}>{reviewing ? "Requoting…" : "Requote & Review"}</Btn> : <span className="text-xs text-cream/70">Connect wallet to review</span>)}</td>
+                        <td>{r.b && r.verdict.kind !== "invalid" && (publicKey ? <Btn size="sm" onClick={() => requote(r)} disabled={reviewing || runner.running || draining}>{reviewing ? "Requoting…" : "Requote & Review"}</Btn> : <span className="text-xs text-cream/70">Connect wallet to review</span>)}</td>
                       </tr>
                     ))}
                   </tbody>
