@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it, vi } from "vitest";
 import BN from "bn.js";
 import { Keypair, PublicKey, SystemProgram, Transaction, VersionedTransaction } from "@solana/web3.js";
@@ -8,8 +9,7 @@ import { decodeShare, encodeShare, exportRoutes, importRoutes, isPublicKey, load
 import { planKey } from "@/lib/plan";
 import { validateCall } from "@/routes/api/public/rpc.$cluster";
 import { redactUrls } from "@/lib/format";
-import { skyOf } from "@/routes/app.signals";
-import { splitAmount } from "@/routes/app.pool.$address";
+import { skyOf, splitAmount } from "@/lib/derive";
 
 /* ---------------- Token programs ---------------- */
 describe("token programs and mint parsing", () => {
@@ -207,7 +207,9 @@ describe("rpc relay validation", () => {
 });
 
 describe("data truth helpers", () => {
-  it("sky labels need both readings (callers pass undefined → Unavailable)", () => {
+  it("sky labels need both readings", () => {
+    expect(skyOf(undefined, 0.25)).toBe("Unavailable");
+    expect(skyOf(0.1, undefined)).toBe("Unavailable");
     expect(skyOf(0, 0.25)).toBe("Calm");
     expect(skyOf(0.2, 0.25)).toBe("Storm");
   });
