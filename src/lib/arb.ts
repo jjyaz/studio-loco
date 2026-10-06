@@ -2,12 +2,12 @@ import { installNodeGlobals } from "./polyfills";
 installNodeGlobals();
 import type { Connection, PublicKey as PK, Transaction, TransactionInstruction } from "@solana/web3.js";
 import BN from "bn.js";
-import { fetchPools, type ApiPool } from "./meteora-api";
+import { fetchJson, normalizePool, METEORA_API, type ApiPool } from "./meteora-api";
 import { getPool, invalidatePool, DLMM_PROGRAM_ID, type DLMM } from "./dlmm";
 import { withTimeout } from "./tx";
 import {
-  BASE_FEE_PER_SIGNATURE, MAX_POOLS, MAX_TX_BYTES, SPL_TOKEN_PROGRAM, USDC_MINT, WSOL_MINT,
-  evaluateRoute, priorityFeeLamports, priorityPrice, type Costs, type LegQuote, type RouteVerdict,
+  DECIMALS, MAX_POOLS, MAX_TX_BYTES, SPL_TOKEN_PROGRAM, USDC_MINT, WSOL_MINT,
+  evaluateRoute, legError, priorityFeeLamports, priorityPrice, type Costs, type LegQuote, type RouteVerdict,
 } from "./arb-math";
 
 /** Programs an arbitrage transaction may touch. Anything else rejects the build. */
@@ -23,19 +23,27 @@ export const ALLOWED_PROGRAMS = new Set([
 export interface Candidate { address: string; name: string; binStep?: number; tvl?: number }
 
 /** Top-liquidity SOL/USDC pools from the live API, matched by exact mints (never symbols). */
-export async function discoverCandidates(max: number, signal?: AbortSignal): Promise<{ pools: Candidate[]; rejected: string[] }> {
-  const page = await fetchPools({ page: 1, pageSize: 50, query: "SOL-USDC", sort: "tvl", dir: "desc", hideBlacklisted: true }, signal);
+export async function discoverCandidates(max: number, signal?: AbortSignal): Promise<{ pools: Candidate[]; rejected: string[]; universe: string }> {
   const rejected: string[] = [];
+  const rows: ApiPool[] = [];
+  // Exact token-address filters, both orientations, top 25 by TVL each.
+  for (const [x, y] of [[WSOL_MINT, USDC_MINT], [USDC_MINT, WSOL_MINT]]) {
+    const url = `${METEORA_API}/pools?page=1&page_size=25&sort_by=tvl:desc&filter_by=${encodeURIComponent(`token_x=${x}&&token_y=${y}`)}`;
+    const page = await fetchJson<{ data: unknown[] }>(url, { signal });
+    if (!page || !Array.isArray(page.data)) throw new Error("Unexpected pool list shape");
+    for (const r of page.data) { const n = normalizePool(r); if (n) rows.push(n); else rejected.push("row failed schema validation"); }
+  }
+  rows.sort((p, q) => (q.tvl ?? -1) - (p.tvl ?? -1));
   const pools: Candidate[] = [];
-  for (const p of page.data as ApiPool[]) {
-    const exact = p.token_x.address === WSOL_MINT && p.token_y.address === USDC_MINT;
-    if (!exact) continue;
+  for (const p of rows) {
+    const pair = new Set([p.token_x.address, p.token_y.address]);
+    if (!(pair.has(WSOL_MINT) && pair.has(USDC_MINT))) { rejected.push(`${p.address}: mints mismatch`); continue; }
     if (p.is_blacklisted) { rejected.push(`${p.address}: blacklisted`); continue; }
     if (pools.some((x) => x.address === p.address)) continue;
+    if (pools.length >= Math.min(max, MAX_POOLS)) continue;
     pools.push({ address: p.address, name: p.name ?? "SOL-USDC", binStep: p.pool_config?.bin_step, tvl: p.tvl });
-    if (pools.length >= Math.min(max, MAX_POOLS)) break;
   }
-  return { pools, rejected };
+  return { pools, rejected, universe: `Top ${Math.min(max, MAX_POOLS)} by TVL of ${rows.length} exact WSOL/USDC pools returned (≤25 per orientation)` };
 }
 
 /** On-chain verification: lbPair owned by DLMM, enabled, exact canonical mints, both legacy SPL Token, no hooks. */
@@ -43,11 +51,11 @@ export async function verifyPool(connection: Connection, pool: DLMM): Promise<st
   const acc = await withTimeout(connection.getAccountInfo(pool.pubkey, "confirmed"), 10_000, "Pool account read");
   if (!acc || acc.owner.toBase58() !== DLMM_PROGRAM_ID) return "Pool account is not owned by the DLMM program";
   const x = pool.lbPair.tokenXMint.toBase58(), y = pool.lbPair.tokenYMint.toBase58();
-  if (x !== WSOL_MINT || y !== USDC_MINT) return "Pool mints are not exactly WSOL (X) / USDC (Y)";
+  if (!((x === WSOL_MINT && y === USDC_MINT) || (x === USDC_MINT && y === WSOL_MINT))) return "Pool mints are not exactly WSOL / USDC";
   if (pool.lbPair.status !== 0) return "Pool is disabled";
   if (pool.tokenX.owner.toBase58() !== SPL_TOKEN_PROGRAM || pool.tokenY.owner.toBase58() !== SPL_TOKEN_PROGRAM) return "Token-2022 or unknown token program — unsupported";
   if (pool.tokenX.transferHookAccountMetas.length || pool.tokenY.transferHookAccountMetas.length) return "Transfer-hook accounts present — unsupported";
-  if (pool.tokenX.mint.decimals !== 9 || pool.tokenY.mint.decimals !== 6) return "Unexpected mint decimals";
+  if (pool.tokenX.mint.decimals !== DECIMALS[x] || pool.tokenY.mint.decimals !== DECIMALS[y]) return "Unexpected mint decimals";
   return null;
 }
 
@@ -64,12 +72,16 @@ export interface PoolState { address: string; name: string; binStep?: number; po
 export interface QuotedLeg extends LegQuote { binArrays: PK[] }
 
 export async function quoteLeg(pool: DLMM, inMint: string, inRaw: BN, slippageBps: number): Promise<QuotedLeg> {
-  const swapForY = inMint === WSOL_MINT; // X = WSOL
+  const xMint = pool.lbPair.tokenXMint.toBase58(), yMint = pool.lbPair.tokenYMint.toBase58();
+  if (inMint !== xMint && inMint !== yMint) throw new Error("Input mint is not in this pool");
+  const swapForY = inMint === xMint;
+  const { getFeeMode } = await import("@meteora-ag/dlmm");
+  const mode = getFeeMode(pool.lbPair, swapForY);
   const arrays = await withTimeout(pool.getBinArrayForSwap(swapForY, 3), 12_000, "Bin array read");
   // isPartialFill=true lets us detect (and reject) a partial fill rather than throw generically.
   const q = pool.swapQuote(inRaw, swapForY, new BN(slippageBps), arrays, true);
   return {
-    pool: pool.pubkey.toBase58(), inMint, outMint: swapForY ? USDC_MINT : WSOL_MINT, requested: inRaw,
+    pool: pool.pubkey.toBase58(), inMint, outMint: swapForY ? yMint : xMint, requested: inRaw, feeMint: mode.feeOnTokenX ? xMint : yMint,
     consumed: q.consumedInAmount, out: q.outAmount, min: q.minOutAmount, fee: q.fee, protocolFee: q.protocolFee,
     impactPct: q.priceImpact.toString(), binArrays: q.binArraysPubkey as PK[],
   };
@@ -83,6 +95,9 @@ export interface ScanResult {
   routes: RouteResult[];
   /** costs assumed for the scan (read-only: wallet-dependent rent unknown when not connected) */
   costs: Costs;
+  /** true when every pool loaded and every ordered pair has both legs quoted */
+  complete: boolean;
+  discoveryRejected: string[];
 }
 
 /** Bounded concurrency map. */
@@ -104,8 +119,8 @@ export async function scanRoutes(connection: Connection, opts: { inLamports: BN;
   const { signal, log = () => {} } = opts;
   const mintErr = await verifyMints(connection);
   if (mintErr) throw new Error(mintErr);
-  const { pools: cands } = await discoverCandidates(opts.maxPools, signal);
-  log(`Discovered ${cands.length} exact WSOL/USDC pools from the Meteora API`);
+  const { pools: cands, rejected, universe } = await discoverCandidates(opts.maxPools, signal);
+  log(`${universe}; ${rejected.length} rejected${rejected.length ? `: ${rejected.slice(0, 3).join("; ")}` : ""}`);
   if (cands.length < 2) throw new Error("Fewer than two eligible SOL/USDC pools found");
   const states = await mapLimit(cands, 2, async (c) => {
     try {
@@ -144,6 +159,8 @@ export async function scanRoutes(connection: Connection, opts: { inLamports: BN;
     pools: states.map((s) => ({ address: s.c.address, name: label(s.c), binStep: s.c.binStep, status: s.status, reason: s.status === "ok" ? (typeof legA.get(s.c.address) === "string" ? `Leg A quote failed: ${legA.get(s.c.address)}` : undefined) : s.reason })),
     routes,
     costs: opts.costs,
+    complete: ok.length === states.length && routes.length === states.length * (states.length - 1) && routes.every((r) => r.b),
+    discoveryRejected: rejected,
   };
 }
 const label = (c: Candidate) => `${c.name}${c.binStep ? ` · ${c.binStep}bps` : ""}`;
@@ -155,33 +172,50 @@ function rank(r: RouteResult) {
 
 /* ---------------- atomic transaction composition ---------------- */
 
-export interface WalletAccounts { wsolAta: PK; usdcAta: PK; wsolExists: boolean; usdcExists: boolean; wsolOwnerOk: boolean; usdcOwnerOk: boolean; lamports: BN; ataRent: BN }
+export interface WalletAccounts { wsolAta: PK; usdcAta: PK; wsolExists: boolean; usdcExists: boolean; lamports: BN; ataRent: BN }
 
+/** Decode existing ATAs: right mint, wallet owner, initialized, not frozen, no foreign close authority. */
 export async function readWalletAccounts(connection: Connection, user: PK): Promise<WalletAccounts> {
   const { PublicKey } = await import("@solana/web3.js");
-  const { getAssociatedTokenAddressSync } = await import("@solana/spl-token");
-  const wsolAta = getAssociatedTokenAddressSync(new PublicKey(WSOL_MINT), user, false);
-  const usdcAta = getAssociatedTokenAddressSync(new PublicKey(USDC_MINT), user, false);
+  const spl = await import("@solana/spl-token");
+  const wsolAta = spl.getAssociatedTokenAddressSync(new PublicKey(WSOL_MINT), user, false);
+  const usdcAta = spl.getAssociatedTokenAddressSync(new PublicKey(USDC_MINT), user, false);
   const [accs, lamports, ataRent] = await Promise.all([
     withTimeout(connection.getMultipleAccountsInfo([wsolAta, usdcAta], "confirmed"), 10_000, "Token account read"),
     withTimeout(connection.getBalance(user, "confirmed"), 10_000, "Balance read"),
     withTimeout(connection.getMinimumBalanceForRentExemption(165, "confirmed"), 10_000, "Rent read"),
   ]);
-  const own = (a: typeof accs[number] | undefined) => !a || a.owner.toBase58() === SPL_TOKEN_PROGRAM;
-  return { wsolAta, usdcAta, wsolExists: !!accs[0], usdcExists: !!accs[1], wsolOwnerOk: own(accs[0]), usdcOwnerOk: own(accs[1]), lamports: new BN(lamports), ataRent: new BN(ataRent) };
+  const check = (addr: PK, info: (typeof accs)[number] | undefined, mint: string) => {
+    if (!info) return false;
+    if (info.owner.toBase58() !== SPL_TOKEN_PROGRAM) throw new Error(`${mint === WSOL_MINT ? "WSOL" : "USDC"} account is not an SPL Token account`);
+    const t = spl.unpackAccount(addr, info, new PublicKey(SPL_TOKEN_PROGRAM));
+    if (t.mint.toBase58() !== mint || !t.owner.equals(user)) throw new Error("Token account mint/owner mismatch");
+    if (!t.isInitialized || t.isFrozen) throw new Error("Token account is uninitialized or frozen");
+    if (t.closeAuthority && !t.closeAuthority.equals(user)) throw new Error("Token account has a foreign close authority");
+    return true;
+  };
+  return { wsolAta, usdcAta, wsolExists: check(wsolAta, accs[0], WSOL_MINT), usdcExists: check(usdcAta, accs[1], USDC_MINT), lamports: new BN(lamports), ataRent: new BN(ataRent) };
 }
 
-/** Wallet-specific cost model. WSOL ATA created here is closed in the same tx (refundable); a new USDC ATA is kept (residual dust lives there). */
-export function walletCosts(w: WalletAccounts, priorityBudget: BN, computeUnits: number): Costs & { microLamports: BN } {
-  const micro = priorityPrice(priorityBudget, computeUnits);
-  return {
-    microLamports: micro,
-    baseFee: new BN(BASE_FEE_PER_SIGNATURE),
-    priorityFee: priorityFeeLamports(micro, computeUnits),
-    nonRefundableRent: w.usdcExists ? new BN(0) : w.ataRent,
-    refundableRent: w.wsolExists ? new BN(0) : w.ataRent,
-  };
+/** RPC fee for a compiled message (includes priority). null on RPC null/error — callers must block. */
+export async function messageFee(connection: Connection, tx: Transaction): Promise<BN | null> {
+  try {
+    const { blockhash } = await withTimeout(connection.getLatestBlockhash("confirmed"), 10_000, "Blockhash");
+    tx.recentBlockhash = blockhash;
+    const r = await withTimeout(connection.getFeeForMessage(tx.compileMessage(), "confirmed"), 10_000, "Fee lookup");
+    return r.value === null || !Number.isSafeInteger(r.value) ? null : new BN(r.value);
+  } catch { return null; }
 }
+
+/** Read-only estimate: RPC fee for a representative 1-signer message with the configured CU limit/price. */
+export async function estimateFee(connection: Connection, microLamports: BN, computeUnits: number): Promise<BN | null> {
+  const { ComputeBudgetProgram, Transaction, PublicKey } = await import("@solana/web3.js");
+  const tx = new Transaction().add(ComputeBudgetProgram.setComputeUnitLimit({ units: computeUnits }), ComputeBudgetProgram.setComputeUnitPrice({ microLamports: BigInt(microLamports.toString()) }));
+  tx.feePayer = new PublicKey(WSOL_MINT); // any key: fee depends only on signatures + CU price
+  return messageFee(connection, tx);
+}
+
+export { priorityFeeLamports, priorityPrice };
 
 async function swapIx(pool: DLMM, user: PK, inMint: string, userIn: PK, userOut: PK, inAmount: BN, minOut: BN, binArrays: PK[]): Promise<TransactionInstruction> {
   const { slices, accounts } = pool.getPotentialToken2022IxDataAndAccounts(0);
@@ -211,9 +245,9 @@ export interface BuiltArb { tx: Transaction; bytes: number; programs: string[]; 
 export async function buildArbTx(opts: { user: PK; poolA: DLMM; poolB: DLMM; a: QuotedLeg; b: QuotedLeg; floor: BN; w: WalletAccounts; microLamports: BN; computeUnits: number }): Promise<BuiltArb> {
   const { user, poolA, poolB, a, b, floor, w } = opts;
   if (poolA.pubkey.equals(poolB.pubkey)) throw new Error("Duplicate pool legs");
-  if (!b.requested.eq(a.min)) throw new Error("Leg B input must equal leg A minimum output");
+  if (a.pool !== poolA.pubkey.toBase58() || b.pool !== poolB.pubkey.toBase58()) throw new Error("Quote/pool binding mismatch");
+  const le = legError(a, b); if (le) throw new Error(le);
   if (b.min.lt(floor)) throw new Error("Leg B minimum is below the enforced floor");
-  if (!w.wsolOwnerOk || !w.usdcOwnerOk) throw new Error("A wallet token account is not owned by the SPL Token program");
   const web3 = await import("@solana/web3.js");
   const spl = await import("@solana/spl-token");
   const { ComputeBudgetProgram, SystemProgram, Transaction, PublicKey } = web3;
@@ -222,7 +256,8 @@ export async function buildArbTx(opts: { user: PK; poolA: DLMM; poolB: DLMM; a: 
     ComputeBudgetProgram.setComputeUnitLimit({ units: opts.computeUnits }),
     ComputeBudgetProgram.setComputeUnitPrice({ microLamports: BigInt(opts.microLamports.toString()) }),
   ];
-  if (!w.wsolExists) ixs.push(spl.createAssociatedTokenAccountIdempotentInstruction(user, w.wsolAta, user, wsol));
+  // NON-idempotent: fails on-chain if the WSOL account appeared after our read, so we never close a user's account.
+  if (!w.wsolExists) ixs.push(spl.createAssociatedTokenAccountInstruction(user, w.wsolAta, user, wsol));
   if (!w.usdcExists) ixs.push(spl.createAssociatedTokenAccountIdempotentInstruction(user, w.usdcAta, user, usdc));
   ixs.push(SystemProgram.transfer({ fromPubkey: user, toPubkey: w.wsolAta, lamports: BigInt(a.requested.toString()) }));
   ixs.push(spl.createSyncNativeInstruction(w.wsolAta));
