@@ -17,3 +17,4 @@
 - Feature truth lives in `src/lib/capabilities.ts`; update it when a feature's status changes.
 - `exactOptionalPropertyTypes` is disabled — SDK and router types are incompatible with it.
 - Server (Worker) build environments add the "browser" resolve condition via a plugin in vite.config.ts — some Solana deps export only browser/node conditions.
+- Resolve each installed Anchor version to its browser entry and bundle Anchor/DLMM in SSR — Anchor's ESM entry references undefined CommonJS exports in the published runtime.
