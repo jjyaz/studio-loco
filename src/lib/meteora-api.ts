@@ -197,7 +197,7 @@ export function normalizePool(raw: unknown): ApiPool | null {
     has_farm: typeof o.has_farm === "boolean" ? o.has_farm : undefined,
     created_at: fin(o.created_at),
     token_x_amount: fin(o.token_x_amount), token_y_amount: fin(o.token_y_amount),
-    tags: Array.isArray(o.tags) ? o.tags.filter((t): t is string => typeof t === "string") : undefined,
+    tags: Array.isArray(o.tags) ? o.tags.filter((t: unknown): t is string => typeof t === "string") : undefined,
     launchpad: typeof o.launchpad === "string" ? o.launchpad : undefined,
   };
 }
