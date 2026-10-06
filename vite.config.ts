@@ -42,6 +42,6 @@ export default defineConfig({
   vite: {
     plugins: [workerBrowserFallback, anchorBrowserEntry],
     // Resolve Anchor before the final server bundling stage; never externalize it.
-    ssr: { noExternal: ["@meteora-ag/dlmm", "@coral-xyz/anchor"] },
+    ssr: { noExternal: [/^@meteora-ag\/dlmm$/, /^@coral-xyz\/anchor$/] },
   },
 });
