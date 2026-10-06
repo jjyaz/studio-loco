@@ -50,6 +50,31 @@ export function validateCall(c: Call): string | null {
   return null;
 }
 
+export const MULTI_CHUNK = 10;
+const MULTI_MAX_KEYS = 100;
+class UpstreamError extends Error { constructor(public status: number) { super(`upstream ${status}`); } }
+export const isLargeMulti = (c: Call) =>
+  c.method === "getMultipleAccounts" && Array.isArray(c.params) && Array.isArray(c.params[0]) && (c.params[0] as unknown[]).length > MULTI_CHUNK;
+
+async function postOne(upstream: string, c: Call): Promise<unknown> {
+  const r = await fetch(upstream, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(c), signal: AbortSignal.timeout(RELAY_LIMITS.timeoutMs) });
+  if (!r.ok) throw new UpstreamError(r.status);
+  return r.json();
+}
+
+/** Splits one getMultipleAccounts call into ≤10-key upstream calls; merges `value` in order. Any chunk error fails the whole call. */
+export async function splitMulti(upstream: string, c: Call, post: typeof postOne = postOne): Promise<unknown> {
+  const p = c.params as unknown[];
+  const keys = p[0] as unknown[];
+  if (keys.length > MULTI_MAX_KEYS) return { jsonrpc: "2.0", id: c.id ?? null, error: { code: -32602, message: `Too many accounts (max ${MULTI_MAX_KEYS})` } };
+  const parts: unknown[][] = [];
+  for (let i = 0; i < keys.length; i += MULTI_CHUNK) parts.push(keys.slice(i, i + MULTI_CHUNK));
+  const replies = await Promise.all(parts.map((k, i) => post(upstream, { jsonrpc: "2.0", id: i, method: "getMultipleAccounts", params: [k, ...p.slice(1)] }))) as { result?: { context: unknown; value: unknown[] }; error?: unknown }[];
+  const bad = replies.find((r) => r.error || !r.result || !Array.isArray(r.result.value));
+  if (bad) return { jsonrpc: "2.0", id: c.id ?? null, error: bad.error ?? { code: -32603, message: "Malformed upstream reply" } };
+  return { jsonrpc: "2.0", id: c.id ?? null, result: { context: replies[0]!.result!.context, value: replies.flatMap((r) => r.result!.value) } };
+}
+
 const rpcErr = (id: unknown, code: number, message: string, status = 200) =>
   Response.json({ jsonrpc: "2.0", id: id ?? null, error: { code, message } }, { status, headers: { "cache-control": "no-store" } });
 
@@ -60,7 +85,8 @@ export const Route = createFileRoute("/api/public/rpc/$cluster")({
         if (!UPSTREAM[params.cluster]) return new Response("Unknown cluster", { status: 404 });
         // Optional server-side upstream (e.g. a keyed provider) — public Solana RPC blocks hosted-Worker IPs.
         const override = process.env[params.cluster === "mainnet" ? "SOLANA_MAINNET_RPC_URL" : "SOLANA_DEVNET_RPC_URL"];
-        const upstream = override && /^https:\/\//.test(override) ? override : UPSTREAM[params.cluster]!;
+        const usingOverride = !!override && /^https:\/\//.test(override);
+        const upstream = usingOverride ? override! : UPSTREAM[params.cluster]!;
         const len = Number(request.headers.get("content-length") ?? "0");
         if (len > RELAY_LIMITS.bodyChars) return new Response("Body too large", { status: 413 });
         const text = await request.text();
@@ -73,6 +99,22 @@ export const Route = createFileRoute("/api/public/rpc/$cluster")({
         for (const c of calls) {
           const bad = validateCall(c);
           if (bad) return rpcErr(c?.id, bad.startsWith("Method not allowed") ? -32601 : -32602, bad);
+        }
+        // PublicNode (default mainnet) answers 403 "Request blocked" to getMultipleAccounts with
+        // more than 10 keys (verified 2026-10-06). Split those into ≤10-key requests and merge.
+        if (!usingOverride && params.cluster === "mainnet" && calls.some(isLargeMulti)) {
+          try {
+            const results = [];
+            for (const c of calls) results.push(isLargeMulti(c) ? await splitMulti(upstream, c) : await postOne(upstream, c));
+            const out = JSON.stringify(Array.isArray(body) ? results : results[0]);
+            if (out.length > RELAY_LIMITS.responseBytes) return rpcErr(calls[0]?.id, -32004, "Upstream response too large for the public relay. Use your own RPC in Settings.", 502);
+            return new Response(out, { status: 200, headers: { "content-type": "application/json", "cache-control": "no-store" } });
+          } catch (e) {
+            const st = e instanceof UpstreamError ? e.status : 0;
+            if (st === 429) return rpcErr(calls[0]?.id, 429, "Public RPC rate limit reached. Wait a moment, or add your own RPC in Settings.", 429);
+            if (st === 403) return rpcErr(calls[0]?.id, 403, "Public Solana RPC refused the hosted relay (403). Add your own RPC in Settings.", 502);
+            return rpcErr(calls[0]?.id, -32003, "Public RPC did not respond in time. Retry, or add your own RPC in Settings.", 504);
+          }
         }
         let res: Response;
         try {

@@ -1,4 +1,4 @@
-import "./polyfills";
+import { installNodeGlobals } from "./polyfills";
 import type { Connection, PublicKey } from "@solana/web3.js";
 import type DLMMType from "@meteora-ag/dlmm";
 import type { Cluster } from "./settings";
@@ -6,7 +6,13 @@ import type { Cluster } from "./settings";
 /** Lazily load the official Meteora DLMM SDK (heavy) only when a chain feature needs it. */
 let sdkPromise: Promise<typeof import("@meteora-ag/dlmm")> | null = null;
 export function loadSdk() {
-  if (!sdkPromise) sdkPromise = import("@meteora-ag/dlmm");
+  installNodeGlobals();
+  if (!sdkPromise) {
+    const p = import("@meteora-ag/dlmm");
+    // A failed import must not stick: reset so a manual Retry re-evaluates it.
+    p.catch(() => { if (sdkPromise === p) sdkPromise = null; });
+    sdkPromise = p;
+  }
   return sdkPromise;
 }
 

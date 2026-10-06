@@ -19,3 +19,5 @@
 - Server (Worker) build environments add the "browser" resolve condition via a plugin in vite.config.ts — some Solana deps export only browser/node conditions.
 - Resolve each installed Anchor version to its browser entry and bundle Anchor/DLMM in SSR — Anchor's ESM entry references undefined CommonJS exports in the published runtime.
 - Client builds resolve `buffer`/`node:buffer` to the npm buffer package via the first plugin in vite.config.ts — otherwise Vite substitutes an empty stub and hydration crashes.
+- Browser globals (Buffer/global/process) are installed by calling `installNodeGlobals()` explicitly, never by side-effect import — `"sideEffects": false` lets the bundler drop bare imports.
+- The relay splits default-mainnet `getMultipleAccounts` calls into ≤10-key chunks — PublicNode blocks larger ones.

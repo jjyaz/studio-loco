@@ -1,4 +1,5 @@
-import "@/lib/polyfills";
+import { installNodeGlobals } from "@/lib/polyfills";
+installNodeGlobals();
 import { useMemo, type ReactNode } from "react";
 import { ConnectionProvider, WalletProvider } from "@solana/wallet-adapter-react";
 import { SolflareWalletAdapter } from "@solana/wallet-adapter-solflare";
