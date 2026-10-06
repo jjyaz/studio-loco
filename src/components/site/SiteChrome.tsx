@@ -1,6 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { useState, type ReactNode } from "react";
 import { Wordmark } from "./Wordmark";
+import { CaButton } from "./CaButton";
 import { btn } from "@/components/kit";
 import { cn } from "@/lib/utils";
 
@@ -28,6 +29,7 @@ export function SiteNav({ overlay = false }: { overlay?: boolean }) {
               {n.label}
             </Link>
           ))}
+          <CaButton />
           <Link to="/app" className={btn({ size: "sm" })}>
             Enter Terminal
           </Link>
@@ -43,6 +45,7 @@ export function SiteNav({ overlay = false }: { overlay?: boolean }) {
               {n.label}
             </Link>
           ))}
+          <CaButton />
           <Link to="/app" className={cn(btn(), "mt-2")} onClick={() => setOpen(false)}>
             Enter Terminal
           </Link>
