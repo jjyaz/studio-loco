@@ -83,7 +83,7 @@ export function retryAfterMs(header: string | null, fallback: number, now = Date
   if (header) {
     const secs = Number(header);
     if (Number.isFinite(secs) && secs >= 0) ms = secs * 1000;
-    else { const d = Date.parse(header); if (Number.isFinite(d)) ms = d - now; }
+    else if (/[a-z]/i.test(header)) { const d = Date.parse(header); if (Number.isFinite(d)) ms = d - now; }
   }
   return Math.min(Math.max(0, ms), MAX_RETRY_WAIT_MS);
 }
