@@ -16,3 +16,4 @@
 - Default RPC goes through the allowlisted relay `src/routes/api/public/rpc.$cluster.ts` because public Solana RPC rejects browser origins; custom RPCs bypass it.
 - Feature truth lives in `src/lib/capabilities.ts`; update it when a feature's status changes.
 - `exactOptionalPropertyTypes` is disabled — SDK and router types are incompatible with it.
+- Server (Worker) build environments add the "browser" resolve condition via a plugin in vite.config.ts — some Solana deps export only browser/node conditions.
