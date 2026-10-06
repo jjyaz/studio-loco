@@ -56,6 +56,7 @@
     "@tanstack/react-router": "1.170.41",
     "@tanstack/react-start": "1.168.60",
     "@tanstack/router-plugin": "1.168.42",
+    "@tanstack/zod-adapter": "^1.167.0",
     "bn.js": "^5.2.5",
     "buffer": "^6.0.3",
     "class-variance-authority": "^0.7.1",
