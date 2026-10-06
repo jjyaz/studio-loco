@@ -16,6 +16,7 @@ const TABS = [
   { to: "/app/studio", label: "Studio" },
   { to: "/app/signals", label: "Signals" },
   { to: "/app/launch", label: "Launch" },
+  { to: "/app/dispatch", label: "Dispatch" },
 ] as const;
 
 export function SettingsDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (o: boolean) => void }) {

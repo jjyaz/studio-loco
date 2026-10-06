@@ -25,7 +25,7 @@ export const ALLOWED = new Set([
   "getAccountInfo", "getMultipleAccounts", "getBalance", "getLatestBlockhash", "getSlot", "getBlockHeight",
   "getEpochInfo", "getVersion", "getMinimumBalanceForRentExemption", "getFeeForMessage", "simulateTransaction",
   "sendTransaction", "getSignatureStatuses", "getTokenAccountsByOwner", "getProgramAccounts",
-  "isBlockhashValid", "getRecentPrioritizationFees", "getTokenAccountBalance", "getHealth", "getGenesisHash",
+  "isBlockhashValid", "getRecentPrioritizationFees", "getTokenAccountBalance", "getHealth", "getGenesisHash", "getTransaction",
 ]);
 
 type Call = { jsonrpc?: unknown; id?: unknown; method?: unknown; params?: unknown };

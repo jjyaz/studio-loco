@@ -16,6 +16,7 @@ import { Route as GovernanceRouteImport } from './routes/governance'
 import { Route as NetworkRouteImport } from './routes/network'
 import { Route as TokenRouteImport } from './routes/token'
 import { Route as AppIndexRouteImport } from './routes/app.index'
+import { Route as AppDispatchRouteImport } from './routes/app.dispatch'
 import { Route as AppLaunchRouteImport } from './routes/app.launch'
 import { Route as AppPortfolioRouteImport } from './routes/app.portfolio'
 import { Route as AppSignalsRouteImport } from './routes/app.signals'
@@ -60,6 +61,11 @@ const TokenRoute = TokenRouteImport.update({
 const AppIndexRoute = AppIndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppDispatchRoute = AppDispatchRouteImport.update({
+  id: '/dispatch',
+  path: '/dispatch',
   getParentRoute: () => AppRoute,
 } as any)
 const AppLaunchRoute = AppLaunchRouteImport.update({
@@ -120,6 +126,7 @@ export interface FileRoutesByFullPath {
   '/governance': typeof GovernanceRoute
   '/network': typeof NetworkRoute
   '/token': typeof TokenRoute
+  '/app/dispatch': typeof AppDispatchRoute
   '/app/launch': typeof AppLaunchRoute
   '/app/portfolio': typeof AppPortfolioRoute
   '/app/signals': typeof AppSignalsRoute
@@ -138,6 +145,7 @@ export interface FileRoutesByTo {
   '/governance': typeof GovernanceRoute
   '/network': typeof NetworkRoute
   '/token': typeof TokenRoute
+  '/app/dispatch': typeof AppDispatchRoute
   '/app/launch': typeof AppLaunchRoute
   '/app/portfolio': typeof AppPortfolioRoute
   '/app/signals': typeof AppSignalsRoute
@@ -158,6 +166,7 @@ export interface FileRoutesById {
   '/governance': typeof GovernanceRoute
   '/network': typeof NetworkRoute
   '/token': typeof TokenRoute
+  '/app/dispatch': typeof AppDispatchRoute
   '/app/launch': typeof AppLaunchRoute
   '/app/portfolio': typeof AppPortfolioRoute
   '/app/signals': typeof AppSignalsRoute
@@ -179,6 +188,7 @@ export interface FileRouteTypes {
     | '/governance'
     | '/network'
     | '/token'
+    | '/app/dispatch'
     | '/app/launch'
     | '/app/portfolio'
     | '/app/signals'
@@ -197,6 +207,7 @@ export interface FileRouteTypes {
     | '/governance'
     | '/network'
     | '/token'
+    | '/app/dispatch'
     | '/app/launch'
     | '/app/portfolio'
     | '/app/signals'
@@ -216,6 +227,7 @@ export interface FileRouteTypes {
     | '/governance'
     | '/network'
     | '/token'
+    | '/app/dispatch'
     | '/app/launch'
     | '/app/portfolio'
     | '/app/signals'
@@ -294,6 +306,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppIndexRouteImport
       parentRoute: typeof AppRoute
     }
+    '/app/dispatch': {
+      id: '/app/dispatch'
+      path: '/dispatch'
+      fullPath: '/app/dispatch'
+      preLoaderRoute: typeof AppDispatchRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/app/launch': {
       id: '/app/launch'
       path: '/launch'
@@ -368,6 +387,7 @@ declare module '@tanstack/react-router' {
 }
 
 interface AppRouteChildren {
+  AppDispatchRoute: typeof AppDispatchRoute
   AppLaunchRoute: typeof AppLaunchRoute
   AppPortfolioRoute: typeof AppPortfolioRoute
   AppSignalsRoute: typeof AppSignalsRoute
@@ -377,6 +397,7 @@ interface AppRouteChildren {
 }
 
 const AppRouteChildren: AppRouteChildren = {
+  AppDispatchRoute: AppDispatchRoute,
   AppLaunchRoute: AppLaunchRoute,
   AppPortfolioRoute: AppPortfolioRoute,
   AppSignalsRoute: AppSignalsRoute,
