@@ -1,6 +1,6 @@
 {
-  "at": "2026-10-07T21:58:00.520163+00:00",
-  "baseCommit": "8af0833481c8a10198bd5e4e6e9ccbf667c174ed",
+  "at": "2026-10-07T22:31:27.011539+00:00",
+  "baseCommit": "ead532a08d61da6c4fd556877f59a250e82a4bc6",
   "unitTests": {
     "passed": 172,
     "failed": 0,
@@ -64,27 +64,59 @@
       "blocked": null
     },
     "funded-devnet-acceptance.json": {
-      "passed": false,
+      "passed": true,
       "network": "devnet",
-      "strategy": null,
-      "width": null,
-      "signed": false,
-      "broadcast": false,
-      "blocked": "devnet-funding-required"
+      "signed": true,
+      "broadcast": true,
+      "cases": 6,
+      "confirmedTransactions": 27,
+      "blocked": null
     }
   },
   "publicRelease": {
     "publishedThisPass": false,
-    "blockedBy": "Funded devnet acceptance has no signed receipts; test wallet requires devnet SOL."
+    "blockedBy": null,
+    "state": "ready-for-publication; production verification pending"
   },
-  "browserWalletRehearsal": "not performed in this pass",
+  "browserWalletRehearsal": "not performed; wallet dialog verified, signed devnet runner acceptance verified separately",
   "fundedMainnet": "not performed",
   "previewBrowser": {
-    "passed": false,
-    "blocked": "Lovable preview redirects to sign-in; no authenticated browser test performed."
+    "passed": true,
+    "source": "Lovable project dev runtime QA",
+    "checkedCommit": "ead532a08d61da6c4fd556877f59a250e82a4bc6",
+    "viewports": [
+      1280,
+      390
+    ],
+    "routes": [
+      "/",
+      "/app",
+      "/app/agents",
+      "/app/dispatch",
+      "/docs"
+    ],
+    "pageErrors": 0,
+    "documentOverflow": 0,
+    "applyArmConfirmed": true,
+    "realWatchOnlyLoaded": true,
+    "fundedBrowserWallet": false,
+    "limitations": "Connected browser-wallet rehearsal and production runtime are separate; devnet signing used the dedicated Node QA wallet."
   },
   "localWorkerSmoke": {
     "passed": false,
     "blocked": "Wrangler local startup failed in the environment (uv_interface_addresses system error); no route smoke pass claimed."
+  },
+  "fundedDevnet": {
+    "passed": true,
+    "wallet": "FpebsUzBXJ9PLAkFi1Kq4wEPHtyRPznh5e5FpdztpZQZ",
+    "pool": "5BekUyptd4Tefo6EqjxtXvKjBWBjNt3vUKJ6jTfrXNnn",
+    "cases": 6,
+    "confirmedTransactions": 27,
+    "networkFeesLamports": 170000,
+    "finalBalanceLamports": 326215840,
+    "unresolvedSignatures": [],
+    "nativeRebalances": 6,
+    "partialWithdrawals": 6,
+    "positionCleanups": 6
   }
 }

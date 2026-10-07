@@ -1,0 +1,28 @@
+{
+  "at": "2026-10-07T22:13:28.421Z",
+  "network": "devnet",
+  "rpc": "https://api.devnet.solana.com",
+  "realMainnetFunds": false,
+  "passed": false,
+  "operations": [
+    {
+      "label": "Create synthetic devnet token and wrap test SOL",
+      "signature": "4G56EHWw8DmjuSugS3ZwDxLrjEEpFRPvX5k8nJD7yFNPuKEGpu8dcWiZoLJ7263CkE32jbkmrDgvABWPgPxRXksS",
+      "slot": 508601814,
+      "confirmed": true,
+      "feeLamports": 10000
+    },
+    {
+      "label": "Create isolated test pool",
+      "signature": "4hoKhhMwo4J2Cva8wVbu95Vff7Mgr3HXf5bHafzaT5E7pxMc6NV5srGdRcVxwBy4fnk1JYb6Vvf6HEXjKoddLwvs",
+      "slot": 508601825,
+      "confirmed": true,
+      "feeLamports": 5000
+    }
+  ],
+  "wallet": "FpebsUzBXJ9PLAkFi1Kq4wEPHtyRPznh5e5FpdztpZQZ",
+  "initialBalanceLamports": 500000000,
+  "pool": "5BekUyptd4Tefo6EqjxtXvKjBWBjNt3vUKJ6jTfrXNnn",
+  "error": "Simulation failed: {\"InstructionError\":[4,{\"Custom\":1}]}",
+  "unresolvedSignatures": []
+}

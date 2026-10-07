@@ -3,7 +3,7 @@ import { createRequire } from "node:module";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import BN from "bn.js";
 import { Connection, Keypair, PublicKey, SystemProgram, Transaction } from "@solana/web3.js";
-import { MINT_SIZE, NATIVE_MINT, TOKEN_PROGRAM_ID, createAssociatedTokenAccountIdempotentInstruction, createInitializeMint2Instruction, createMintToInstruction, createSyncNativeInstruction, getAssociatedTokenAddressSync } from "@solana/spl-token";
+import { MINT_SIZE, NATIVE_MINT, TOKEN_PROGRAM_ID, createAssociatedTokenAccountIdempotentInstruction, createInitializeMint2Instruction, createMintToInstruction, createSyncNativeInstruction, getAssociatedTokenAddressSync, getMint, unpackAccount } from "@solana/spl-token";
 import { JobControl } from "@/lib/job-control";
 import { buildNativeRebalance, buildWithdraw } from "@/lib/agents-chain";
 import { executionReadiness, REVIEW_TTL_MS } from "@/lib/agents";
@@ -22,6 +22,7 @@ const DLMM = sdk.default ?? sdk;
 const DEVNET_RPC = "https://api.devnet.solana.com";
 const REQUIRED_SOL = 350_000_000;
 const WALLET_FILE = ".qa/funded-devnet-wallet.json";
+const FIXTURE_FILE = ".qa/devnet-fixture.json";
 
 describe("explicit funded DEVNET acceptance", () => {
   it("confirms odd/even native moves, a 25% withdrawal and cleanup through the real wallet runner", async () => {
@@ -79,26 +80,58 @@ describe("explicit funded DEVNET acceptance", () => {
         console.log(JSON.stringify(operations.at(-1)));
         return result;
       };
-      // Synthetic test token + a WSOL account; all account creation goes through the shared runner.
-      const mint = Keypair.generate();
-      const tokenAta = getAssociatedTokenAddressSync(mint.publicKey, payer.publicKey);
       const wsolAta = getAssociatedTokenAddressSync(NATIVE_MINT, payer.publicKey);
-      const rent = await connection.getMinimumBalanceForRentExemption(MINT_SIZE);
-      const setup = new Transaction().add(
-        SystemProgram.createAccount({ fromPubkey: payer.publicKey, newAccountPubkey: mint.publicKey, lamports: rent, space: MINT_SIZE, programId: TOKEN_PROGRAM_ID }),
-        createInitializeMint2Instruction(mint.publicKey, 9, payer.publicKey, null),
-        createAssociatedTokenAccountIdempotentInstruction(payer.publicKey, tokenAta, payer.publicKey, mint.publicKey),
-        createMintToInstruction(mint.publicKey, tokenAta, payer.publicKey, 1_000_000_000_000n),
-        createAssociatedTokenAccountIdempotentInstruction(payer.publicKey, wsolAta, payer.publicKey, NATIVE_MINT),
-        SystemProgram.transfer({ fromPubkey: payer.publicKey, toPubkey: wsolAta, lamports: 40_000_000 }),
-        createSyncNativeInstruction(wsolAta),
-      );
-      await send("Create synthetic devnet token and wrap test SOL", setup, [mint]);
-      const pairTx = await DLMM.createCustomizablePermissionlessLbPair2(connection, new BN(25), NATIVE_MINT, mint.publicKey, new BN(0), new BN(10), sdk.ActivationType.Slot, false, payer.publicKey, undefined, false, sdk.ConcreteFunctionType.LiquidityMining, sdk.CollectFeeMode.InputOnly, { cluster: "devnet" });
-      await send("Create isolated test pool", pairTx);
-      const [pair] = sdk.deriveCustomizablePermissionlessLbPair(NATIVE_MINT, mint.publicKey, new PublicKey(sdk.LBCLMM_PROGRAM_IDS.devnet));
+      let mint: PublicKey, pair: PublicKey;
+      if (existsSync(FIXTURE_FILE)) {
+        const saved = JSON.parse(readFileSync(FIXTURE_FILE, "utf8"));
+        if (saved.network !== "devnet" || saved.wallet !== payer.publicKey.toBase58()) throw new Error("The existing QA fixture belongs to another network or wallet.");
+        mint = new PublicKey(saved.mint); pair = new PublicKey(saved.pool);
+        const [derived] = sdk.deriveCustomizablePermissionlessLbPair(NATIVE_MINT, mint, new PublicKey(sdk.LBCLMM_PROGRAM_IDS.devnet));
+        expect(derived.equals(pair)).toBe(true);
+        for (const receipt of saved.setupReceipts ?? []) {
+          const landed = await connection.getTransaction(receipt.signature, { commitment: "confirmed", maxSupportedTransactionVersion: 0 });
+          expect(landed?.meta?.err).toBeNull();
+          operations.push({ ...receipt, reusedFixture: true });
+        }
+        report.reusedFixture = true;
+      } else {
+        // Synthetic test token + WSOL. Never use an imported user mint or keypair.
+        const mintSigner = Keypair.generate(); mint = mintSigner.publicKey;
+        const tokenAta = getAssociatedTokenAddressSync(mint, payer.publicKey);
+        const rent = await connection.getMinimumBalanceForRentExemption(MINT_SIZE);
+        const setup = new Transaction().add(
+          SystemProgram.createAccount({ fromPubkey: payer.publicKey, newAccountPubkey: mint, lamports: rent, space: MINT_SIZE, programId: TOKEN_PROGRAM_ID }),
+          createInitializeMint2Instruction(mint, 9, payer.publicKey, null),
+          createAssociatedTokenAccountIdempotentInstruction(payer.publicKey, tokenAta, payer.publicKey, mint),
+          createMintToInstruction(mint, tokenAta, payer.publicKey, 1_000_000_000_000n),
+          createAssociatedTokenAccountIdempotentInstruction(payer.publicKey, wsolAta, payer.publicKey, NATIVE_MINT),
+          SystemProgram.transfer({ fromPubkey: payer.publicKey, toPubkey: wsolAta, lamports: 40_000_000 }),
+          createSyncNativeInstruction(wsolAta),
+        );
+        await send("Create synthetic devnet token and wrap test SOL", setup, [mintSigner]);
+        // The default helper unwraps existing WSOL; explicitly preserve it.
+        const pairTx = await DLMM.createCustomizablePermissionlessLbPair2(connection, new BN(25), NATIVE_MINT, mint, new BN(0), new BN(10), sdk.ActivationType.Slot, false, payer.publicKey, undefined, false, sdk.ConcreteFunctionType.LiquidityMining, sdk.CollectFeeMode.InputOnly, { cluster: "devnet", skipSolWrappingOperation: true });
+        await send("Create isolated test pool", pairTx);
+        [pair] = sdk.deriveCustomizablePermissionlessLbPair(NATIVE_MINT, mint, new PublicKey(sdk.LBCLMM_PROGRAM_IDS.devnet));
+        writeFileSync(FIXTURE_FILE, JSON.stringify({ network: "devnet", wallet: payer.publicKey.toBase58(), mint: mint.toBase58(), pool: pair.toBase58(), setupReceipts: [...operations] }), { mode: 0o600 });
+      }
       report.pool = pair.toBase58();
       const loadPool = () => DLMM.create(connection, pair, { cluster: "devnet", skipSolWrappingOperation: true });
+      const fixturePool = await loadPool();
+      expect([fixturePool.tokenX.publicKey.toBase58(), fixturePool.tokenY.publicKey.toBase58()].sort()).toEqual([NATIVE_MINT.toBase58(), mint.toBase58()].sort());
+      const mintAccount = await getMint(connection, mint, "confirmed", TOKEN_PROGRAM_ID);
+      expect(mintAccount.decimals).toBe(9);
+      expect(mintAccount.mintAuthority?.equals(payer.publicKey)).toBe(true);
+      const wsolAccount = await connection.getAccountInfo(wsolAta);
+      const wsolAmount = wsolAccount ? unpackAccount(wsolAta, wsolAccount, TOKEN_PROGRAM_ID).amount : 0n;
+      if (wsolAmount < 40_000_000n) {
+        const restore = new Transaction().add(
+          createAssociatedTokenAccountIdempotentInstruction(payer.publicKey, wsolAta, payer.publicKey, NATIVE_MINT),
+          SystemProgram.transfer({ fromPubkey: payer.publicKey, toPubkey: wsolAta, lamports: 40_000_000n - wsolAmount }),
+          createSyncNativeInstruction(wsolAta),
+        );
+        await send("Prepare persistent WSOL fixture after pool creation", restore);
+      }
       for (const width of [20, 21]) for (const strategy of ["Spot", "Curve", "BidAsk"] as const) {
         let pool = await loadPool();
         const position = Keypair.generate();

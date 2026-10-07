@@ -1,6 +1,6 @@
 # Release readiness
 
-The Observatory update is prepared for acceptance, but its public release is pending confirmed funded testing. No transaction has been signed or broadcast in this validation pass. The dedicated devnet QA wallet remains unfunded after the public faucet returned HTTP 429. See [the release procedure](OBSERVATORY_RELEASE.md) and the machine-readable evidence in `docs/qa/`.
+The Observatory passed funded devnet acceptance: six 20/21-bin × Spot/Curve/BidAsk native moves, exact 25% share withdrawals, preserved WSOL and six confirmed position cleanups. There are 27 confirmed transaction receipts including setup and no unresolved signatures. Funded mainnet signing and a browser-wallet rehearsal remain unperformed. Public deployment is the remaining release step after preview QA. See [the release procedure](OBSERVATORY_RELEASE.md) and the machine-readable evidence in `docs/qa/`.
 
 | Item | State | Evidence |
 |---|---|---|
@@ -14,9 +14,10 @@ The Observatory update is prepared for acceptance, but its public release is pen
 | Live pool list, real bins, limit-order mode detection | Pass | YZY-USDC active bin −124, mode Undetermined → order-capable per SDK |
 | Wallet absence | Pass | every action shows Connect wallet; nothing auto-transacts |
 | Keyboard focus, wallet modal, dialogs | Pass (pass 5, /app at 1280px) | Skip link first; nav, Settings, Connect wallet, tabs, Refresh, inputs all show focus (search via amber frame); Enter opens wallet dialog, Escape closes it; 0 page errors |
-| Funded devnet native acceptance | **Blocked: test SOL required** | Dedicated devnet-only harness is ready; no signed receipts yet |
+| Funded devnet native acceptance | Pass — six cases, 27 confirmed transactions | Exact range/width/owner, 25% per-bin shares, WSOL account preservation and cleanup; zero pending signatures |
 | Funded mainnet signing and native orders | **Not run** | No funded mainnet transactions or native-order signatures in this pass |
-| Public release of this update | **Pending funded acceptance** | Prior production deployment remains published; this update has not been deployed |
+| Current preview runtime and UI | Pass in Lovable dev runtime | Five routes at 1280/390 px; no page errors/document overflow; wallet dialog, practice proposals/monitor/review, exact Apply→Arm→Disarm and real watch-only positions with spending blocked |
+| Public release of this update | **Pending deployment** | Funded acceptance passed; this update has not yet been deployed |
 | Confidential protocol | **Not deployed** | educational simulation only |
 
 ## Pass 4 (2026-10-06 12:06 UTC)
@@ -77,7 +78,7 @@ The Observatory update is prepared for acceptance, but its public release is pen
 - [x] 128/128 tests (incl. src/test/agents.test.ts), tsgo typecheck clean, production build exit 0.
 - [x] Browser (dev): no-wallet empty state, practice scenario rule→arm→proposals→practice review at 1280px and 390px; no page errors, no horizontal overflow.
 - [x] Live native rebalance built + simulated using a real public mainnet position and sigVerify disabled; decoded post-state checked. No signing or ownership claim.
-- [ ] Funded signed rebalance / withdrawal (not performed; no funds used).
+- [x] Funded signed devnet rebalance / withdrawal (six cases, confirmed 2026-10-07; mainnet signing remains unperformed).
 - Historical limit, superseded below: SDK 1.9.14's convenience balanced helper adds one bin to even-width ranges. The explicit SDK strategy path now preserves the original width.
 
 ### Liquidity Agents review fixes (2026-10-07)
@@ -102,3 +103,11 @@ The Observatory update is prepared for acceptance, but its public release is pen
 - [ ] Fund the dedicated QA wallet, run the signed matrix and verify all confirmed receipts.
 - [ ] Verify preview behavior and publish only after funded acceptance passes, then re-check the production routes and relay.
 - Current browser preview check redirects to Lovable sign-in. No authentication or browser wallet rehearsal was performed. An attempted local Worker smoke check could not start Wrangler in this environment (`uv_interface_addresses` system error); successful production bundling does not count as a runtime smoke pass.
+
+### Confirmed funded acceptance (2026-10-07)
+- [x] User funded the dedicated devnet QA wallet with 0.5 test SOL. The first setup and pool creation confirmed, then the next simulation blocked because the SDK's default pool-creation helper had unwrapped the existing WSOL account. [That failed attempt](qa/funded-devnet-setup-refusal.json) is retained; no position was signed in that attempt.
+- [x] Harness setup now explicitly preserves WSOL and resumes the same verified pool/mint with re-verified setup receipts. The successful run restored the WSOL fixture and completed all six cases. [Full confirmed receipts and post-state evidence](qa/funded-devnet-acceptance.json).
+- [x] Six native rebalances, six exact 25% share withdrawals and six full withdrawal/close cleanups confirmed. Every native move retained its 20/21-bin width, target range and owner. Existing WSOL survived. All six positions were closed and no unresolved signature remained.
+- [x] 27 confirmed transactions including reused setup receipts, 170000 lamports total network fees. Final unwrapped devnet SOL balance: 326215840 lamports. WSOL and setup pool/token/bin accounts remain test fixtures; the balance difference is not described as network fees alone or a full rent refund.
+- [x] Lovable read-only QA of commit ead532a0: `/`, `/app`, `/app/agents`, `/app/dispatch`, `/docs` returned 200 at 1280 and 390 px, no page errors/document overflow. Connect wallet opened on Enter and closed on Escape; invalid watch address blocked Inspect; explicit practice rules, arm, monitoring start/pause, proposal review and Close worked. Follow-up confirmed Apply→Arm→Disarm at both sizes; the earlier loose locator had clicked the position card. Real mainnet watch-only loaded eight verified positions and kept spending controls disabled. No wallet was connected. [Full scoped QA findings](qa/preview-ui-verification.json).
+- [ ] Publish the verified build and verify production routes, hydration and relay behavior.

@@ -1,13 +1,272 @@
 {
-  "at": "2026-10-07T21:33:08.779Z",
+  "at": "2026-10-07T22:17:30.851Z",
   "network": "devnet",
   "rpc": "https://api.devnet.solana.com",
   "realMainnetFunds": false,
-  "passed": false,
-  "operations": [],
+  "passed": true,
+  "operations": [
+    {
+      "label": "Create synthetic devnet token and wrap test SOL",
+      "signature": "4G56EHWw8DmjuSugS3ZwDxLrjEEpFRPvX5k8nJD7yFNPuKEGpu8dcWiZoLJ7263CkE32jbkmrDgvABWPgPxRXksS",
+      "slot": 508601814,
+      "confirmed": true,
+      "feeLamports": 10000,
+      "reusedFixture": true
+    },
+    {
+      "label": "Create isolated test pool",
+      "signature": "4hoKhhMwo4J2Cva8wVbu95Vff7Mgr3HXf5bHafzaT5E7pxMc6NV5srGdRcVxwBy4fnk1JYb6Vvf6HEXjKoddLwvs",
+      "slot": 508601825,
+      "confirmed": true,
+      "feeLamports": 5000,
+      "reusedFixture": true
+    },
+    {
+      "label": "Prepare persistent WSOL fixture after pool creation",
+      "signature": "2WHTHniAMfuhRbuWyuD8hDbxR9jWcdpH7XTNTnEgfgqeWTwnctQEEMkzouTTWkWthtnGREB8avL6gGnR4x9Z3xWj",
+      "slot": 508602811,
+      "confirmed": true,
+      "feeLamports": 5000
+    },
+    {
+      "label": "Create funded 20-bin out-of-range position (Spot)",
+      "signature": "3Dej76pNzQ3fJ6NqZRQR29zZfSppzw1W9WdqmSQ49w541ZCV8n5LnCMJEpqQacJPHdD7eUtoeWecznbDPYGCiDEo",
+      "slot": 508602895,
+      "confirmed": true,
+      "feeLamports": 10000
+    },
+    {
+      "label": "Native 20-bin Spot rebalance",
+      "signature": "3Ejv6nM36mL9K92yxv42UkF4KUuWJ7GULSb3edsEuqxzAMG94P8SVgNe1topHdbK8kvT5gqPxb1ucsqBuyNYZiPw",
+      "slot": 508602985,
+      "confirmed": true,
+      "feeLamports": 5000
+    },
+    {
+      "label": "20-bin Spot partial withdrawal (25%)",
+      "signature": "452YNoWNJUw47vo7N9LU78brUFFXvYrUpZyYTwziJMggpTTWhXCTGtzX2U9B4q5C7n91nY5DJeCdVoJZ21uxZe7G",
+      "slot": 508603010,
+      "confirmed": true,
+      "feeLamports": 5000
+    },
+    {
+      "label": "20-bin Spot post-state",
+      "position": "HjK1eJ1zmvW2hmZaNunyyvNPJKPH9hDhjjLMCAHvL62A",
+      "sameWidth": true,
+      "target": {
+        "lower": -10,
+        "upper": 9
+      },
+      "exactPartialWithdrawal": true,
+      "existingWsolPreserved": true
+    },
+    {
+      "label": "20-bin Spot cleanup: withdraw remaining shares and close",
+      "signature": "2VcCy3WHNfoHwNJiiJbwGEa2QMxbZ3QjbrBcW7igJh8xKneoAAfzVMkCvhsShz9yxujfh2FvheM6AnWrEUvkTZwh",
+      "slot": 508603027,
+      "confirmed": true,
+      "feeLamports": 5000
+    },
+    {
+      "label": "Create funded 20-bin out-of-range position (Curve)",
+      "signature": "SfhHKWQiC8Cxwv5fUUqRcW96WJCkkNxGL64MbHjR97atxBgqTrjZDerZ9k2JcX2WRnsNzazDePqM28EKZCVxGMn",
+      "slot": 508603109,
+      "confirmed": true,
+      "feeLamports": 10000
+    },
+    {
+      "label": "Native 20-bin Curve rebalance",
+      "signature": "5FsMnVry66RkDzfP4PefVAKxugsQcQ9Ru61yCRNmtTuHozLWugSDM49vibpCWp1Z9ofdKN1wH4RejDUvbqi15gQW",
+      "slot": 508603220,
+      "confirmed": true,
+      "feeLamports": 5000
+    },
+    {
+      "label": "20-bin Curve partial withdrawal (25%)",
+      "signature": "4TRhAmm4MMecYvJUCm9tyYFwcitUpeppFkYC599kBXviEqxUAW7zXefGxgPcKF2jrppvajDjJXZd1DjxTiQw4ctH",
+      "slot": 508603247,
+      "confirmed": true,
+      "feeLamports": 5000
+    },
+    {
+      "label": "20-bin Curve post-state",
+      "position": "4nxZnkCePRHNzAgFumqWhi2iRQHkB37q3qcbmE1uJaKk",
+      "sameWidth": true,
+      "target": {
+        "lower": -10,
+        "upper": 9
+      },
+      "exactPartialWithdrawal": true,
+      "existingWsolPreserved": true
+    },
+    {
+      "label": "20-bin Curve cleanup: withdraw remaining shares and close",
+      "signature": "2L7RfjbezUAzAEuk9eiok4cRjK4k72UTjB32SKpsTmAqGcaWYBuKJcTnyosUnBgPA7D2dYomaqb8AVUYUmWb6nPn",
+      "slot": 508603266,
+      "confirmed": true,
+      "feeLamports": 5000
+    },
+    {
+      "label": "Create funded 20-bin out-of-range position (BidAsk)",
+      "signature": "5VMm2ac23H7uY7F4vtAvcQhydfhBZcwFQr3tMjA53QZePHNX4dbzp8WUxwb9nobGohA5JrTVEUM5yKwVbCcw4nAv",
+      "slot": 508603342,
+      "confirmed": true,
+      "feeLamports": 10000
+    },
+    {
+      "label": "Native 20-bin BidAsk rebalance",
+      "signature": "4MsuA3Fz2mW2SLUUy9bHdZBM7NE8kvxZtdrbESp1yB78rxXP1h2YPHvCiV3Z1xU9haXdPXLvXdc83RqpkYZd8i3r",
+      "slot": 508603448,
+      "confirmed": true,
+      "feeLamports": 5000
+    },
+    {
+      "label": "20-bin BidAsk partial withdrawal (25%)",
+      "signature": "3Uqr7FXThMpPhtCWfTyCQWzN3ZgqEW5AP82d4PXBWUVdaXjaM9zpBPhi6i2Mw1MKHUbc9NPurqcL3k3oaLKD4BgB",
+      "slot": 508603475,
+      "confirmed": true,
+      "feeLamports": 5000
+    },
+    {
+      "label": "20-bin BidAsk post-state",
+      "position": "7y6dFwxbjvsQe67X8u9W5sQ5jN5hST2gpxRGx5rGAD2k",
+      "sameWidth": true,
+      "target": {
+        "lower": -10,
+        "upper": 9
+      },
+      "exactPartialWithdrawal": true,
+      "existingWsolPreserved": true
+    },
+    {
+      "label": "20-bin BidAsk cleanup: withdraw remaining shares and close",
+      "signature": "YQh23SnhYCnyA3FDAxb86pY8J4AUPzQ9455YwsyXzUh9MN8TJTyugzGCmxaRfyydcuBdpzQ9Wz7vbHy27T9B9aX",
+      "slot": 508603492,
+      "confirmed": true,
+      "feeLamports": 5000
+    },
+    {
+      "label": "Create funded 21-bin out-of-range position (Spot)",
+      "signature": "61qv2GardfKWfey2obYTQFJMCExTfLLz1wH6SSSxKEcW5vMVTY9vGiLTgs7PzB7kELf9BKNcH4yfrAF8twd5FFr2",
+      "slot": 508603567,
+      "confirmed": true,
+      "feeLamports": 10000
+    },
+    {
+      "label": "Native 21-bin Spot rebalance",
+      "signature": "5rGQaWHDVEyzwipYqZC5VCnuxed53JyJgJc4LPPEGDCtDZnHatYPgD4XHL1MysFrUEkTH828CxHJg3uXQUZ4atwG",
+      "slot": 508603662,
+      "confirmed": true,
+      "feeLamports": 5000
+    },
+    {
+      "label": "21-bin Spot partial withdrawal (25%)",
+      "signature": "5ke1uA4MFaJhbJTUYPamENxz9u1MUGUbiUuqgbzjVLvRzFxF3TjtN6FWe82zMprhW3S49NzVAhmaPV5GPCe1CpkM",
+      "slot": 508603688,
+      "confirmed": true,
+      "feeLamports": 5000
+    },
+    {
+      "label": "21-bin Spot post-state",
+      "position": "7njvZAE7DHiC6dvkykjRo4D6NXCTGEZSBid7ecuHuNtN",
+      "sameWidth": true,
+      "target": {
+        "lower": -10,
+        "upper": 10
+      },
+      "exactPartialWithdrawal": true,
+      "existingWsolPreserved": true
+    },
+    {
+      "label": "21-bin Spot cleanup: withdraw remaining shares and close",
+      "signature": "3idbNLVCMpKdBPCZFNpQ2MQT9m7MGZkSG7bXpgiNKyYRmWAXMukJh5fr4meRXyFcz7ZywyogqumWudT69sTzV9hb",
+      "slot": 508603707,
+      "confirmed": true,
+      "feeLamports": 5000
+    },
+    {
+      "label": "Create funded 21-bin out-of-range position (Curve)",
+      "signature": "2Jbx9GWGgJ6An5qmg9ES4GNdUgvtMxNWt3jwHgdxGkNGBLgkGLVDKEb4sHVMToJABGBGGUsxUsYyYxXJ635D3MS6",
+      "slot": 508603783,
+      "confirmed": true,
+      "feeLamports": 10000
+    },
+    {
+      "label": "Native 21-bin Curve rebalance",
+      "signature": "2MeC6HtJ1RCEbU5mcJRHYYs6RLeXKipFEWGUNw6NVnvY3TG3KopcpvtpyEu6tdncktbkd6miECrujJCcpd6gaTmq",
+      "slot": 508603864,
+      "confirmed": true,
+      "feeLamports": 5000
+    },
+    {
+      "label": "21-bin Curve partial withdrawal (25%)",
+      "signature": "5vzeGrmTzhxw5LkZtqy8rum35MFSYUpLi9vystPunPctJmjB6pNCmYekKGoF45pUiP83ZeC4D8V4tWbmyiV58AWR",
+      "slot": 508603890,
+      "confirmed": true,
+      "feeLamports": 5000
+    },
+    {
+      "label": "21-bin Curve post-state",
+      "position": "2uLinMuawTqeQCTphGwCWyiiMdUz6YMLPACFkEtZzMWs",
+      "sameWidth": true,
+      "target": {
+        "lower": -10,
+        "upper": 10
+      },
+      "exactPartialWithdrawal": true,
+      "existingWsolPreserved": true
+    },
+    {
+      "label": "21-bin Curve cleanup: withdraw remaining shares and close",
+      "signature": "5Ke5kHc6xHFC4xsY1FVmdCup2acoijG39jJrNfsD37yWvACxepGyDKuQ8mMwQazvXKCynz8riZRR1ZbKmAu3njw2",
+      "slot": 508603909,
+      "confirmed": true,
+      "feeLamports": 5000
+    },
+    {
+      "label": "Create funded 21-bin out-of-range position (BidAsk)",
+      "signature": "4j6t8YUmPQr6fwn38kLr78pKzANtL4ng2hTK8YH2FCHS8SUqXmk2PXSNDBAjWV6DsWXdajc7U3kHqH9vsRTUfu4e",
+      "slot": 508603996,
+      "confirmed": true,
+      "feeLamports": 10000
+    },
+    {
+      "label": "Native 21-bin BidAsk rebalance",
+      "signature": "2P2hspLwkzNZLy7342ij1VKQ99jwes8Cc7ZUTECNUXumasCEDSftwQZkcavfqCcFi5eGA2Bweec8jGyXa99cqhhZ",
+      "slot": 508604078,
+      "confirmed": true,
+      "feeLamports": 5000
+    },
+    {
+      "label": "21-bin BidAsk partial withdrawal (25%)",
+      "signature": "4mCHh7yWFpAnFk52AmsPziSirffQQcjFHg4sTtCh4ZPooFrXxWsFwnAc19syCefTo1qxHtZ2RL5heReZMkxW9v2b",
+      "slot": 508604104,
+      "confirmed": true,
+      "feeLamports": 5000
+    },
+    {
+      "label": "21-bin BidAsk post-state",
+      "position": "CxXuXb8866Cxh58xyDpD75WnGp3vbpD9DmWt71ub9mKj",
+      "sameWidth": true,
+      "target": {
+        "lower": -10,
+        "upper": 10
+      },
+      "exactPartialWithdrawal": true,
+      "existingWsolPreserved": true
+    },
+    {
+      "label": "21-bin BidAsk cleanup: withdraw remaining shares and close",
+      "signature": "2xnG4vDA9cVicgWqzwP2by9KMHkJ8B6hQLqnj917oeqxwu1MhPQBzDP7C2Z3H4Y2mwJGvxDXuNuK4i4qNnTqKwWK",
+      "slot": 508604133,
+      "confirmed": true,
+      "feeLamports": 5000
+    }
+  ],
   "wallet": "FpebsUzBXJ9PLAkFi1Kq4wEPHtyRPznh5e5FpdztpZQZ",
-  "initialBalanceLamports": 0,
-  "blocked": "devnet-funding-required",
-  "error": "Fund this dedicated wallet with 0.5 DEVNET SOL using https://faucet.solana.com, then rerun: FpebsUzBXJ9PLAkFi1Kq4wEPHtyRPznh5e5FpdztpZQZ. Nothing was signed.",
+  "initialBalanceLamports": 472141520,
+  "reusedFixture": true,
+  "pool": "5BekUyptd4Tefo6EqjxtXvKjBWBjNt3vUKJ6jTfrXNnn",
+  "finalBalanceLamports": 326215840,
   "unresolvedSignatures": []
 }
