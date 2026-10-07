@@ -78,6 +78,7 @@ function Portfolio() {
       <PageHead code="ST-04 · Portfolio" title="Your carriages." intro="DLMM positions owned by your connected wallet. On mainnet they are found through Meteora's index, then every position is checked on chain before any action is offered." cap={["live"]}>
         {publicKey && <div className="flex items-center gap-3"><span className="station-code text-cream/70">{q.dataUpdatedAt ? `Updated ${timeAgo(q.dataUpdatedAt)}` : "—"}</span><Btn size="sm" variant="line" onClick={() => q.refetch()} disabled={q.isFetching}>{q.isFetching ? "Refreshing…" : "Refresh"}</Btn></div>}
       </PageHead>
+      <p className="mb-6 text-sm text-cream/75">Arm range and risk rules on these positions in <Link to="/app/agents" className="underline hover:text-amber">Liquidity Agents</Link>.</p>
       {!publicKey && <Panel><p className="mb-4 text-cream/80">Connect a wallet to read your positions. Nothing is shown until you do.</p><WalletButton /></Panel>}
       {publicKey && q.isPending && <Spinner label="Scanning DLMM positions" />}
       {q.isError && (

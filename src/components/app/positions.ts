@@ -102,13 +102,18 @@ export function usePositions(refetchMs: number | false = false) {
     retry: 1,
     // Rows carry a `report` (rejected/truncated) that structural sharing would strip.
     structuralSharing: false,
-    queryFn: async ({ signal }): Promise<PositionRows> => {
-      if (settings.cluster === "mainnet-beta") {
-        const r = await hydrateIndexedPositions(connection, publicKey!, signal);
+    queryFn: ({ signal }) => fetchPositionRows(connection, publicKey!, settings.cluster, signal),
+  });
+}
+
+/** Shared by usePositions and the Liquidity Agents monitor (which bounds it with JobControl). */
+export async function fetchPositionRows(connection: Connection, owner: PublicKey, cluster: "mainnet-beta" | "devnet", signal?: AbortSignal): Promise<PositionRows> {
+      if (cluster === "mainnet-beta") {
+        const r = await hydrateIndexedPositions(connection, owner, signal);
         return Object.assign(r.rows, { report: { rejected: r.rejected, truncated: r.truncated, indexedTotal: r.indexedTotal } });
       }
       const sdk = await loadSdk();
-      const map = await sdk.default.getAllLbPairPositionsByUser(connection, publicKey!, { cluster: settings.cluster });
+      const map = await sdk.default.getAllLbPairPositionsByUser(connection, owner, { cluster: cluster });
       const rows: PositionRow[] = [];
       for (const [pair, info] of map) {
         const lb = info.lbPair as unknown as { activeId: number; binStep: number };
@@ -129,8 +134,6 @@ export function usePositions(refetchMs: number | false = false) {
         }
       }
       return rows;
-    },
-  });
 }
 
 export type RangeState = "in-range" | "approaching-edge" | "out-of-range";

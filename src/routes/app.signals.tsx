@@ -35,6 +35,7 @@ function Signals() {
   return (
     <div>
       <PageHead code="ST-05 · Signal Box" title="Watch the lamps." intro="Signals run only while this tab is open. There is no keeper and nothing executes without your approval." cap={["live"]} />
+      <p className="-mt-2 mb-6 text-sm text-cream/75">Want armed rules with reviewable rebalance and withdrawal proposals? Open <Link to="/app/agents" className="underline hover:text-amber">Liquidity Agents</Link>.</p>
       <div role="tablist" className="mb-6 flex border-b border-line">
         {(["watch", "weather"] as const).map((t) => (
           <button key={t} role="tab" aria-selected={tab === t} type="button" onClick={() => setTab(t)} className={cn("station-code min-h-11 border-b-2 px-4", tab === t ? "border-amber text-amber" : "border-transparent text-cream/75")}>

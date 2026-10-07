@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import BN from "bn.js";
@@ -271,6 +271,7 @@ function Dispatch() {
   return (
     <div>
       <PageHead code="ST-06 · Dispatch" title="Two pools, one train." intro="Finds SOL → USDC → SOL round trips across two Meteora DLMM pools using real SDK quotes. Scanning is read-only. A route executes only as one atomic transaction that you review, simulate and approve." cap={["live"]} />
+      <p className="-mt-2 mb-6 text-sm text-cream/75">Want armed rules with reviewable rebalance and withdrawal proposals? Open <Link to="/app/agents" className="underline hover:text-amber">Liquidity Agents</Link>.</p>
       {blocked && <div className="mb-6"><Notice tone="warn" title="Dispatch unavailable">{blocked}</Notice></div>}
       <div className="mb-6"><Notice tone="info" title="Read before using">Estimates are not guarantees. A transaction that fails onchain still pays its network and priority fees. Monitoring runs only in this open tab, finds proposals and never signs. Ordinary DLMM program only — DLMM Pro is not integrated.</Notice></div>
 
