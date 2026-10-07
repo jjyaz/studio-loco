@@ -1,14 +1,58 @@
-# Welcome to your Lovable project
+# Loco Studio: The Solana Terminal
+
+Create a new project named Studio Loco. This is a polished, working Solana/Meteora product inspired by https://www.theinterfold.com/ and its ecosystem, with an original Studio Loco identity, copy, art world and liquidity tools. The user explicitly asks for a deep, fully working product, no corners cut. Build substantial functionality now, not just a marketing mockup. Use the three attached images as real project assets.
+
+RESEARCH / ESSENTIAL DISTINCTION
+Interfold is an Ethereum confidential-coordination protocol (formerly Enclave), not a DEX. Its core E3 lifecycle is request -> random committee -> distributed key generation -> encrypted inputs -> proved computation -> threshold decryption of aggregate. It combines FHE (BFV), ZK proofs, a Rust ciphernode network, contracts, Avail data availability, FOLD bonding/slashing/tickets and Aragon CRISP secret ballots. It also has docs, governance, operator dashboards, tokenomics, auctions, journal and community. Meteora DLMM is public Solana liquidity infrastructure and does not itself supply FHE, private ballots, sealed bids or a distributed privacy network. Do not claim that browser encryption or using Meteora recreates these guarantees. Preserve these product areas through clearly marked implementations and educational/simulation surfaces; only call chain features live when backed by real chain/API data. No invented LOCO mint, token supply, TVL, node network, audits, users, partners or returns. No fake successful transactions. No copied Interfold branding.
+
+ART DIRECTION
+Image 1 is the original square Studio Loco logo/reference. Image 2 panoramic hero is a continuation of that world; Image 3 is its night station. Use image 2 as a full bleed 90vh landscape hero, retaining the entire golden field and train in the lower part. Left blue sky is deliberately clean for typography. Image 3 continues the narrative further down and in app section banners. Place them in source assets, never leave expiring upload URLs. Deep saturated cobalt #073E91, ultramarine #0649B0, midnight #061F42, signal amber #FFB51B, ochre #F38B04, warm cream #FFF4CC. Keep art richly saturated; do not flatten it with a dark overlay. Pixel/dither art is for imagery and small accents; actual charts, numbers and controls must be crisp and readable. Typography: editorial oversized cream sans-serif (Space Grotesk or similar) plus restrained Space Mono for station codes / numerical labels, with a pixel wordmark matching the original. Strong shapes, subtle thin cream lines, station-ticket corners, generous layout, custom icons and rail motifs. Avoid generic rounded shadcn cards, purple gradients, stock photos, glossy 3D, fake dashboards and heavy glass effects.
+
+HOME / PUBLIC WORLD
+Top nav Studio Loco wordmark, The World, Liquidity, Lab, Field Notes, a real Enter Terminal button. Hero eyebrow SOLANA × METEORA, enormous headline 'Good things move together.' Original concise copy: 'Shape liquidity. Explore private coordination. Build a world on Solana.' Primary 'Enter the terminal' -> /app; secondary 'Explore the world' -> the next home section. Need a large beautiful layout not a bare image; art focal train/cloud remain clear. Include a discreet scroll track/ticket cue. Below the hero, a train-route index introduces 3 real destinations: Liquidity Terminal, Strategy Studio, Coordination Lab. Carry the image narrative through an illustrated night-station section, a meaningful rail/bin explainer, selected original Field Notes, FAQs, footer with Docs, Status, Risk information. Status/capability labels must be truthful. Home should feel like a distinct world and be memorable, with restrained train/cloud/parallax motions, CSS/SVG/canvas 2D and prefers-reduced-motion fallback. Entire site must work without WebGL; the reference site fails completely when WebGL is unavailable.
+
+ROUTES / REAL PRODUCT
+1. /app is the terminal, immediately useful with a real pool table, search and filters. Mainnet live data is default; a separate explicit 'Practice mode' lets users explore seeded examples only after choosing it. Do not automatically substitute fake markets when fetch fails. Fetch current public Meteora API data, refresh with last-updated stamps. Sort TVL, volume 24h, fees 24h, fee/TVL, bin step. Read real token symbols/decimals, blacklist indicators, unknown data should be '—'. Pool cards/table lead to /app/pool/:address. Starred pools persist locally. Search debounced and pagination functional. Wallet connect via standard Solana wallet adapter (Phantom and Solflare), never emulate a wallet. Show address, disconnect, mainnet/devnet setting (no pretend mainnet API data labeled devnet). Settings allow a custom HTTPS RPC endpoint and slippage presets. Avoid ever asking for seed phrases or storing private keys.
+
+2. Pool detail: real pool metrics, active bin and token orientation, a Rail Map visual showing discrete price stations and active train price marker. Chart uses actual bins from SDK; if disconnected RPC fails show explicit retry/error. Tabs Overview / Add Liquidity / Swap / Orders. Allow Spot, Curve, BidAsk strategy selection, price or bin range, X/Y token deposit amounts with correct decimals and validations. Review computes a real transaction from the official SDK, clearly states token amounts, pool, range, slippage, rent/fees and calls simulation before wallet request. A native direct pool swap flow: input amount, reverse side, fresh quote with minimum receive and price impact, expire quote, wallet sign/send, confirm using blockhash / lastValidBlockHeight, only show success after confirmation with explorer link. Real add liquidity via initializePositionAndAddLiquidityByStrategy with generated temporary position signer; ephemeral position private key must never be persisted/logged. Claim fee and withdrawal flows are real in portfolio. Wallet actions remain disabled if unavailable, invalid or unsupported. Never transact automatically or use a custodial backend.
+
+3. /app/portfolio: reads connected wallet's real DLMM positions across pools, unclaimed X/Y fees and rewards, range states, precise holdings; empty/disconnected/errors distinct. Claim selected fees, withdraw % and full remove/claim/close as supported by SDK, per-transaction status for chunks and partial failures. Refresh after confirmation. No fabricated USD total if prices unavailable.
+
+4. /app/studio = Strategy Studio, with a fully working multi-stop railway-style DLMM allocation composer. Select a real pool and Spot/Curve/BidAsk, choose min/max bins or range around active price, budget and token split. Display per-bin normalized allocation, active coverage, widths, estimated deposit/rent only if computable and illustrative scenario sliders. Templates named Local (wide Spot), Express (narrow Curve) and Switchback (BidAsk); no guaranteed return rankings. Save named routes locally, duplicate/delete, export/import validated versioned JSON, share via URL if practical. Mark distribution previews and scenario outcomes as simulations, and use the official SDK's real strategy semantics when preparing wallet transactions. Execute one selected strategy via the pool liquidity flow; multi-position plans need explicit sequential approval and accurate partial-success handling.
+5. /app/signals = Signal Box: watches real portfolio position boundaries while app is open, computes active/in-range/approaching-edge/out-of-range using actual active bin. User sets local alert buffer per position. Prepare a user-approved rebalance plan with costs and min outputs; require separate confirmation for remove/add if non-atomic. No claims of unattended/autonomous management without a running keeper. Include an original 'Fee Weather' view showing actual dynamic fees and activity metrics, no invented predictions.
+6. /app/launch = Launch Station: a working DLMM pool creation wizard using real mint input validation, onchain decimals, ordered mint pair, fetched PresetParameter2 options, initial quote-token price converted correctly using decimals, duplicate pool check, full review and official createLbPair2 transaction. Prevent unsupported configurations. Do not invent a launch token. Include DBC/DAMM v2 / Alpha Vault as separate infrastructure, documented configuration handoffs, not falsely DLMM-native or live without implemented adapters.
+7. /lab = Coordination Lab: working local privacy/coordination examples for ballot, sealed-bid aggregate and shared histogram with editable contributions, input-window lifecycle, aggregate results, visible proof/verification status. Explicitly label all local examples 'Local educational simulation — not a deployed confidential protocol'. Use Web Crypto for input encryption/hashing where appropriate, explain this does not give threshold-FHE/committee guarantees. No fake ZK proof hashes presented as cryptographic proof. Include a precise architecture page of what real Solana privacy deployment needs (MPC/FHE verifier, authenticated inputs, committee, data availability, onchain settlement, audit). No wallet deposits, staking or live governance actions for undeployed programs.
+8. /network = public cluster/DLMM observatory: actual RPC connectivity / slot/confirmed height and real DLMM program identity, features enabled, backend health, refresh state. This replaces operator participation for the current public infrastructure. An Interfold-equivalent ciphernode network is clearly a separate future protocol integration; no fake nodes or slashing counters.
+9. /governance = local decision-room demo with proposals, lifecycle and secret-ballot educational lab link; no pretending DAO exists. Public /token page clearly says LOCO has not been deployed and no public sale is configured, rather than fabricating tokenomics. Include an editable launch/token planning worksheet if useful, labeled proposal.
+10. /docs with real original guides to wallet connection, DLMM bins/fees/strategies, swaps, range/IL risk, signals, launch pool configuration, privacy distinction, development and integration sources. Searchable, navigable help and anchored article links. /journal and article routes with at least three substantial original educational Field Notes, dated and linked to official sources.
+
+VERIFIED CURRENT METEORA REFERENCES
+Read these docs before SDK implementation and check installed types rather than invent signatures:
+https://docs.meteora.ag/developer-guides/dlmm/typescript-sdk/getting-started
+https://docs.meteora.ag/developer-guides/dlmm/typescript-sdk/examples
+https://docs.meteora.ag/developer-guides/dlmm/typescript-sdk/reference
+https://docs.meteora.ag/api-reference/dlmm/pools/pools
+https://docs.meteora.ag/core-products/dlmm/what-is-dlmm
+https://docs.meteora.ag/core-products/dlmm/strategies-and-use-cases
+https://github.com/MeteoraAg/dlmm-sdk
+Current public API https://dlmm.datapi.meteora.ag/pools returns {data, current_page, page_size, pages, total}; query page, page_size, query, sort_by='volume_24h:desc' or 'tvl:desc', filter_by. Items use tvl, volume['24h'], fees['24h'], fee_tvl_ratio['24h'], pool_config.bin_step, pool_config.base_fee_pct, dynamic_fee_pct, token_x/token_y objects with address, symbol, decimals. Don't assume old /pair/all schema. mainnet DLMM program LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo. SDK current @meteora-ag/dlmm supports direct swaps, liquidity, native limit orders, resizable positions; inspect exports and pin working version. Liquidity Mining and Limit Order are distinct function modes: validate onchain mode before enabling Orders. Do not equate one-sided LP with native limit orders. Positions start with ~70 bins but supported dynamic positions can be wider; cap initial UI to tested range and explain. DLMM fee/yield is not lending vault yield. DBC graduates to DAMM, not DLMM.
+
+ENGINEERING / QA / HONESTY
+Use TypeScript, React router, TanStack Query, carefully typed service modules separating live and practice data, exact decimal-to-BN parsing (no floating point raw amounts), wallet context and transaction runner. Lazily load heavy SDK. Handle fetch timeout, 429, HTTP errors, cancellation, stale data and retries. Never make zero balances stand in for errors. A proxy can be introduced only if necessary for public data CORS; no secrets in client code. Maintain capability registry and release-readiness checklist in the repo that identifies implemented vs simulated vs requires deployment. Add error boundaries and route 404. Original SEO/Open Graph and image alt text. Keyboard navigation/focus, good contrast, labels, touch targets, reduced motion, 375px/mobile/desktop responsive. All visible links/buttons must act; no toasts substituting real work.
+Run build/typecheck and meaningful tests for amount parsing/strategy normalization and transaction success/failure. Smoke test routes, wallet absence, failed API and practice mode. Create docs/RESEARCH.md with the Interfold-to-Studio-Loco capability mapping, sources, important port limits, implementation status, next operational requirements, and no copied promises. Do not describe it as a full production Interfold cryptography fork; make a strong working Meteora product and honest privacy lab.
+Please implement comprehensively, verify the app actually renders, and report exact working capabilities, tests and anything that needs an external key/program deployment.
 
 This project was built with [Lovable](https://lovable.dev).
 
+**Live app**: https://studio-loco.lovable.app
+
 ## Build with Lovable
 
-Open your project in the [Lovable editor](https://lovable.dev) and keep building.
+Continue developing this project in the [Lovable editor](https://lovable.dev/projects/24853ceb-2343-4b7d-9ed0-298ff931d003).
 
 - **Ship faster**: describe what you want to build and Lovable handles the code.
-- **Stay in sync**: connect the project to GitHub and every change made in Lovable is committed straight to your repository.
-- **Full ownership**: this code is yours. Push to your repository and your changes sync back into Lovable, ready for your next prompt.
+- **Stay in sync**: every change made in Lovable is committed straight to this repository.
+- **Full ownership**: this code is yours. Push to `main` on GitHub and your changes sync back into Lovable, ready for your next prompt.
 
 ## Development
 
@@ -20,10 +64,3 @@ cd <repository-name>
 npm i
 npm run dev
 ```
-
-## Built with
-
-- TanStack Start
-- TypeScript
-- React
-- Tailwind CSS
