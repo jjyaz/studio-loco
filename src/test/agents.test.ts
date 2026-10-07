@@ -103,14 +103,11 @@ describe("trigger precedence, dedup and cooldown", () => {
     expect(p?.kind).toBe("reduce");
     expect(p?.withdrawPct).toBe(40);
   });
-  it("dedupes within cooldown and falls through to the next trigger", () => {
+  it("keeps a risk exit in charge during cooldown instead of proposing a conflicting rebalance", () => {
     const seen: Record<string, number> = {};
     const a = propose({ rule, pos: pos(1020), outRun, vol: null, now: 120_000 }, seen)!; seen[a.id] = 120_000;
-    const b = propose({ rule, pos: pos(1020), outRun, vol: null, now: 130_000 }, seen)!; seen[b.id] = 130_000;
-    expect(b.trigger).toBe("left-range");
-    expect(b.target).toEqual(balancedTarget(1020, 21));
-    const c = propose({ rule, pos: pos(1020), outRun, vol: null, now: 140_000 }, seen)!; seen[c.id] = 140_000;
-    expect(c.trigger).toBe("price-move");
+    expect(propose({ rule, pos: pos(1020), outRun, vol: null, now: 130_000 }, seen)).toBeNull();
+    expect(propose({ rule, pos: pos(1020), outRun, vol: null, now: 140_000 }, seen)).toBeNull();
     expect(propose({ rule, pos: pos(1020), outRun, vol: null, now: 150_000 }, seen)).toBeNull();
     expect(propose({ rule, pos: pos(1020), outRun, vol: null, now: 120_000 + 10 * 60_000 }, seen)?.trigger).toBe("out-time");
   });
@@ -232,13 +229,13 @@ describe("spend gating and review freshness", () => {
 });
 
 describe("native rebalance target verification", () => {
-  const base = { activeId: 100, width: 21, expected: balancedTarget(100, 21), depositedX: new BN(10), depositedY: new BN(10), availX: new BN(10), availY: new BN(10) };
+  const base = { activeId: 100, width: 21, expected: balancedTarget(100, 21), depositedX: new BN(0), depositedY: new BN(0), availX: new BN(10), availY: new BN(10) };
   it("accepts exactly the reviewed same-width target with zero top-up", () => {
     expect(verifyRebalanceTarget({ ...base, deposits: [{ minDeltaId: new BN(-10), maxDeltaId: new BN(10) }] })).toBeNull();
   });
   it("rejects a different target, width change, multiple ranges or a hidden top-up", () => {
     expect(verifyRebalanceTarget({ ...base, deposits: [{ minDeltaId: new BN(-9), maxDeltaId: new BN(10) }] })).toMatch(/differs/);
     expect(verifyRebalanceTarget({ ...base, deposits: [] })).toMatch(/one deposit/);
-    expect(verifyRebalanceTarget({ ...base, deposits: [{ minDeltaId: new BN(-10), maxDeltaId: new BN(10) }], depositedX: new BN(11) })).toMatch(/top-up/);
+    expect(verifyRebalanceTarget({ ...base, deposits: [{ minDeltaId: new BN(-10), maxDeltaId: new BN(10) }], depositedX: new BN(1) })).toMatch(/top-up/);
   });
 });

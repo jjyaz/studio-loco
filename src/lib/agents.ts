@@ -30,6 +30,7 @@ export function rulesStorageKey(owner: string, cluster: string, rpcId: string): 
 export const VOL_FRAMES = ["5m", "1h"] as const;
 export type VolFrame = (typeof VOL_FRAMES)[number];
 export const FRAME_MS: Record<VolFrame, number> = { "5m": 300_000, "1h": 3_600_000 };
+export const volatilityKey = (pool: string, frame: VolFrame, candles: number) => `${pool}:${frame}:${candles}`;
 
 const Baseline = z.object({ activeId: z.number().int(), binStep: z.number().int().min(1).max(500), at: z.number().int().positive() }).strict();
 const Vol = z.object({ frame: z.enum(VOL_FRAMES), candles: z.number().int().min(6).max(48), thresholdPct: z.number().min(0.05).max(50), withdrawPct: z.number().int().min(1).max(100) }).strict();
@@ -169,6 +170,12 @@ export function binsForPctMove(pct: number, binStep: number): number {
   return Math.ceil(Math.log(1 + pct / 100) / Math.log(1 + binStep / 10_000) - 1e-12);
 }
 
+/** Conservative bin limit: the upward price change may not exceed the user's slippage. */
+export function activeBinSlippage(slippageBps: number, binStep: number): number {
+  if (!Number.isInteger(slippageBps) || slippageBps < 0 || slippageBps > 10_000 || !Number.isInteger(binStep) || binStep < 1) throw new Error("Invalid slippage or bin step.");
+  return Math.max(0, Math.floor(Math.log1p(slippageBps / 10_000) / Math.log1p(binStep / 10_000) + 1e-12));
+}
+
 /**
  * Mirrors the SDK 1.9.14 BalancedStrategyBuilder (favorXIfImbalance=false) exactly.
  * Odd widths are preserved; for EVEN widths the SDK deposits width+1 bins (bid=side+1, ask=side-1),
@@ -204,9 +211,15 @@ export function volatility(candles: CandleLite[], n: number, frame: VolFrame, no
   if (ok.length < n + 1) return { state: "unavailable", reason: `Only ${ok.length} usable candles; ${n + 1} needed.` };
   const last = ok.slice(-(n + 1));
   const newestMs = last[last.length - 1]!.t * (last[last.length - 1]!.t < 1e12 ? 1000 : 1);
+  if (newestMs > now) return { state: "unavailable", reason: "Price history contains a future candle." };
   if (now - newestMs > 2 * FRAME_MS[frame]) return { state: "unavailable", reason: "Newest candle is stale." };
   const rets: number[] = [];
-  for (let i = 1; i < last.length; i++) rets.push(Math.log(last[i]!.c / last[i - 1]!.c));
+  for (let i = 1; i < last.length; i++) {
+    const ms = (k: CandleLite) => k.t * (k.t < 1e12 ? 1000 : 1);
+    const gap = ms(last[i]!) - ms(last[i - 1]!);
+    if (Math.abs(gap - FRAME_MS[frame]) > 1000) return { state: "unavailable", reason: "Price history has duplicate or missing candles." };
+    rets.push(Math.log(last[i]!.c / last[i - 1]!.c));
+  }
   const mean = rets.reduce((a, b) => a + b, 0) / rets.length;
   const sd = Math.sqrt(rets.reduce((a, b) => a + (b - mean) ** 2, 0) / rets.length);
   return { state: "ok", pct: sd * 100, candles: n, newestAt: newestMs };
@@ -271,13 +284,13 @@ export function evaluate(i: EvalInput): EvalOutput {
 
 export const proposalKey = (position: string, trigger: TriggerKind, revision: number) => `${position}:${trigger}:r${revision}`;
 
-/** Pick the highest-precedence trigger not in cooldown. Returns null when nothing new should be proposed. */
+/** The highest active trigger owns the decision, including during its cooldown. */
 export function propose(i: EvalInput, lastProposedAt: Record<string, number>): Proposal | null {
-  const { triggers } = evaluate(i);
-  for (const tr of triggers) {
+  const tr = evaluate(i).triggers[0];
+  if (tr) {
     const id = proposalKey(i.pos.key, tr.kind, i.rule.revision);
     const last = lastProposedAt[id];
-    if (last !== undefined && i.now - last < i.rule.cooldownMin * 60_000) continue;
+    if (last !== undefined && i.now - last < i.rule.cooldownMin * 60_000) return null;
     const reduce = tr.kind === "out-time" || tr.kind === "volatility";
     const width = i.pos.upper - i.pos.lower + 1;
     return {
@@ -288,6 +301,11 @@ export function propose(i: EvalInput, lastProposedAt: Record<string, number>): P
     };
   }
   return null;
+}
+
+/** A queued decision is valid only for this revision and the current highest trigger. */
+export function proposalIsCurrent(p: Proposal, i: EvalInput): boolean {
+  return p.position === i.pos.key && p.pool === i.pos.pool && p.ruleRevision === i.rule.revision && evaluate(i).triggers[0]?.kind === p.trigger;
 }
 
 /* ---------------- capital allocation ---------------- */
@@ -347,10 +365,43 @@ export function reviewStaleReason(f: FrozenReview, l: LiveIdentity, now: number)
   if (!l.positionPresent) return "The position is no longer in the verified list.";
   if (l.ruleRevision !== f.ruleRevision) return "The rule was edited.";
   if (l.slippageBps !== f.slippageBps) return "Slippage changed.";
-  if (f.feeLamports === null || f.solOutLamports === null) return "Costs are unknown, so this cannot be signed.";
-  if (now - f.builtAt > REVIEW_TTL_MS) return "This review expired. Rebuild it from fresh chain state.";
+  if (!knownLamports(f.feeLamports) || !knownLamports(f.solOutLamports)) return "Costs are unknown or invalid, so this cannot be signed.";
+  if (!Number.isFinite(f.builtAt) || now < f.builtAt || now - f.builtAt > REVIEW_TTL_MS) return "This review expired. Rebuild it from fresh chain state.";
   return null;
 }
 
 /** Fee-cap applied by the runner: reviewed fee per transaction must not grow. */
 export function feeCap(f: FrozenReview): number | undefined { return f.feeLamports ?? undefined; }
+
+export const knownLamports = (n: number | null | undefined): n is number => typeof n === "number" && Number.isSafeInteger(n) && n >= 0;
+
+/** Decimal SDK rent quotes are display estimates; conversion never passes a float to BigInt. */
+export function solQuoteLamports(sol: number): number | null {
+  if (!Number.isFinite(sol) || sol < 0) return null;
+  const n = Math.round(sol * 1e9);
+  return knownLamports(n) ? n : null;
+}
+
+export interface ExecutionCosts {
+  perTxFee: (number | null)[]; solOutLamports: number | null; requiredLamports: number | null;
+  walletLamports: number | null; sizes: number[]; units: (number | null)[]; simErrors: (string | null)[];
+}
+
+/** Used by both the button and the runner's guard; UI state alone never authorizes a signature. */
+export function executionReadiness(c: ExecutionCosts, unresolved = false): string | null {
+  if (unresolved) return "A previous transaction's settlement is unresolved. Check its status first.";
+  if (c.simErrors[0]) return `Simulation failed: ${c.simErrors[0]}`;
+  if (c.simErrors.length !== 1 || c.simErrors[0] !== null) return "Exact simulation is unavailable.";
+  if (!knownLamports(c.perTxFee[0]) || !knownLamports(c.solOutLamports) || !knownLamports(c.requiredLamports)) return "Costs unknown or invalid — cannot sign.";
+  if (!knownLamports(c.walletLamports)) return "Wallet SOL balance is unknown — cannot sign.";
+  if (!Number.isSafeInteger(c.sizes[0]) || c.sizes[0]! < 1 || c.sizes[0]! > 1232) return "Transaction size is invalid.";
+  if (!Number.isSafeInteger(c.units[0]) || c.units[0]! < 1 || c.units[0]! > 1_400_000) return "Simulation compute usage is unavailable or invalid.";
+  if (c.requiredLamports < Math.max(c.perTxFee[0], c.solOutLamports)) return "Cost review is inconsistent.";
+  if (c.walletLamports < c.requiredLamports) return "Wallet SOL is below the reviewed requirement.";
+  return null;
+}
+
+/** Pending signatures survive navigation/reload; an RPC change cannot release the lock. */
+export function unresolvedForOwner<T extends { wallet: string; cluster: string }>(pending: T[], wallet: string, cluster: string): T | null {
+  return pending.find((p) => p.wallet === wallet && p.cluster === cluster) ?? null;
+}

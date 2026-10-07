@@ -40,6 +40,9 @@ export async function hydrateIndexedPositions(connection: Connection, owner: Pub
   for (const ip of idx.pools) {
     abort();
     const pool = await getPool(connection, ip.poolAddress, "mainnet-beta");
+    // Cached SDK instances contain cached active bins; every observation needs a chain refresh.
+    await pool.refetchStates();
+    abort();
     const keys = ip.listPositions.map((k) => new PublicKey(k));
     for (const part of chunk(keys, 100)) {
       abort();

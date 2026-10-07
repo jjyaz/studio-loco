@@ -11,15 +11,16 @@ import { fmtPct, fmtUsd, isBase58Address, redactUrls, shortAddr, timeAgo } from 
 import { useSettings } from "@/lib/settings";
 import { cn } from "@/lib/utils";
 import { JobCancelled, JobControl, JobTimeout } from "@/lib/job-control";
+import { browserPendingStore, type PendingTx } from "@/lib/tx";
 import { MAX_UI_BINS, STRATEGIES, type StrategyName } from "@/lib/strategy";
 import { feeTvlPct, v24 } from "@/lib/meteora-api";
 import {
-  DEFAULT_RULE, REVIEW_TTL_MS, balancedTarget, SUPPORTED_COMMANDS, allocation, armRule, disarmRule, editRule, evaluate, observeOut, observedMs,
+  DEFAULT_RULE, REVIEW_TTL_MS, balancedTarget, SUPPORTED_COMMANDS, allocation, armRule, disarmRule, editRule, evaluate, observeOut, observedMs, executionReadiness, knownLamports,
   parseCommand, parseRuleStore, pctMoveBetweenBins, propose, rebaseAfterConfirmedRebalance, reviewStaleReason, rpcIdentity,
-  rulesStorageKey, spendRefusal, type AgentMode, type BinLite, type FrozenReview, type LiveIdentity, type OutRun, type Proposal,
+  rulesStorageKey, spendRefusal, proposalIsCurrent, solQuoteLamports, unresolvedForOwner, volatilityKey, type AgentMode, type BinLite, type FrozenReview, type LiveIdentity, type OutRun, type Proposal,
   type Rule, type RuleParams, type VolReading,
 } from "@/lib/agents";
-import { buildNativeRebalance, buildWithdraw, discoverSamePair, readVolatility, type BuiltRebalance, type BuiltWithdraw, type PairScan } from "@/lib/agents-chain";
+import { buildNativeRebalance, buildWithdraw, discoverSamePair, readVolatility, verifyStagedDestination, type BuiltRebalance, type BuiltWithdraw, type PairScan } from "@/lib/agents-chain";
 import { PRACTICE_OWNER, practiceRow } from "@/lib/agents-practice";
 import nightAsset from "@/assets/studio-loco-night-station.png.asset.json";
 
@@ -56,10 +57,10 @@ type Review =
   | { state: "building"; proposal: Proposal }
   | { state: "error"; proposal: Proposal; error: string }
   | { state: "staged"; proposal: Proposal; reason: string }
-  | { state: "ready"; proposal: Proposal; frozen: FrozenReview; built: { kind: "rebalance"; b: BuiltRebalance } | { kind: "withdraw"; b: BuiltWithdraw; staged?: { targetPool: string; width: number; strategy: StrategyName } } }
+  | { state: "ready"; proposal: Proposal; frozen: FrozenReview; built: { kind: "rebalance"; b: BuiltRebalance } | { kind: "withdraw"; b: BuiltWithdraw; staged?: { targetPool: string; width: number; sourceWidth: number; strategy: StrategyName; orientation: "same" | "reversed"; mintX: string; mintY: string } } }
   | { state: "practice"; proposal: Proposal };
 
-function Agents() {
+export function Agents() {
   const { settings } = useSettings();
   const wallet = useWallet();
   const { connection } = useConnection();
@@ -77,10 +78,13 @@ function Agents() {
   const [report, setReport] = useState<{ rejected: number; truncated: boolean } | null>(null);
   const [load, setLoad] = useState<{ phase: "idle" | "loading" | "ok" | "error"; error?: string; at?: number }>({ phase: "idle" });
   const [rules, setRules] = useState<Record<string, Rule>>({});
+  const rulesRef = useRef(rules); rulesRef.current = rules;
   const [vol, setVol] = useState<Record<string, VolReading>>({});
   const [proposals, setProposals] = useState<Proposal[]>([]);
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [monitoring, setMonitoring] = useState(false);
+  const monitoringRef = useRef(monitoring); monitoringRef.current = monitoring;
+  const [pending, setPending] = useState<PendingTx[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const [review, setReview] = useState<Review | null>(null);
   const [now, setNow] = useState(() => Date.now());
@@ -108,6 +112,7 @@ function Agents() {
     ctl.current!.invalidate();
     setMonitoring(false); setReview(null); setRows(null); setReport(null); setProposals([]); setVol({}); setLoad({ phase: "idle" }); setStaged(null);
     outRuns.current = {}; lastProposed.current = {};
+    pendingRebase.current.clear();
   }, [identity]);
 
   // Load scoped rules + history.
@@ -116,19 +121,29 @@ function Agents() {
     try { setRules(parseRuleStore(JSON.parse(localStorage.getItem(storeKey) ?? "null"))); } catch { setRules({}); }
     try { const h = JSON.parse(localStorage.getItem(histKey!) ?? "[]"); setHistory(Array.isArray(h) ? h.filter((x) => x && typeof x.t === "number" && typeof x.text === "string").slice(0, 100) : []); } catch { setHistory([]); }
   }, [storeKey, histKey]);
-  const saveRules = (next: Record<string, Rule>) => {
+  const saveRules = (next: Record<string, Rule>, invalidate = true) => {
+    rulesRef.current = next;
     setRules(next);
     genRef.current++;
+    if (invalidate) { ctl.current!.invalidate(); outRuns.current = {}; setReview(null); }
+    setProposals((q) => q.filter((p) => next[p.position]?.revision === p.ruleRevision));
     if (storeKey) try { localStorage.setItem(storeKey, JSON.stringify({ v: 1, rules: next })); } catch { /* quota */ }
   };
   useEffect(() => { if (histKey) try { localStorage.setItem(histKey, JSON.stringify(history)); } catch { /* */ } }, [history, histKey]);
 
   const live = useRef<LiveIdentity & { rules: Record<string, Rule>; rowKeys: Set<string> }>(null as never);
   live.current = { ruleRevision: undefined, wallet: wallet.publicKey?.toBase58() ?? "", cluster: settings.cluster, rpcId, practiceSetting: settings.practice, mode, slippageBps: settings.slippageBps, gen: genRef.current, positionPresent: false, rules, rowKeys: new Set((rows ?? []).map((r) => r.key)) };
-  const liveFor = (position: string): LiveIdentity => ({ ...live.current, gen: genRef.current, ruleRevision: live.current.rules[position]?.revision ?? -1, positionPresent: live.current.rowKeys.has(position) });
+  const liveFor = (position: string): LiveIdentity => ({ ...live.current, gen: genRef.current, ruleRevision: rulesRef.current[position]?.revision ?? -1, positionPresent: live.current.rowKeys.has(position) });
 
   const refusal = spendRefusal({ mode, practiceSetting: settings.practice, canSign: runner.canSign });
-  const unresolved = runner.steps?.find((s) => s.phase === "unknown")?.pending ?? null;
+  useEffect(() => {
+    const refresh = () => setPending(browserPendingStore.list());
+    refresh();
+    window.addEventListener("studio-loco:pending", refresh); window.addEventListener("storage", refresh);
+    return () => { window.removeEventListener("studio-loco:pending", refresh); window.removeEventListener("storage", refresh); };
+  }, []);
+  const unresolved = unresolvedForOwner(pending, wallet.publicKey?.toBase58() ?? "", settings.cluster) ?? runner.steps?.find((s) => s.phase === "unknown")?.pending ?? null;
+  const pendingNow = () => unresolvedForOwner(browserPendingStore.list(), live.current.wallet, live.current.cluster) !== null;
 
   /* ---------- the check: read-only, bounded, single-flight ---------- */
   const runCheck = useCallback(async (source: "manual" | "monitor") => {
@@ -136,6 +151,7 @@ function Agents() {
     const job = c.begin();
     if (!job) { if (source === "manual") addHistory("error", c.draining ? "A timed-out request is still draining; try again shortly." : "A check is already running."); return; }
     setLoad((l) => ({ ...l, phase: "loading", error: undefined }));
+    const checkedRules = rulesRef.current;
     try {
       let next: ViewRow[];
       let rep: { rejected: number; truncated: boolean } | null = null;
@@ -152,35 +168,43 @@ function Agents() {
       }
       // Volatility only for pools whose armed rule asks for it.
       const vr: Record<string, VolReading> = {};
+      const metrics = new Map<string, VolReading>();
       for (const r of next) {
-        const rule = rules[r.key];
+        const rule = checkedRules[r.key];
         if (!rule?.armed || !rule.volatility) continue;
-        if (mode === "practice") { vr[r.pair] = { state: "unavailable", reason: "Practice scenario has no price history." }; continue; }
-        vr[r.pair] = await job.step(readVolatility(r.pair, settings.cluster, rule.volatility.frame, rule.volatility.candles, job.signal), 15_000, "Price history");
+        if (mode === "practice") { vr[r.key] = { state: "unavailable", reason: "Practice scenario has no price history." }; continue; }
+        const key = volatilityKey(r.pair, rule.volatility.frame, rule.volatility.candles);
+        const reading = metrics.get(key) ?? await job.step(readVolatility(r.pair, settings.cluster, rule.volatility.frame, rule.volatility.candles, job.signal), 15_000, "Price history");
+        metrics.set(key, reading); vr[r.key] = reading;
       }
       job.check();
       const t = Date.now();
       // Observations: continuity requires a gap no larger than MAX_GAP_MS.
       const runs: Record<string, OutRun | undefined> = {};
-      for (const r of next) runs[r.key] = observeOut(outRuns.current[r.key], r.activeId < r.lower || r.activeId > r.upper, t, MAX_GAP_MS);
+      // Manual checks while paused do not accrue a continuous monitoring interval.
+      if (monitoringRef.current && !document.hidden) for (const r of next) runs[r.key] = observeOut(outRuns.current[r.key], r.activeId < r.lower || r.activeId > r.upper, t, MAX_GAP_MS);
       outRuns.current = runs;
       // Confirmed-rebalance re-anchoring happens on the first fresh read after confirmation.
-      let ruleMap = rules;
+      let ruleMap = checkedRules;
       for (const k of [...pendingRebase.current]) {
         const r = next.find((x) => x.key === k);
         if (r && ruleMap[k]?.armed) { ruleMap = { ...ruleMap, [k]: rebaseAfterConfirmedRebalance(ruleMap[k]!, r.activeId, r.binStep, t) }; addHistory("rule", `Baseline re-anchored at bin ${r.activeId} after a confirmed rebalance of ${shortAddr(k)}.`); }
         pendingRebase.current.delete(k);
       }
-      if (ruleMap !== rules) saveRules(ruleMap);
+      if (ruleMap !== checkedRules) saveRules(ruleMap, false);
       const fresh: Proposal[] = [];
       for (const r of next) {
         const rule = ruleMap[r.key];
         if (!rule) continue;
-        const p = propose({ rule, pos: { key: r.key, pool: r.pair, activeId: r.activeId, lower: r.lower, upper: r.upper, binStep: r.binStep }, outRun: runs[r.key], vol: vr[r.pair] ?? null, now: t }, lastProposed.current);
+        const p = propose({ rule, pos: { key: r.key, pool: r.pair, activeId: r.activeId, lower: r.lower, upper: r.upper, binStep: r.binStep }, outRun: runs[r.key], vol: vr[r.key] ?? null, now: t }, lastProposed.current);
         if (p) { lastProposed.current[p.id] = t; fresh.push(p); }
       }
-      setRows(next); setReport(rep); setVol((v) => ({ ...v, ...vr }));
-      setProposals((q) => [...fresh, ...q.filter((x) => !fresh.some((f) => f.id === x.id) && next.some((r) => r.key === x.position))].slice(0, 20));
+      setRows(next); setReport(rep); setVol(vr);
+      setProposals((q) => [...fresh, ...q.filter((p) => {
+        if (fresh.some((f) => f.position === p.position)) return false;
+        const r = next.find((r) => r.key === p.position), rule = ruleMap[p.position];
+        return !!r && !!rule && proposalIsCurrent(p, { rule, pos: { ...r, pool: r.pair }, outRun: runs[r.key], vol: vr[r.key] ?? null, now: t });
+      })].slice(0, 20));
       for (const p of fresh) addHistory("proposal", `${p.kind === "reduce" ? `Reduce ${p.withdrawPct}%` : "Rebalance"} proposed for ${shortAddr(p.position)}: ${p.reason}`);
       addHistory("check", `${source === "monitor" ? "Monitor" : "Manual"} check: ${next.length} verified position(s)${rep?.rejected ? `, ${rep.rejected} rejected` : ""}${rep?.truncated ? ", index truncated" : ""}.`);
       setLoad({ phase: "ok", at: t });
@@ -204,18 +228,20 @@ function Agents() {
     if (!monitoring) return;
     void checkRef.current("monitor");
     const t = setInterval(() => { if (!ctl.current!.busy) void checkRef.current("monitor"); }, POLL_MS);
-    const vis = () => { if (document.hidden) { ctl.current!.invalidate(); setMonitoring(false); addHistory("check", "Monitoring paused: tab hidden. Hidden time is not counted as observed."); } };
+    const vis = () => { if (document.hidden) { genRef.current++; ctl.current!.invalidate(); outRuns.current = {}; monitoringRef.current = false; setMonitoring(false); setProposals((q) => q.filter((p) => p.trigger !== "out-time")); addHistory("check", "Monitoring paused: tab hidden. Hidden time is not counted as observed."); } };
     document.addEventListener("visibilitychange", vis);
     return () => { clearInterval(t); document.removeEventListener("visibilitychange", vis); };
   }, [monitoring, addHistory]);
-  const pause = () => { genRef.current++; ctl.current!.invalidate(); setMonitoring(false); addHistory("check", "Monitoring paused."); };
+  const pause = () => { genRef.current++; ctl.current!.invalidate(); outRuns.current = {}; monitoringRef.current = false; setMonitoring(false); setProposals((q) => q.filter((p) => p.trigger !== "out-time")); addHistory("check", "Monitoring paused."); };
 
   /* ---------- reviews ---------- */
   async function prepare(p: Proposal, opts: { stagedTo?: { pool: string } } = {}) {
+    if (p.ruleRevision !== (rulesRef.current[p.position]?.revision ?? -1)) { setReview({ state: "error", proposal: p, error: "The rule changed. Run a fresh check for a new proposal." }); return; }
     if (mode === "practice") { setReview({ state: "practice", proposal: p }); addHistory("review", `Practice review opened for ${p.kind}. Nothing can be signed.`); return; }
     if (refusal) { setReview({ state: "error", proposal: p, error: refusal }); return; }
-    if (unresolved) { setReview({ state: "error", proposal: p, error: "A previous transaction's settlement is unresolved. Check its status first." }); return; }
-    if (monitoring) pause();
+    if (pendingNow() || unresolved) { setReview({ state: "error", proposal: p, error: "A previous transaction's settlement is unresolved. Check its status first." }); return; }
+    const evidence = outRuns.current[p.position];
+    if (monitoringRef.current) pause(); else outRuns.current = {};
     genRef.current++;
     ctl.current!.invalidate();
     const c = ctl.current!;
@@ -224,47 +250,58 @@ function Agents() {
     setReview({ state: "building", proposal: p });
     const gen = genRef.current;
     const ownerPk = wallet.publicKey!;
-    const rule = rules[p.position];
+    const rule = rulesRef.current[p.position];
     try {
+      const got = await job.step(fetchPositionRows(connection, ownerPk, settings.cluster, job.signal), 30_000, "Fresh proposal verification");
+      const freshRow = got.map(fromLive).find((r) => r.key === p.position && r.pair === p.pool);
+      if (!freshRow) throw new Error("Position is no longer in the verified list for this wallet and pool.");
+      const reading = rule?.volatility ? await job.step(readVolatility(p.pool, settings.cluster, rule.volatility.frame, rule.volatility.candles, job.signal), 15_000, "Fresh price history") : null;
+      if (!opts.stagedTo && (!rule || !proposalIsCurrent(p, { rule, pos: { ...freshRow, pool: freshRow.pair }, outRun: evidence && Date.now() - evidence.lastSeen <= MAX_GAP_MS ? evidence : undefined, vol: reading, now: Date.now() }))) throw new Error("This trigger is no longer the current decision. Run a fresh check.");
+      job.check();
       const builtAt = Date.now();
       const base = { ruleRevision: rule?.revision ?? -1, wallet: ownerPk.toBase58(), cluster: settings.cluster, rpcId, pool: p.pool, position: p.position, slippageBps: settings.slippageBps, builtAt, gen };
       if (p.kind === "rebalance" && !opts.stagedTo) {
-        const r = await job.step(buildNativeRebalance({ connection, owner: ownerPk, poolAddress: p.pool, position: p.position, strategy: rule?.strategy ?? "Spot", slippageBps: settings.slippageBps, cluster: settings.cluster }), 60_000, "Rebalance build");
+        const r = await buildNativeRebalance({ connection, owner: ownerPk, poolAddress: p.pool, position: p.position, strategy: rule?.strategy ?? "Spot", slippageBps: settings.slippageBps, cluster: settings.cluster, job });
+        job.check();
         if (!r.ok) { setReview({ state: "staged", proposal: p, reason: r.reason }); addHistory("review", `Native rebalance not possible for ${shortAddr(p.position)}: ${r.reason}`); return; }
         const b = r.built;
-        const frozen: FrozenReview = { ...base, builtAt: Date.now(), action: "rebalance", targetLower: b.target.lower, targetUpper: b.target.upper, feeLamports: b.costs.perTxFee[0] ?? null, solOutLamports: b.costs.solOutLamports };
+        const frozen: FrozenReview = { ...base, action: "rebalance", targetLower: b.target.lower, targetUpper: b.target.upper, feeLamports: b.costs.perTxFee[0] ?? null, solOutLamports: b.costs.solOutLamports };
         setReview({ state: "ready", proposal: p, frozen, built: { kind: "rebalance", b } });
         addHistory("review", `Rebalance review built: target ${b.target.lower}–${b.target.upper}, ${b.kind}${b.costs.simErrors[0] ? `, simulation failed: ${b.costs.simErrors[0]}` : ", simulated OK"}.`);
       } else {
         const pct = opts.stagedTo ? 100 : p.withdrawPct ?? 100;
-        const b = await job.step(buildWithdraw({ connection, owner: ownerPk, poolAddress: p.pool, position: p.position, bps: pct * 100, cluster: settings.cluster, label: opts.stagedTo ? "Stage 1 · Withdraw 100% (position stays open)" : `Withdraw ${pct}%` }), 60_000, "Withdraw build");
-        const row = rows?.find((x) => x.key === p.position);
-        const frozen: FrozenReview = { ...base, builtAt: Date.now(), action: "withdraw", withdrawBps: pct * 100, feeLamports: b.costs.perTxFee[0] ?? null, solOutLamports: b.costs.solOutLamports };
-        setReview({ state: "ready", proposal: p, frozen, built: { kind: "withdraw", b, staged: opts.stagedTo && row ? { targetPool: opts.stagedTo.pool, width: row.upper - row.lower + 1, strategy: rule?.strategy ?? "Spot" } : undefined } });
+        const b = await buildWithdraw({ connection, owner: ownerPk, poolAddress: p.pool, position: p.position, bps: pct * 100, cluster: settings.cluster, label: opts.stagedTo ? "Stage 1 · Withdraw 100% (position stays open)" : `Withdraw ${pct}%`, job });
+        const orientation = opts.stagedTo ? await verifyStagedDestination({ connection, poolAddress: opts.stagedTo.pool, mintX: b.mintX, mintY: b.mintY, cluster: settings.cluster, job }) : null;
+        job.check();
+        const sourceWidth = b.upper - b.lower + 1;
+        const frozen: FrozenReview = { ...base, action: "withdraw", withdrawBps: pct * 100, feeLamports: b.costs.perTxFee[0] ?? null, solOutLamports: b.costs.solOutLamports };
+        setReview({ state: "ready", proposal: p, frozen, built: { kind: "withdraw", b, staged: opts.stagedTo && orientation ? { targetPool: opts.stagedTo.pool, width: Math.min(sourceWidth, MAX_UI_BINS), sourceWidth, strategy: rule?.strategy ?? "Spot", orientation, mintX: b.mintX, mintY: b.mintY } : undefined } });
         addHistory("review", `Withdrawal review built (${pct}%)${b.costs.simErrors[0] ? `, simulation failed: ${b.costs.simErrors[0]}` : ", simulated OK"}.`);
       }
     } catch (e) {
       if (e instanceof JobCancelled) return;
-      if (genRef.current === gen || e instanceof JobTimeout) setReview({ state: "error", proposal: p, error: redactUrls(e instanceof Error ? e.message : String(e)) });
+      if (genRef.current === gen) setReview({ state: "error", proposal: p, error: redactUrls(e instanceof Error ? e.message : String(e)) });
     } finally { c.end(job); }
   }
 
   async function approve(rv: Extract<Review, { state: "ready" }>) {
-    const why = reviewStaleReason(rv.frozen, liveFor(rv.proposal.position), Date.now());
+    const guard = () => reviewStaleReason(rv.frozen, liveFor(rv.proposal.position), Date.now()) ?? executionReadiness(rv.built.b.costs, pendingNow());
+    const why = guard();
     if (why) return;
     const first = rv.built.b.txs[0];
     if (!first) return;
     addHistory("tx", `Wallet approval requested: ${first.label}.`);
     let steps;
     try {
-      steps = await runner.run([first], { semanticGuard: () => reviewStaleReason(rv.frozen, liveFor(rv.proposal.position), Date.now()), maxFeeLamports: rv.frozen.feeLamports ?? undefined });
+      steps = await runner.run([first], { semanticGuard: guard, maxFeeLamports: rv.frozen.feeLamports ?? undefined });
     } catch (e) { addHistory("error", e instanceof Error ? e.message : String(e)); return; }
     const s = steps[0];
+    if (live.current.wallet !== rv.frozen.wallet || live.current.cluster !== rv.frozen.cluster || live.current.rpcId !== rv.frozen.rpcId || live.current.mode !== "wallet") return;
     addHistory("tx", `${first.label}: ${s?.phase ?? "not run"}${s?.signature ? ` · ${shortAddr(s.signature, 6)}` : ""}${s?.error ? ` — ${s.error}` : ""}`);
     genRef.current++;
     if (s?.phase === "confirmed") {
       const remaining = rv.built.b.costs.remaining;
-      if (rv.built.kind === "rebalance" && remaining === 0) pendingRebase.current.add(rv.proposal.position);
+      if (rv.built.kind === "rebalance" && remaining === 0 && rulesRef.current[rv.proposal.position]?.revision === rv.frozen.ruleRevision) pendingRebase.current.add(rv.proposal.position);
       if (rv.built.kind === "withdraw" && rv.built.staged && remaining === 0) setStaged({ pool: rv.built.staged.targetPool, width: rv.built.staged.width, strategy: rv.built.staged.strategy, cluster: settings.cluster });
       setProposals((q) => (remaining === 0 ? q.filter((x) => x.id !== rv.proposal.id) : q));
       if (remaining > 0) addHistory("tx", `${remaining} more step(s) remain. Build a fresh review to continue — nothing continues automatically.`);
@@ -273,11 +310,32 @@ function Agents() {
     }
   }
 
+  const closeReview = () => { genRef.current++; ctl.current!.invalidate(); setReview(null); };
+
   const sel = rows?.find((r) => r.key === selected) ?? null;
   const selRule = sel ? rules[sel.key] ?? DEFAULT_RULE : null;
   const updateRule = (k: string, f: (r: Rule) => Rule, note: string) => {
-    try { const n = f(rules[k] ?? DEFAULT_RULE); saveRules({ ...rules, [k]: n }); addHistory("rule", note); setReview((rv) => (rv && rv.proposal.position === k ? null : rv)); } catch (e) { addHistory("error", e instanceof Error ? e.message : String(e)); }
+    try { const n = f(rulesRef.current[k] ?? DEFAULT_RULE); saveRules({ ...rulesRef.current, [k]: n }); addHistory("rule", note); } catch (e) { addHistory("error", e instanceof Error ? e.message : String(e)); }
   };
+
+  async function armSelected(row: ViewRow) {
+    if (mode === "practice") { updateRule(row.key, (r) => armRule(r, row.activeId, row.binStep, Date.now()), `Practice rule armed at bin ${row.activeId}.`); return; }
+    const c = ctl.current!, job = c.begin();
+    if (!job || !owner) return;
+    const revision = rulesRef.current[row.key]?.revision ?? -1;
+    try {
+      const { PublicKey } = await import("@solana/web3.js");
+      const got = await job.step(fetchPositionRows(connection, new PublicKey(owner), settings.cluster, job.signal), 30_000, "Fresh arming baseline");
+      job.check();
+      if ((rulesRef.current[row.key]?.revision ?? -1) !== revision) return;
+      const fresh = got.find((r) => r.key === row.key && r.pair === row.pair);
+      if (!fresh) throw new Error("Position could not be verified for the arming baseline.");
+      const t = Date.now();
+      setRows(got.map(fromLive)); setLoad({ phase: "ok", at: t });
+      updateRule(row.key, (r) => armRule(r, fresh.activeId, fresh.binStep, t), `Rule armed for ${shortAddr(row.key)} from a fresh chain baseline at bin ${fresh.activeId}.`);
+    } catch (e) { if (!(e instanceof JobCancelled)) addHistory("error", `Could not arm: ${e instanceof Error ? e.message : String(e)}`); }
+    finally { c.end(job); }
+  }
 
   const status = mode === "practice" ? "Practice scenario" : mode === "watch" ? "Watch-only" : settings.practice ? "Practice setting on — live spending disabled" : wallet.publicKey ? "Live wallet" : "Disconnected";
   const canCheck = mode === "practice" || !!owner;
@@ -326,12 +384,12 @@ function Agents() {
               <div className="grid gap-6 xl:grid-cols-[1.1fr_1fr]">
                 <div className="flex flex-col gap-4">
                   <p className="station-code text-cream/60">Last check {load.at ? timeAgo(load.at) : "—"}{load.at && now - load.at > 2 * POLL_MS ? " · stale" : ""}</p>
-                  {rows.map((r) => <PositionCard key={r.key} r={r} rule={rules[r.key]} vol={vol[r.pair]} outRun={outRuns.current[r.key]} selected={selected === r.key} onSelect={() => setSelected(r.key)} />)}
+                  {rows.map((r) => <PositionCard key={r.key} r={r} rule={rules[r.key]} vol={vol[r.key]} outRun={outRuns.current[r.key]} selected={selected === r.key} onSelect={() => setSelected(r.key)} />)}
                 </div>
                 <div className="flex flex-col gap-6">
-                  {sel && selRule && <RuleEditor key={sel.key + selRule.revision} row={sel} rule={selRule} canArm={!reviewing}
+                  {sel && selRule && <RuleEditor key={sel.key + selRule.revision} row={sel} rule={selRule} canArm={!reviewing && !ctl.current!.busy}
                     onSave={(patch) => updateRule(sel.key, (r) => editRule(r, patch), `Rule for ${shortAddr(sel.key)} edited (now disarmed; arm to capture a baseline).`)}
-                    onArm={() => updateRule(sel.key, (r) => armRule(r, sel.activeId, sel.binStep, Date.now()), `Rule armed for ${shortAddr(sel.key)} with baseline bin ${sel.activeId}.`)}
+                    onArm={() => void armSelected(sel)}
                     onDisarm={() => updateRule(sel.key, disarmRule, `Rule disarmed for ${shortAddr(sel.key)}.`)} />}
                 </div>
               </div>
@@ -359,15 +417,15 @@ function Agents() {
               )}
             </section>
 
-            {review && <ReviewPanel review={review} now={now} stale={review.state === "ready" ? reviewStaleReason(review.frozen, liveFor(review.proposal.position), now) : null} running={runner.running}
+            {review && <ReviewPanel review={review} now={now} stale={review.state === "ready" ? reviewStaleReason(review.frozen, liveFor(review.proposal.position), now) ?? executionReadiness(review.built.b.costs, !!unresolved) : null} running={runner.running}
               onApprove={() => review.state === "ready" && approve(review)} onRebuild={() => prepare(review.proposal, review.state === "ready" && review.built.kind === "withdraw" && review.built.staged ? { stagedTo: { pool: review.built.staged.targetPool } } : {})}
-              onStage={(pool) => prepare({ ...review.proposal, kind: "reduce" }, { stagedTo: { pool } })} onClose={() => setReview(null)} row={rows?.find((r) => r.key === review.proposal.position) ?? null} />}
+              onStage={(pool) => prepare({ ...review.proposal, kind: "reduce" }, { stagedTo: { pool } })} onClose={closeReview} row={rows?.find((r) => r.key === review.proposal.position) ?? null} />}
             <TxSteps steps={runner.steps} />
             {unresolved && <div className="mt-3"><CheckStatus p={unresolved} onResolved={() => runner.reset()} /></div>}
             {staged && (
               <Notice tone="info" title="Stage 1 confirmed — continue with a fresh add">
                 Withdrawal confirmed. Stage 2 opens the add-liquidity review for the chosen pool on {staged.cluster === "devnet" ? "devnet" : "mainnet"}; you review amounts against your fresh balance and sign separately. This is not atomic.
-                {staged.width > MAX_UI_BINS && <> Your range was {staged.width} bins; the add flow opens at most {MAX_UI_BINS} bins, so it will be narrower.</>}
+                {` The add flow opens with ${staged.width} bins and the ${staged.strategy} distribution.`}
                 <div className="mt-2"><Link to="/app/pool/$address" params={{ address: staged.pool }} search={{ tab: "add", strategy: staged.strategy, below: Math.floor((Math.min(staged.width, MAX_UI_BINS) - 1) / 2), above: Math.min(staged.width, MAX_UI_BINS) - 1 - Math.floor((Math.min(staged.width, MAX_UI_BINS) - 1) / 2), cluster: staged.cluster }} className="underline">Continue to stage 2 →</Link></div>
               </Notice>
             )}
@@ -504,7 +562,7 @@ function RuleEditor({ row, rule, onSave, onArm, onDisarm, canArm }: { row: ViewR
   );
 }
 
-function lamportsSol(n: number | null | undefined) { return n === null || n === undefined ? "—" : `${formatUnits(BigInt(n), 9, 9)} SOL`; }
+function lamportsSol(n: number | null | undefined) { return knownLamports(n) ? `${formatUnits(BigInt(n), 9, 9)} SOL` : "—"; }
 
 function ReviewPanel({ review, now, stale, running, onApprove, onRebuild, onStage, onClose, row }: { review: Review; now: number; stale: string | null; running: boolean; onApprove: () => void; onRebuild: () => void; onStage: (pool: string) => void; onClose: () => void; row: ViewRow | null }) {
   const head = (t: string, extra?: ReactNode) => <div className="flex flex-wrap items-center justify-between gap-2"><h2 className="display text-2xl">{t}</h2><div className="flex gap-2">{extra}<Btn size="sm" variant="ghost" onClick={onClose}>Close</Btn></div></div>;
@@ -520,10 +578,8 @@ function ReviewPanel({ review, now, stale, running, onApprove, onRebuild, onStag
   const { frozen, built } = review;
   const left = Math.max(0, Math.ceil((frozen.builtAt + REVIEW_TTL_MS - now) / 1000));
   const c = built.b.costs;
-  const needs = c.solOutLamports !== null && c.feeLamports !== null ? c.solOutLamports + (c.perTxFee[0] ?? 0) : null;
-  const short = needs !== null && c.walletLamports !== null && c.walletLamports < needs;
-  const simErr = c.simErrors[0];
-  const block = stale ?? (simErr ? `Simulation failed: ${simErr}` : null) ?? (needs === null ? "Costs unknown — cannot sign." : null) ?? (short ? "Wallet SOL is below the simulated requirement." : null);
+  const short = knownLamports(c.requiredLamports) && knownLamports(c.walletLamports) && c.walletLamports < c.requiredLamports;
+  const block = stale ?? executionReadiness(c);
   const dec = row ? { x: row.decX, y: row.decY } : null;
   return (
     <Panel tone="cobalt" className="mt-6">
@@ -537,13 +593,20 @@ function ReviewPanel({ review, now, stale, running, onApprove, onRebuild, onStag
           <Stat label="Form" value={built.b.kind === "atomic" ? "One atomic transaction" : "Split: price-level accounts first"} sub={built.b.kind === "split" ? "Only step 1 is sent now; rebuild a fresh review for the rebalance." : "Withdraw + redeposit together"} />
           <Stat label="Withdrawn (SDK sim)" value={dec ? `${formatUnits(built.b.withdrawn.x, dec.x, 6)} X · ${formatUnits(built.b.withdrawn.y, dec.y, 6)} Y` : "—"} />
           <Stat label="Redeposited (SDK sim)" value={dec ? `${formatUnits(built.b.deposited.x, dec.x, 6)} X · ${formatUnits(built.b.deposited.y, dec.y, 6)} Y` : "—"} sub="Zero wallet top-up. Accrued fees are included; rewards are claimed to your wallet." />
-          <Stat label="New price-level accounts" value={`${built.b.binArrayCount}`} sub={`rent ${lamportsSol(built.b.binArrayCost * 1e9)} · bitmap ${lamportsSol(built.b.bitmapExtensionCost * 1e9)} (included in simulated SOL)`} />
+          <Stat label="Returned to wallet (SDK sim)" value={dec ? `${formatUnits(built.b.walletOut.x, dec.x, 6)} X · ${formatUnits(built.b.walletOut.y, dec.y, 6)} Y` : "—"} sub="Net amounts after redeposit. SOL remains wrapped; existing WSOL is preserved." />
+          <Stat label="New price-level accounts" value={`${built.b.binArrayCount}`} sub={`SDK rent estimates: ${lamportsSol(solQuoteLamports(built.b.binArrayCost))} · bitmap ${lamportsSol(solQuoteLamports(built.b.bitmapExtensionCost))}. Exact simulation controls approval.`} />
         </> : <>
           <Stat label="Withdraw" value={`${built.b.bps / 100}% of liquidity shares`} sub={`bins ${built.b.lower}–${built.b.upper}; position stays open, nothing is closed`} />
-          <Stat label="Estimated out" value={dec ? `${formatUnits(built.b.estX, dec.x, 6)} X · ${formatUnits(built.b.estY, dec.y, 6)} Y` : "—"} sub="Estimate only — shares are removed; no X/Y output floor is enforced." />
+          <Stat label="Estimated out" value={dec ? `${formatUnits(built.b.estX, dec.x, 6)} X · ${formatUnits(built.b.estY, dec.y, 6)} Y` : "—"} sub="Estimate only — shares are removed; no X/Y output floor is enforced. SOL remains wrapped; existing WSOL is preserved." />
+          {built.staged && <>
+            <Stat label="Stage 2 destination" value={shortAddr(built.staged.targetPool)} sub={`${frozen.cluster} · ${built.staged.orientation === "reversed" ? "reversed Y/X" : "X/Y"} · exact mint pair verified on chain`} />
+            <Stat label="Stage 2 range setup" value={`${built.staged.width} bins · ${built.staged.strategy}`} sub={built.staged.width < built.staged.sourceWidth ? `Your ${built.staged.sourceWidth}-bin range will be narrowed to ${built.staged.width} bins by the add flow. Review this before withdrawing.` : "Fresh range and amounts require a separate add review after confirmation."} />
+            <Stat label="Verified mints" value={`${shortAddr(built.staged.mintX)} / ${shortAddr(built.staged.mintY)}`} sub="Withdraw 100% now; no transfer to the destination occurs in this transaction." />
+          </>}
         </>}
         <Stat label="Network fee (tx 1)" value={lamportsSol(c.perTxFee[0])} sub="getFeeForMessage; runner refuses to sign above this" />
-        <Stat label="Simulated SOL out" value={lamportsSol(c.solOutLamports)} sub="Wallet balance change in exact simulation (rent, wraps, ATAs). Fee shown separately; may overlap." />
+        <Stat label="Simulated net SOL out" value={lamportsSol(c.solOutLamports)} sub="Wallet lamport decrease, including the network fee; refunds can offset rent. The fee is not added twice." />
+        <Stat label="SOL needed before signing" value={lamportsSol(c.requiredLamports)} sub="Larger of net outflow or fee + new-account rent. Withdrawn WSOL is not counted as rent." />
         <Stat label="Wallet SOL" value={lamportsSol(c.walletLamports)} sub={short ? "Insufficient" : undefined} />
         <Stat label="Size / compute" value={`${Number.isFinite(c.sizes[0]) ? c.sizes[0] : "—"} bytes · ${c.units[0] ?? "—"} CU`} sub={c.remaining ? `${c.remaining} later step(s) need a fresh review` : undefined} />
       </dl>

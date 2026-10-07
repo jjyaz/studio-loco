@@ -76,3 +76,15 @@ Not production-ready: no funded wallet has signed any transaction built by this 
 - [ ] Live native rebalance built + simulated against a real owned mainnet position (needs a wallet with a position).
 - [ ] Funded signed rebalance / withdrawal (not performed; no funds used).
 - Known limit: SDK 1.9.14 balanced rebalance adds one bin to even-width ranges; such positions get a staged withdraw→add instead.
+
+### Liquidity Agents review fixes (2026-10-07)
+- [x] 165/165 tests, clean TypeScript check, production build exit 0 and clean diff whitespace. React integration tests cover stale reads after rule edits, fresh arming, per-position volatility, short pauses, persisted pending signatures and cancelled preparation.
+- Rules invalidate running checks/builds immediately. Arming fetches a new chain baseline; edits cannot restore old armed rules. Closing preparation cancels it.
+- Cached pool state is refreshed on every indexed observation. Volatility is scoped by position and full metric; future, duplicate and gapped candles are rejected.
+- Pausing, hiding, reviewing and rule/identity changes reset observed-time continuity. Paused manual checks do not accrue monitoring time. A risk trigger in cooldown cannot fall through to a rebalance.
+- Approval and the runner share the same readiness guard: finite known fees, balance, upfront SOL, successful exact simulation, valid size/compute, frozen scope and TTL. Pending signatures are checked from persistent storage at execution time.
+- Correct SDK boundaries: numeric deposit offsets; net wallet input must be zero; gross redeposit and net wallet output shown separately. Both native rebalance and withdrawal preserve existing WSOL. Active-bin slippage rounds down and honors zero.
+- Original SDK/RPC promises are tracked by JobControl, including after timeout. Multi-transaction percentage withdrawals are rejected before signing to prevent repeating the first chunk. Native bin-account preflight may still be reviewed separately and followed by a fresh rebalance build.
+- Staged moves verify the destination's exact mint pair on chain and show its orientation, distribution and capped range width before withdrawing.
+- Read-only mainnet proof: an actual 25% withdrawal of a public SOL/USDC position simulated successfully (751 bytes, 297759 CU, 5000-lamport fee); no signature or broadcast. Same-pair discovery returned 40 valid pools; 12-candle 5m volatility was available. Even-width native rebalance correctly refused a changed width. Odd-width native instruction construction timed out; live native rebalance remains unverified.
+- Browser preview blocked in this session; screen behavior verified with React integration tests. Funded rebalance/withdrawal acceptance remains outstanding. This pass does not publish the site.

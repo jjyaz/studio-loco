@@ -4,12 +4,13 @@
  * Builds and SIMULATES only. Signing/sending happens exclusively in the shared runner (src/lib/tx.ts).
  */
 import BN from "bn.js";
+import { Buffer } from "buffer";
 import type { Connection, PublicKey as PK, Transaction, TransactionInstruction } from "@solana/web3.js";
 import { METEORA_API, fetchJson, normalizePool, fetchOhlcv, type ApiPool } from "./meteora-api";
-import { getPool, invalidatePool, loadSdk } from "./dlmm";
-import { withTimeout } from "./tx";
+import { loadSdk } from "./dlmm";
+import type { Job } from "./job-control";
 import { STRATEGY_TYPE_VALUE, type StrategyName } from "./strategy";
-import { balancedTarget, pairOrientation, volatility, FRAME_MS, type VolFrame, type VolReading } from "./agents";
+import { activeBinSlippage, balancedTarget, knownLamports, pairOrientation, volatility, FRAME_MS, type VolFrame, type VolReading } from "./agents";
 
 export const MAX_TX_BYTES = 1232;
 const T = 12_000;
@@ -57,12 +58,14 @@ export interface CostReview {
   perTxFee: (number | null)[];
   /** Simulated wallet SOL outflow (wraps, rent, ATAs). null = unknown (blocks). */
   solOutLamports: number | null;
+  /** Conservative fee + newly funded writable-account rent, or net SOL outflow if larger. */
+  requiredLamports: number | null;
   walletLamports: number | null;
   sizes: number[];
   units: (number | null)[];
   simErrors: (string | null)[];
   logs: string[][];
-  /** Only txs[0] is reviewed; callers must send just that one and rebuild for the rest. */
+  /** Only account-creation preflight may precede a separately rebuilt native rebalance. */
   remaining: number;
 }
 
@@ -77,131 +80,171 @@ export interface BuiltRebalance {
   binArrayCount: number;
   withdrawn: { x: string; y: string };
   deposited: { x: string; y: string };
+  walletOut: { x: string; y: string };
   maxActiveBinSlippage: number;
   costs: CostReview;
 }
 
 export type RebalanceResult = { ok: true; built: BuiltRebalance } | { ok: false; staged: true; reason: string };
 
+/** A newly created WSOL account can receive withdrawn SOL: that output is not rent paid by the wallet. */
+export function newAccountRentLamports(a: { lamports: number; owner: string; data: string[] }): number | null {
+  if (!knownLamports(a.lamports)) return null;
+  if (a.owner === "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA") {
+    if (!a.data[0] || a.data[1] !== "base64") return null;
+    const data = Buffer.from(a.data[0], "base64");
+    if (data.length >= 165 && data.readUInt32LE(109) === 1) {
+      const reserve = Number(data.readBigUInt64LE(113));
+      return knownLamports(reserve) && reserve <= a.lamports ? reserve : null;
+    }
+  }
+  return a.lamports;
+}
+
 /** Verifies the SDK response targets exactly the reviewed range with zero top-up. Returns a reason when it doesn't. */
 export function verifyRebalanceTarget(o: {
   activeId: number; width: number; expected: { lower: number; upper: number };
-  deposits: { minDeltaId: BN; maxDeltaId: BN }[]; depositedX: BN; depositedY: BN; availX: BN; availY: BN;
+  deposits: { minDeltaId: BN | number; maxDeltaId: BN | number }[]; depositedX: BN; depositedY: BN; availX: BN; availY: BN;
 }): string | null {
   if (o.deposits.length !== 1) return `Expected one deposit range, got ${o.deposits.length}.`;
   const d = o.deposits[0]!;
-  const lower = o.activeId + d.minDeltaId.toNumber(), upper = o.activeId + d.maxDeltaId.toNumber();
+  const asInt = (n: BN | number) => BN.isBN(n) ? n.toNumber() : n;
+  const lo = asInt(d.minDeltaId), hi = asInt(d.maxDeltaId);
+  if (!Number.isSafeInteger(lo) || !Number.isSafeInteger(hi)) return "SDK returned invalid bin offsets.";
+  const lower = o.activeId + lo, upper = o.activeId + hi;
   if (lower !== o.expected.lower || upper !== o.expected.upper) return `SDK target ${lower}–${upper} differs from the reviewed ${o.expected.lower}–${o.expected.upper}.`;
   if (upper - lower + 1 !== o.width) return "SDK target would change the range width.";
-  if (o.depositedX.gt(o.availX) || o.depositedY.gt(o.availY)) return "SDK deposit exceeds what the position holds — a wallet top-up would be required.";
+  // SDK actualAmount*Deposited means NET input from the wallet, not gross redeposit.
+  if (!o.depositedX.isZero() || !o.depositedY.isZero()) return "SDK requires a wallet top-up; this review only permits zero top-up.";
   return null;
 }
 
-async function reviewCosts(connection: Connection, owner: PK, txs: Transaction[]): Promise<CostReview> {
+export async function reviewCosts(connection: Connection, owner: PK, txs: Transaction[], job: Job): Promise<CostReview> {
   const { VersionedTransaction } = await import("@solana/web3.js");
-  const walletLamports = await withTimeout(connection.getBalance(owner, "confirmed"), T, "Wallet balance").catch(() => null);
-  const out: CostReview = { feeLamports: 0, perTxFee: [], solOutLamports: 0, walletLamports, sizes: [], units: [], simErrors: [], logs: [], remaining: Math.max(0, txs.length - 1) };
-  let running = walletLamports;
-  for (const tx of txs) {
-    let size = Infinity;
-    try { size = tx.serialize({ requireAllSignatures: false, verifySignatures: false }).length; } catch { /* oversize */ }
-    out.sizes.push(size);
-    if (size > MAX_TX_BYTES) { out.perTxFee.push(null); out.units.push(null); out.simErrors.push(`Transaction is ${Number.isFinite(size) ? size : ">" + MAX_TX_BYTES} bytes; the limit is ${MAX_TX_BYTES}.`); out.logs.push([]); out.feeLamports = null; out.solOutLamports = null; continue; }
-    const msg = tx.compileMessage();
-    const fee = await withTimeout(connection.getFeeForMessage(msg, "confirmed"), T, "Network fee").then((r) => r.value).catch(() => null);
-    out.perTxFee.push(fee);
-    if (fee === null) out.feeLamports = null; else if (out.feeLamports !== null) out.feeLamports += fee;
-    try {
-      const sim = await withTimeout(connection.simulateTransaction(new VersionedTransaction(msg), { sigVerify: false, replaceRecentBlockhash: false, commitment: "confirmed", accounts: { addresses: [owner.toBase58()], encoding: "base64" } }), T, "Simulation");
-      out.units.push(sim.value.unitsConsumed ?? null);
-      out.logs.push(sim.value.logs ?? []);
-      out.simErrors.push(sim.value.err ? JSON.stringify(sim.value.err) : null);
-      const post = sim.value.accounts?.[0]?.lamports;
-      if (sim.value.err || typeof post !== "number" || running === null) out.solOutLamports = null;
-      else if (out.solOutLamports !== null) { out.solOutLamports += Math.max(0, running - post); running = post; }
-    } catch (e) {
-      out.units.push(null); out.logs.push([]); out.simErrors.push(e instanceof Error ? e.message : String(e)); out.solOutLamports = null;
+  job.check();
+  const tx = txs[0];
+  if (!tx) throw new Error("No transaction to review.");
+  let size = Infinity;
+  try { size = tx.serialize({ requireAllSignatures: false, verifySignatures: false }).length; } catch { /* oversize */ }
+  const out: CostReview = { feeLamports: null, perTxFee: [null], solOutLamports: null, requiredLamports: null, walletLamports: null, sizes: [size], units: [null], simErrors: [null], logs: [[]], remaining: Math.max(0, txs.length - 1) };
+  if (size > MAX_TX_BYTES) { out.simErrors[0] = `Transaction exceeds ${MAX_TX_BYTES} bytes.`; return out; }
+  const msg = tx.compileMessage();
+  const keys = msg.accountKeys.filter((_, i) => msg.isAccountWritable(i));
+  const ownerIndex = keys.findIndex((k) => k.equals(owner));
+  if (ownerIndex < 0) throw new Error("Reviewed wallet is missing from the transaction.");
+  // Track the ORIGINAL RPC promise with JobControl. A timeout cannot release the drain latch.
+  const pre = await job.step(connection.getMultipleAccountsInfo(keys, "confirmed"), T, "Wallet and rent accounts");
+  const balance = pre[ownerIndex]?.lamports;
+  out.walletLamports = knownLamports(balance) ? balance : null;
+  const fee = (await job.step(connection.getFeeForMessage(msg, "confirmed"), T, "Network fee")).value;
+  out.feeLamports = out.perTxFee[0] = knownLamports(fee) ? fee : null;
+  const sim = await job.step(connection.simulateTransaction(new VersionedTransaction(msg), { sigVerify: false, replaceRecentBlockhash: false, commitment: "confirmed", accounts: { addresses: keys.map((k) => k.toBase58()), encoding: "base64" } }), T, "Exact simulation");
+  out.units[0] = sim.value.unitsConsumed ?? null;
+  out.logs[0] = sim.value.logs ?? [];
+  out.simErrors[0] = sim.value.err ? JSON.stringify(sim.value.err) : null;
+  const post = sim.value.accounts;
+  const after = post?.[ownerIndex]?.lamports;
+  if (!sim.value.err && post?.length === keys.length && pre.length === keys.length && knownLamports(after) && knownLamports(balance) && knownLamports(fee)) {
+    // RPC simulation debits the fee. Do not add it to the wallet delta a second time.
+    out.solOutLamports = Math.max(0, balance - after);
+    let rent = 0;
+    for (let i = 0; i < keys.length; i++) {
+      if (i === ownerIndex || pre[i] !== null || post[i] === null) continue;
+      const n = post[i] ? newAccountRentLamports(post[i]!) : null;
+      if (!knownLamports(n) || !knownLamports(rent + n)) return out;
+      rent += n;
     }
-    // Only the first tx can simulate against real state; later txs depend on it landing,
-    // so callers send ONLY the first and rebuild a fresh review for the rest.
-    break;
+    // Refunds from old accounts cannot hide the SOL needed to fund new accounts up front.
+    const required = Math.max(out.solOutLamports, fee + rent);
+    out.requiredLamports = knownLamports(required) ? required : null;
   }
   return out;
 }
 
-async function freshTx(connection: Connection, owner: PK, ixs: TransactionInstruction[]): Promise<Transaction> {
+async function freshTx(connection: Connection, owner: PK, ixs: TransactionInstruction[], job: Job): Promise<Transaction> {
   const { Transaction } = await import("@solana/web3.js");
-  const { blockhash, lastValidBlockHeight } = await withTimeout(connection.getLatestBlockhash("confirmed"), T, "Blockhash");
+  const { blockhash, lastValidBlockHeight } = await job.step(connection.getLatestBlockhash("confirmed"), T, "Blockhash");
   const tx = new Transaction({ feePayer: owner, blockhash, lastValidBlockHeight });
   tx.add(...ixs);
   return tx;
 }
 
 /** Native rebalance: withdraw 100% + redeposit around the active bin with the SAME width and zero wallet top-up. */
-export async function buildNativeRebalance(o: { connection: Connection; owner: PK; poolAddress: string; position: string; strategy: StrategyName; slippageBps: number; cluster: "mainnet-beta" | "devnet" }): Promise<RebalanceResult> {
+export async function buildNativeRebalance(o: { connection: Connection; owner: PK; poolAddress: string; position: string; strategy: StrategyName; slippageBps: number; cluster: "mainnet-beta" | "devnet"; job: Job }): Promise<RebalanceResult> {
+  if (!Number.isInteger(o.slippageBps) || o.slippageBps < 0 || o.slippageBps > 10_000) throw new Error("Invalid slippage.");
   const { PublicKey } = await import("@solana/web3.js");
-  const sdk = await loadSdk();
-  invalidatePool(o.poolAddress);
-  const pool = await withTimeout(getPool(o.connection, o.poolAddress, o.cluster), T, "Pool load");
-  await withTimeout(pool.refetchStates(), T, "Pool refresh");
+  const sdk = await o.job.step(loadSdk(), T, "SDK load");
+  const pool = await o.job.step(sdk.default.create(o.connection, new PublicKey(o.poolAddress), { cluster: o.cluster, skipSolWrappingOperation: true }), T, "Fresh pool load");
   const posKey = new PublicKey(o.position);
-  const pos = await withTimeout(pool.getPosition(posKey), T, "Position read");
+  const pos = await o.job.step(pool.getPosition(posKey), T, "Position read");
   if (!pos.positionData.owner.equals(o.owner)) throw new Error("Position owner does not match the connected wallet.");
   const pd = pos.positionData;
   const width = pd.upperBinId - pd.lowerBinId + 1;
   const activeId = pool.lbPair.activeId;
   const expected = balancedTarget(activeId, width);
-  const resp = await withTimeout(pool.simulateRebalancePositionWithBalancedStrategy(posKey, pd, STRATEGY_TYPE_VALUE[o.strategy] as never, new BN(0), new BN(0), new BN(0), new BN(0)), T, "Rebalance simulation");
-  const sim = resp.simulationResult as typeof resp.simulationResult & { depositParams?: { minDeltaId: BN; maxDeltaId: BN }[] };
+  const resp = await o.job.step(pool.simulateRebalancePositionWithBalancedStrategy(posKey, pd, STRATEGY_TYPE_VALUE[o.strategy] as never, new BN(0), new BN(0), new BN(0), new BN(0)), T, "Rebalance simulation");
+  const sim = resp.simulationResult;
   const availX = new BN(pd.totalXAmount.split(".")[0] ?? "0").add(pd.feeX);
   const availY = new BN(pd.totalYAmount.split(".")[0] ?? "0").add(pd.feeY);
   const why = verifyRebalanceTarget({ activeId, width, expected, deposits: sim.depositParams ?? [], depositedX: sim.actualAmountXDeposited, depositedY: sim.actualAmountYDeposited, availX, availY });
   if (why) return { ok: false, staged: true, reason: why };
-  const binStepFrac = pool.lbPair.binStep / 10_000;
-  const slipFrac = o.slippageBps / 10_000;
-  const maxActive = Math.max(1, Math.ceil(Math.log(1 + slipFrac) / Math.log(1 + binStepFrac)));
-  const ixs = await withTimeout(pool.rebalancePosition(resp, new BN(maxActive), o.owner, o.slippageBps / 100), T, "Rebalance instructions");
-  const one = await freshTx(o.connection, o.owner, [...ixs.initBinArrayInstructions, ...ixs.rebalancePositionInstruction]);
+  const maxActive = activeBinSlippage(o.slippageBps, pool.lbPair.binStep);
+  const ixs = await o.job.step(pool.rebalancePosition(resp, new BN(maxActive), o.owner, o.slippageBps / 100), T, "Rebalance instructions");
+  // Keep SDK compute-budget instructions; adding another SetComputeUnitLimit is invalid.
+  const one = await freshTx(o.connection, o.owner, [...ixs.initBinArrayInstructions, ...ixs.rebalancePositionInstruction], o.job);
   let size = Infinity;
   try { size = one.serialize({ requireAllSignatures: false, verifySignatures: false }).length; } catch { /* oversize */ }
   let txs: { label: string; tx: Transaction }[];
   let kind: "atomic" | "split" = "atomic";
   if (size <= MAX_TX_BYTES) txs = [{ label: "Rebalance position (withdraw + redeposit, one transaction)", tx: one }];
   else if (ixs.initBinArrayInstructions.length) {
-    const a = await freshTx(o.connection, o.owner, ixs.initBinArrayInstructions);
-    const b = await freshTx(o.connection, o.owner, ixs.rebalancePositionInstruction);
+    const a = await freshTx(o.connection, o.owner, ixs.initBinArrayInstructions, o.job);
+    const b = await freshTx(o.connection, o.owner, ixs.rebalancePositionInstruction, o.job);
     let sb = Infinity; try { sb = b.serialize({ requireAllSignatures: false, verifySignatures: false }).length; } catch { /* */ }
     if (sb > MAX_TX_BYTES) return { ok: false, staged: true, reason: `The rebalance instruction alone is ${Number.isFinite(sb) ? sb : "over " + MAX_TX_BYTES} bytes, above the ${MAX_TX_BYTES}-byte limit.` };
     kind = "split";
     txs = [{ label: "1/2 Create missing price-level accounts", tx: a }, { label: "2/2 Rebalance position", tx: b }];
   } else return { ok: false, staged: true, reason: `The rebalance transaction is ${Number.isFinite(size) ? size : "over " + MAX_TX_BYTES} bytes, above the ${MAX_TX_BYTES}-byte limit.` };
-  const costs = await reviewCosts(o.connection, o.owner, txs.map((t) => t.tx));
+  const costs = await reviewCosts(o.connection, o.owner, txs.map((t) => t.tx), o.job);
   void sdk;
   return { ok: true, built: {
     kind, txs, target: expected, activeId, width,
     binArrayCost: resp.binArrayCost, bitmapExtensionCost: resp.bitmapExtensionCost, binArrayCount: resp.binArrayCount,
-    withdrawn: { x: sim.actualAmountXWithdrawn.toString(), y: sim.actualAmountYWithdrawn.toString() },
-    deposited: { x: sim.actualAmountXDeposited.toString(), y: sim.actualAmountYDeposited.toString() },
+    withdrawn: { x: sim.amountXDeposited.add(sim.actualAmountXWithdrawn).toString(), y: sim.amountYDeposited.add(sim.actualAmountYWithdrawn).toString() },
+    deposited: { x: sim.amountXDeposited.toString(), y: sim.amountYDeposited.toString() },
+    walletOut: { x: sim.actualAmountXWithdrawn.toString(), y: sim.actualAmountYWithdrawn.toString() },
     maxActiveBinSlippage: maxActive, costs,
   } };
 }
 
-export interface BuiltWithdraw { txs: { label: string; tx: Transaction }[]; bps: number; estX: string; estY: string; costs: CostReview; lower: number; upper: number }
+export interface BuiltWithdraw { txs: { label: string; tx: Transaction }[]; bps: number; estX: string; estY: string; costs: CostReview; lower: number; upper: number; mintX: string; mintY: string }
 
 /** Partial / full liquidity-share removal. Never closes the position and never claims beyond what removeLiquidity does. */
-export async function buildWithdraw(o: { connection: Connection; owner: PK; poolAddress: string; position: string; bps: number; cluster: "mainnet-beta" | "devnet"; label: string }): Promise<BuiltWithdraw> {
+export async function buildWithdraw(o: { connection: Connection; owner: PK; poolAddress: string; position: string; bps: number; cluster: "mainnet-beta" | "devnet"; label: string; job: Job }): Promise<BuiltWithdraw> {
   if (!Number.isInteger(o.bps) || o.bps < 1 || o.bps > 10_000) throw new Error("Withdrawal must be 0.01%–100%");
   const { PublicKey } = await import("@solana/web3.js");
-  invalidatePool(o.poolAddress);
-  const pool = await withTimeout(getPool(o.connection, o.poolAddress, o.cluster), T, "Pool load");
-  await withTimeout(pool.refetchStates(), T, "Pool refresh");
+  const sdk = await o.job.step(loadSdk(), T, "SDK load");
+  const pool = await o.job.step(sdk.default.create(o.connection, new PublicKey(o.poolAddress), { cluster: o.cluster, skipSolWrappingOperation: true }), T, "Fresh pool load");
   const posKey = new PublicKey(o.position);
-  const pos = await withTimeout(pool.getPosition(posKey), T, "Position read");
+  const pos = await o.job.step(pool.getPosition(posKey), T, "Position read");
   if (!pos.positionData.owner.equals(o.owner)) throw new Error("Position owner does not match the connected wallet.");
   const pd = pos.positionData;
-  const txs = await withTimeout(pool.removeLiquidity({ user: o.owner, position: posKey, fromBinId: pd.lowerBinId, toBinId: pd.upperBinId, bps: new BN(o.bps), shouldClaimAndClose: false }), T, "Withdraw build");
+  const txs = await o.job.step(pool.removeLiquidity({ user: o.owner, position: posKey, fromBinId: pd.lowerBinId, toBinId: pd.upperBinId, bps: new BN(o.bps), shouldClaimAndClose: false, skipUnwrapSOL: true }), T, "Withdraw build");
+  // Rebuilding a percentage removal after sending tx[0] can remove that percentage AGAIN.
+  // Until a persisted bin-chunk cursor exists, reject this path before any signature.
+  if (txs.length !== 1) throw new Error(`This withdrawal needs ${txs.length} transactions. Agents currently support single-transaction withdrawals only; no funds were moved. Use the position's withdrawal flow and review every step.`);
   const list = txs.map((tx, i) => ({ label: `${o.label} (${i + 1}/${txs.length})`, tx }));
-  const costs = await reviewCosts(o.connection, o.owner, list.map((l) => l.tx));
+  const costs = await reviewCosts(o.connection, o.owner, list.map((l) => l.tx), o.job);
   const est = (s: string) => (BigInt(s.split(".")[0] || "0") * BigInt(o.bps) / 10_000n).toString();
-  return { txs: list, bps: o.bps, estX: est(pd.totalXAmount), estY: est(pd.totalYAmount), costs, lower: pd.lowerBinId, upper: pd.upperBinId };
+  return { txs: list, bps: o.bps, estX: est(pd.totalXAmount), estY: est(pd.totalYAmount), costs, lower: pd.lowerBinId, upper: pd.upperBinId, mintX: pool.tokenX.publicKey.toBase58(), mintY: pool.tokenY.publicKey.toBase58() };
+}
+
+/** Destination labels from the API are not proof: verify both mint addresses on this RPC. */
+export async function verifyStagedDestination(o: { connection: Connection; poolAddress: string; mintX: string; mintY: string; cluster: "mainnet-beta" | "devnet"; job: Job }): Promise<"same" | "reversed"> {
+  const { PublicKey } = await import("@solana/web3.js");
+  const sdk = await o.job.step(loadSdk(), T, "SDK load");
+  const p = await o.job.step(sdk.default.create(o.connection, new PublicKey(o.poolAddress), { cluster: o.cluster, skipSolWrappingOperation: true }), T, "Destination pool verification");
+  const orientation = pairOrientation(p.tokenX.publicKey.toBase58(), p.tokenY.publicKey.toBase58(), o.mintX, o.mintY);
+  if (!orientation) throw new Error("Destination pool does not contain the same two mint addresses on this network.");
+  return orientation;
 }
