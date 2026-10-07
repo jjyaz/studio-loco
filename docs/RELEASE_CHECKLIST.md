@@ -1,6 +1,6 @@
 # Release readiness
 
-The Observatory passed funded devnet acceptance: six 20/21-bin × Spot/Curve/BidAsk native moves, exact 25% share withdrawals, preserved WSOL and six confirmed position cleanups. There are 27 confirmed transaction receipts including setup and no unresolved signatures. Funded mainnet signing and a browser-wallet rehearsal remain unperformed. Public deployment is the remaining release step after preview QA. See [the release procedure](OBSERVATORY_RELEASE.md) and the machine-readable evidence in `docs/qa/`.
+The Observatory passed funded devnet acceptance: six 20/21-bin × Spot/Curve/BidAsk native moves, exact 25% share withdrawals, preserved WSOL and six confirmed position cleanups. There are 27 confirmed transaction receipts including setup and no unresolved signatures. Funded mainnet signing and a browser-wallet rehearsal remain unperformed. The verified application commit `b8a11bd7` is published at [The Observatory](https://studioloco.cfd/app/agents). Production desktop routes, hydration, real watch-only positions and RPC/program reads passed; mobile QA passed separately in Lovable dev runtime. See [the release procedure](OBSERVATORY_RELEASE.md) and the machine-readable evidence in `docs/qa/`.
 
 | Item | State | Evidence |
 |---|---|---|
@@ -17,7 +17,7 @@ The Observatory passed funded devnet acceptance: six 20/21-bin × Spot/Curve/Bid
 | Funded devnet native acceptance | Pass — six cases, 27 confirmed transactions | Exact range/width/owner, 25% per-bin shares, WSOL account preservation and cleanup; zero pending signatures |
 | Funded mainnet signing and native orders | **Not run** | No funded mainnet transactions or native-order signatures in this pass |
 | Current preview runtime and UI | Pass in Lovable dev runtime | Five routes at 1280/390 px; no page errors/document overflow; wallet dialog, practice proposals/monitor/review, exact Apply→Arm→Disarm and real watch-only positions with spending blocked |
-| Public release of this update | **Pending deployment** | Funded acceptance passed; this update has not yet been deployed |
+| Public release of this update | Pass — published and browser-verified | Commit `b8a11bd7`; six production routes, wallet modal, practice opt-in, 10 real watch-only positions and RPC/program reads; [evidence](qa/production-verification.json) |
 | Confidential protocol | **Not deployed** | educational simulation only |
 
 ## Pass 4 (2026-10-06 12:06 UTC)
@@ -99,9 +99,9 @@ The Observatory passed funded devnet acceptance: six 20/21-bin × Spot/Curve/Bid
 - [x] Native SDK instruction composition has a 45-second bound; individual wallet-provider RPC requests bound headers and response bodies at 15 seconds and disable automatic 429 retries. JobControl continues tracking underlying work until it drains.
 - [x] Mainnet even-width Spot: 901 bytes, 488807 CU. Curve: 901 bytes, 488974 CU. BidAsk: 901 bytes, 485851 CU. Each had a 5000-lamport exact network fee, kept 46 bins and verified the simulated position's owner and pool. These are unsigned simulations, not funded receipts.
 - [x] Curve amount-slippage failures are retained in the evidence. No tolerance was loosened and no failed simulation was signed.
-- [x] Dedicated signed-devnet harness verifies genesis/program, creates a synthetic-token pool, covers 20/21-bin Spot/Curve/BidAsk native moves, 25% per-bin share withdrawals and explicit cleanup through the shared runner. Persistent unknown signatures stop a rerun. The harness passed compilation and funding preflight only; its signed matrix remains unexecuted.
-- [ ] Fund the dedicated QA wallet, run the signed matrix and verify all confirmed receipts.
-- [ ] Verify preview behavior and publish only after funded acceptance passes, then re-check the production routes and relay.
+- [x] Dedicated signed-devnet harness verifies genesis/program, creates a synthetic-token pool, covers 20/21-bin Spot/Curve/BidAsk native moves, 25% per-bin share withdrawals and explicit cleanup through the shared runner. Persistent unknown signatures stop a rerun. At this preparation stage, the harness passed compilation and funding preflight only. The signed matrix subsequently passed below.
+- [x] Fund the dedicated QA wallet, run the signed matrix and verify all confirmed receipts — completed in the acceptance pass below.
+- [x] Verify preview behavior and publish only after funded acceptance passes, then re-check the production routes and relay — completed below.
 - Current browser preview check redirects to Lovable sign-in. No authentication or browser wallet rehearsal was performed. An attempted local Worker smoke check could not start Wrangler in this environment (`uv_interface_addresses` system error); successful production bundling does not count as a runtime smoke pass.
 
 ### Confirmed funded acceptance (2026-10-07)
@@ -110,4 +110,12 @@ The Observatory passed funded devnet acceptance: six 20/21-bin × Spot/Curve/Bid
 - [x] Six native rebalances, six exact 25% share withdrawals and six full withdrawal/close cleanups confirmed. Every native move retained its 20/21-bin width, target range and owner. Existing WSOL survived. All six positions were closed and no unresolved signature remained.
 - [x] 27 confirmed transactions including reused setup receipts, 170000 lamports total network fees. Final unwrapped devnet SOL balance: 326215840 lamports. WSOL and setup pool/token/bin accounts remain test fixtures; the balance difference is not described as network fees alone or a full rent refund.
 - [x] Lovable read-only QA of commit ead532a0: `/`, `/app`, `/app/agents`, `/app/dispatch`, `/docs` returned 200 at 1280 and 390 px, no page errors/document overflow. Connect wallet opened on Enter and closed on Escape; invalid watch address blocked Inspect; explicit practice rules, arm, monitoring start/pause, proposal review and Close worked. Follow-up confirmed Apply→Arm→Disarm at both sizes; the earlier loose locator had clicked the position card. Real mainnet watch-only loaded eight verified positions and kept spending controls disabled. No wallet was connected. [Full scoped QA findings](qa/preview-ui-verification.json).
-- [ ] Publish the verified build and verify production routes, hydration and relay behavior.
+- [x] Publish the verified build and verify production routes, hydration and relay behavior — completed below.
+
+### Public production verification (2026-10-07)
+- [x] Published application commit `b8a11bd71c729c7e34779f3a56b9184cc5107b02` through the existing Lovable project; deployment request `72ffd53e-7d9e-449f-b100-f03de0111db2`. The deploy response was pending, followed by successful normal-browser verification on [studioloco.cfd](https://studioloco.cfd/app/agents).
+- [x] `/`, `/app`, `/app/agents`, `/app/dispatch`, `/docs` and `/network` rendered in production at desktop widths without document overflow. The live docs contain this release's six-case/27-receipt acceptance statement. Keyboard wallet dialog and explicit practice Run check proved hydration. With no wallet, real action checks/monitoring remain disabled.
+- [x] Production watch-only loaded 10 real mainnet SOL/USDC positions, real active-bin/range/holdings state and same-pair pool comparisons. Both staged-move buttons were disabled. No wallet was connected and nothing was signed or broadcast.
+- [x] Status showed confirmed slot 454359334, block height 432396837 and an executable DLMM program account. Meteora Data API was OK. The status UI does not expose the genesis hash, so a direct production genesis lookup is not claimed.
+- [x] Captured error-level console entries contained no application errors; 27 unrelated browser-extension metadata errors were identified by their extension URL. This is a console audit, not a separate pageerror listener. Raw CLI GET probes were refused (403/code 1010); the normal browser worked, and no client bypass was attempted.
+- [x] [Machine-readable production evidence](qa/production-verification.json) and [live screenshot](qa/observatory-live-release-1791412927834.jpg) retained. Production mobile and connected browser-wallet signing were not rerun; the existing mobile dev-runtime check and funded devnet Node-runner checks are reported separately.

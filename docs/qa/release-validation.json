@@ -1,5 +1,5 @@
 {
-  "at": "2026-10-07T22:31:27.011539+00:00",
+  "at": "2026-10-07T22:43:24.556942+00:00",
   "baseCommit": "ead532a08d61da6c4fd556877f59a250e82a4bc6",
   "unitTests": {
     "passed": 172,
@@ -74,9 +74,15 @@
     }
   },
   "publicRelease": {
-    "publishedThisPass": false,
+    "publishedThisPass": true,
     "blockedBy": null,
-    "state": "ready-for-publication; production verification pending"
+    "state": "published; normal-browser production verification passed",
+    "applicationCommit": "b8a11bd71c729c7e34779f3a56b9184cc5107b02",
+    "url": "https://studioloco.cfd/app/agents",
+    "deploymentId": "72ffd53e-7d9e-449f-b100-f03de0111db2",
+    "evidence": "production-verification.json",
+    "productionMobile": "not rerun; preview mobile passed separately",
+    "connectedBrowserWallet": "not performed"
   },
   "browserWalletRehearsal": "not performed; wallet dialog verified, signed devnet runner acceptance verified separately",
   "fundedMainnet": "not performed",
@@ -100,7 +106,7 @@
     "applyArmConfirmed": true,
     "realWatchOnlyLoaded": true,
     "fundedBrowserWallet": false,
-    "limitations": "Connected browser-wallet rehearsal and production runtime are separate; devnet signing used the dedicated Node QA wallet."
+    "limitations": "Connected browser-wallet rehearsal remains separate; devnet signing used the dedicated Node QA wallet. Desktop production verification is recorded in production-verification.json."
   },
   "localWorkerSmoke": {
     "passed": false,

@@ -1,0 +1,110 @@
+{
+  "at": "2026-10-07T22:43:24.556942+00:00",
+  "applicationCommit": "b8a11bd71c729c7e34779f3a56b9184cc5107b02",
+  "lovableProject": "24853ceb-2343-4b7d-9ed0-298ff931d003",
+  "deploymentId": "72ffd53e-7d9e-449f-b100-f03de0111db2",
+  "deploymentResult": "Lovable returned pending; normal browser subsequently verified the published application and new release content.",
+  "publicUrl": "https://studioloco.cfd/app/agents",
+  "passed": true,
+  "source": "Normal Chrome browser, public production UI; no wallet connected or signed.",
+  "routes": [
+    {
+      "url": "https://studioloco.cfd/",
+      "heading": "Good things move together.",
+      "viewportWidth": 1348,
+      "documentOverflow": 0
+    },
+    {
+      "url": "https://studioloco.cfd/app",
+      "heading": "Every station on the line.",
+      "viewportWidth": 1363,
+      "documentOverflow": 0
+    },
+    {
+      "url": "https://studioloco.cfd/app/dispatch",
+      "heading": "Two pools, one train.",
+      "viewportWidth": 1348,
+      "documentOverflow": 0
+    },
+    {
+      "url": "https://studioloco.cfd/app/agents",
+      "heading": "The Observatory.",
+      "viewportWidth": 1363,
+      "documentOverflow": 0
+    },
+    {
+      "url": "https://studioloco.cfd/docs",
+      "heading": "How the line works.",
+      "viewportWidth": 1363,
+      "documentOverflow": 0
+    },
+    {
+      "url": "https://studioloco.cfd/network",
+      "heading": "Signal box status.",
+      "viewportWidth": 1363,
+      "documentOverflow": 0
+    }
+  ],
+  "hydration": {
+    "walletDialog": "Opened on Enter and closed on Escape; no provider selected.",
+    "practice": "Explicit opt-in and Run check completed in the production UI.",
+    "noWallet": "My wallet status Disconnected; Run check and Start monitoring disabled."
+  },
+  "releaseIdentity": {
+    "docsShowConfirmedTransactions": 27,
+    "docsShowCases": 6,
+    "docsDiscloseMainnetAndBrowserSigningLimits": true,
+    "docsDiscloseOrdinaryDlmmAndNoKeeper": true
+  },
+  "watchOnly": {
+    "address": "6mch5rCLBtZ9DCnM2mx18Ud1XXhXAip7otw9LkrTXwTD",
+    "verifiedPositions": 10,
+    "pool": "5rCf1DM8LjKTw4YqhnoLcngyZYeNnQqztScTogYHAS6",
+    "activeBin": -5387,
+    "examplePosition": {
+      "address": "1Be6ZXynELowU6JjN1VRR4pRMEeAywdgpQdeKJp44id",
+      "lowerBin": -5388,
+      "upperBin": -5343,
+      "binCount": 46,
+      "status": "In range",
+      "tokenX": "0.410482 SOL",
+      "tokenY": "2.118942 USDC"
+    },
+    "samePairTableLoaded": true,
+    "stagedMoveButtons": 2,
+    "stagedMoveButtonsDisabled": true,
+    "monitor": "Paused",
+    "activity": "Manual check: 10 verified position(s).",
+    "signed": false,
+    "broadcast": false
+  },
+  "networkUi": {
+    "clusterLabel": "mainnet-beta",
+    "confirmedSlot": 454359334,
+    "blockHeight": 432396837,
+    "latencyMs": 125,
+    "epoch": 1051,
+    "coreVersion": "4.3.0",
+    "dlmmProgram": "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo",
+    "programFound": true,
+    "programExecutable": true,
+    "dataApi": "OK",
+    "indexedPools": 137207,
+    "genesisHash": "Not displayed by this UI; direct production genesis lookup not claimed."
+  },
+  "console": {
+    "applicationErrorMessages": 0,
+    "unrelatedExtensionErrorMessages": 27,
+    "extensionSource": "chrome-extension://kcdongibgcplmaagnmgpjhpjgmmaaaaa/content-script.bundle.js",
+    "extensionMessage": "Error sending browser metadata to extension: Object",
+    "scope": "Captured error-level console messages from this browser tab; not a separate pageerror listener."
+  },
+  "screenshot": "observatory-live-release-1791412927834.jpg",
+  "limitations": [
+    "Production browser verification was desktop only; 390px mobile QA passed separately in Lovable dev runtime.",
+    "Funded acceptance used the dedicated devnet Node QA signer and shared transaction runner, not a connected browser wallet.",
+    "Mainnet transactions were unsigned simulations only; no mainnet funds moved.",
+    "Ordinary DLMM only; no DLMM Pro adapter or background keeper.",
+    "Raw CLI GET probes returned HTTP 403 code 1010; no header or fingerprint bypass was attempted. The normal browser loaded production successfully."
+  ]
+}

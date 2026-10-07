@@ -1,6 +1,6 @@
 # The Observatory — acceptance and public release
 
-This update fixes native Meteora DLMM rebalance preparation and supplies reproducible acceptance checks. Funded devnet acceptance passed all six strategy/width cases with 27 confirmed transactions and no unresolved signatures. The update is awaiting publication and production verification.
+This update fixes native Meteora DLMM rebalance preparation and supplies reproducible acceptance checks. Funded devnet acceptance passed all six strategy/width cases with 27 confirmed transactions and no unresolved signatures. The verified application commit `b8a11bd7` is now public at [The Observatory](https://studioloco.cfd/app/agents). Production desktop UI and real read-only mainnet loading passed verification.
 
 ## What changed
 
@@ -28,7 +28,7 @@ The agent proposes rule-based actions while its tab is visible. Each product act
 | Funded mainnet/browser-wallet acceptance | Not performed | No mainnet funds used; dedicated devnet signing is verified separately |
 | Current preview runtime check | Pass in Lovable dev runtime, 1280/390 px | [Five routes, wallet dialog, practice flows, exact Apply→Arm and real watch-only positions](qa/preview-ui-verification.json); no page errors/document overflow |
 | Current local Worker smoke | Not completed | Wrangler startup hit an environment system error; production bundling passed |
-| Publication of this update | Pending deployment | Funded acceptance passed; production verification follows publication |
+| Publication of this update | Published and browser-verified | [Production evidence](qa/production-verification.json); six routes, hydration, 10 real watch-only positions and live RPC/program reads |
 
 The mainnet harness uses real public positions with signature verification disabled for simulation. Its broadcast methods throw, and it has no signer. Successful post-state checks verify range, owner and pool; they do not demonstrate settlement or ownership. Fees and compute are measurements of those specific messages, not fixed product costs. A protocol slippage error is a refusal to sign, not a successful rebalance.
 
@@ -82,6 +82,8 @@ On a timeout or unknown settlement, **stop**. Use the recorded signature to esta
 
 The user has already requested public release. No second publication approval is needed once the acceptance gate passes. Sync the reviewed commit to `jjyaz/studio-loco` without rewriting history, wait for Lovable to build that exact commit, then publish the existing project.
 
-After publication, verify `/`, `/app`, `/app/agents`, `/app/dispatch` and `/docs`; mobile/desktop hydration and navigation; the production relay's genesis/program reads; and no-wallet actions. Confirm the release's ordinary-DLMM scope, visible-tab monitoring and wallet-approval requirement are accurately disclosed. A read-only production check does not replace funded acceptance.
+This release is published and desktop-verified on the custom domain. `/`, `/app`, `/app/agents`, `/app/dispatch`, `/docs` and `/network` rendered without document overflow. Wallet modal keyboard behavior and explicit practice Run check proved hydration. Real watch-only loading returned 10 verified mainnet positions, live ranges/holdings and same-pair comparisons; spending controls remained disabled. The status page returned a live slot/block height, an executable DLMM account and a healthy Data API. Its UI does not display genesis, so a direct production genesis lookup is not claimed. No application error-level console messages were captured; unrelated browser-extension errors were recorded separately. [Full production findings](qa/production-verification.json) and [screenshot](qa/observatory-live-release-1791412927834.jpg).
+
+The production browser pass was desktop only. Mobile (390px) passed separately in Lovable dev runtime, and connected browser-wallet signing remains a separate unperformed rehearsal. The app clearly discloses ordinary DLMM, visible-tab monitoring and wallet approval for every action. A read-only production check does not replace the funded devnet acceptance or demonstrate funded mainnet settlement.
 
 If the release build fails or production regresses, retain the failed evidence and restore the last known working deployment with a new forward commit. Never rewrite published Git history or label simulated transactions as funded results.
