@@ -176,17 +176,13 @@ export function activeBinSlippage(slippageBps: number, binStep: number): number 
   return Math.max(0, Math.floor(Math.log1p(slippageBps / 10_000) / Math.log1p(binStep / 10_000) + 1e-12));
 }
 
-/**
- * Mirrors the SDK 1.9.14 BalancedStrategyBuilder (favorXIfImbalance=false) exactly.
- * Odd widths are preserved; for EVEN widths the SDK deposits width+1 bins (bid=side+1, ask=side-1),
- * so callers must compare with the original width and fall back to a staged move.
- */
+/** Exact-width target around the active bin; even ranges have one more bin on the bid side. */
 export function balancedTarget(activeId: number, width: number): { lower: number; upper: number } {
-  if (!Number.isInteger(width) || width < 1) throw new Error("Invalid width");
-  const side = Math.floor(width / 2);
-  let ask = side, bid = side;
-  if (width % 2 === 0) { ask -= 1; bid += 1; }
-  return { lower: activeId - bid, upper: activeId + ask };
+  if (!Number.isSafeInteger(activeId) || !Number.isSafeInteger(width) || width < 1) throw new Error("Invalid bin target");
+  const lower = activeId - Math.floor(width / 2);
+  const upper = lower + width - 1;
+  if (!Number.isSafeInteger(lower) || !Number.isSafeInteger(upper)) throw new Error("Invalid bin target");
+  return { lower, upper };
 }
 
 /* ---------------- observed-time continuity ---------------- */

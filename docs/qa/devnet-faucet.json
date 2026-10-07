@@ -1,0 +1,9 @@
+{
+  "at": "2026-10-07T21:25:16.159Z",
+  "network": "devnet",
+  "wallet": "FpebsUzBXJ9PLAkFi1Kq4wEPHtyRPznh5e5FpdztpZQZ",
+  "faucetOnly": true,
+  "requestedLamports": 500000000,
+  "funded": false,
+  "error": "Error: 429 Too Many Requests:  {\"jsonrpc\":\"2.0\",\"error\":{\"code\": 429, \"message\":\"You've either reached your airdrop limit today or the airdrop faucet has run dry. Please visit https://faucet.solana.com for alternate sources of test SOL\"}, \"id\": \"c0eb2f0f-490a-445f-a36f-14a8c41520d1\" } \r\n"
+}

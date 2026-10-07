@@ -258,14 +258,14 @@ export function Agents() {
       const reading = rule?.volatility ? await job.step(readVolatility(p.pool, settings.cluster, rule.volatility.frame, rule.volatility.candles, job.signal), 15_000, "Fresh price history") : null;
       if (!opts.stagedTo && (!rule || !proposalIsCurrent(p, { rule, pos: { ...freshRow, pool: freshRow.pair }, outRun: evidence && Date.now() - evidence.lastSeen <= MAX_GAP_MS ? evidence : undefined, vol: reading, now: Date.now() }))) throw new Error("This trigger is no longer the current decision. Run a fresh check.");
       job.check();
-      const builtAt = Date.now();
-      const base = { ruleRevision: rule?.revision ?? -1, wallet: ownerPk.toBase58(), cluster: settings.cluster, rpcId, pool: p.pool, position: p.position, slippageBps: settings.slippageBps, builtAt, gen };
+      const base = { ruleRevision: rule?.revision ?? -1, wallet: ownerPk.toBase58(), cluster: settings.cluster, rpcId, pool: p.pool, position: p.position, slippageBps: settings.slippageBps, gen };
       if (p.kind === "rebalance" && !opts.stagedTo) {
         const r = await buildNativeRebalance({ connection, owner: ownerPk, poolAddress: p.pool, position: p.position, strategy: rule?.strategy ?? "Spot", slippageBps: settings.slippageBps, cluster: settings.cluster, job });
         job.check();
         if (!r.ok) { setReview({ state: "staged", proposal: p, reason: r.reason }); addHistory("review", `Native rebalance not possible for ${shortAddr(p.position)}: ${r.reason}`); return; }
         const b = r.built;
-        const frozen: FrozenReview = { ...base, action: "rebalance", targetLower: b.target.lower, targetUpper: b.target.upper, feeLamports: b.costs.perTxFee[0] ?? null, solOutLamports: b.costs.solOutLamports };
+        const readyAt = Date.now(); setNow(readyAt);
+        const frozen: FrozenReview = { ...base, builtAt: readyAt, action: "rebalance", targetLower: b.target.lower, targetUpper: b.target.upper, feeLamports: b.costs.perTxFee[0] ?? null, solOutLamports: b.costs.solOutLamports };
         setReview({ state: "ready", proposal: p, frozen, built: { kind: "rebalance", b } });
         addHistory("review", `Rebalance review built: target ${b.target.lower}–${b.target.upper}, ${b.kind}${b.costs.simErrors[0] ? `, simulation failed: ${b.costs.simErrors[0]}` : ", simulated OK"}.`);
       } else {
@@ -274,7 +274,8 @@ export function Agents() {
         const orientation = opts.stagedTo ? await verifyStagedDestination({ connection, poolAddress: opts.stagedTo.pool, mintX: b.mintX, mintY: b.mintY, cluster: settings.cluster, job }) : null;
         job.check();
         const sourceWidth = b.upper - b.lower + 1;
-        const frozen: FrozenReview = { ...base, action: "withdraw", withdrawBps: pct * 100, feeLamports: b.costs.perTxFee[0] ?? null, solOutLamports: b.costs.solOutLamports };
+        const readyAt = Date.now(); setNow(readyAt);
+        const frozen: FrozenReview = { ...base, builtAt: readyAt, action: "withdraw", withdrawBps: pct * 100, feeLamports: b.costs.perTxFee[0] ?? null, solOutLamports: b.costs.solOutLamports };
         setReview({ state: "ready", proposal: p, frozen, built: { kind: "withdraw", b, staged: opts.stagedTo && orientation ? { targetPool: opts.stagedTo.pool, width: Math.min(sourceWidth, MAX_UI_BINS), sourceWidth, strategy: rule?.strategy ?? "Spot", orientation, mintX: b.mintX, mintY: b.mintY } : undefined } });
         addHistory("review", `Withdrawal review built (${pct}%)${b.costs.simErrors[0] ? `, simulation failed: ${b.costs.simErrors[0]}` : ", simulated OK"}.`);
       }

@@ -1,0 +1,82 @@
+{
+  "at": "2026-10-07T21:58:00.520163+00:00",
+  "baseCommit": "8af0833481c8a10198bd5e4e6e9ccbf667c174ed",
+  "unitTests": {
+    "passed": 172,
+    "failed": 0,
+    "files": 14,
+    "success": true
+  },
+  "sourceTypeScript": {
+    "passed": true
+  },
+  "qaTypeScript": {
+    "passed": true
+  },
+  "productionBuild": {
+    "passed": true,
+    "command": "npm run build"
+  },
+  "proofs": {
+    "native-mainnet-even-Spot.json": {
+      "passed": true,
+      "network": "mainnet-beta",
+      "strategy": "Spot",
+      "width": 46,
+      "signed": false,
+      "broadcast": false,
+      "blocked": null
+    },
+    "native-mainnet-even-Curve.json": {
+      "passed": true,
+      "network": "mainnet-beta",
+      "strategy": "Curve",
+      "width": 46,
+      "signed": false,
+      "broadcast": false,
+      "blocked": null
+    },
+    "native-mainnet-even-BidAsk.json": {
+      "passed": true,
+      "network": "mainnet-beta",
+      "strategy": "BidAsk",
+      "width": 46,
+      "signed": false,
+      "broadcast": false,
+      "blocked": null
+    },
+    "native-mainnet-odd-Curve-slippage-refusal.json": {
+      "passed": false,
+      "network": "mainnet-beta",
+      "strategy": "Curve",
+      "width": 69,
+      "signed": false,
+      "broadcast": false,
+      "blocked": null
+    },
+    "native-mainnet-odd-Curve.json": {
+      "passed": false,
+      "network": "mainnet-beta",
+      "strategy": "Curve",
+      "width": 69,
+      "signed": false,
+      "broadcast": false,
+      "blocked": null
+    },
+    "funded-devnet-acceptance.json": {
+      "passed": false,
+      "network": "devnet",
+      "strategy": null,
+      "width": null,
+      "signed": false,
+      "broadcast": false,
+      "blocked": "devnet-funding-required"
+    }
+  },
+  "publicRelease": {
+    "publishedThisPass": false,
+    "blockedBy": "Funded devnet acceptance has no signed receipts; test wallet requires devnet SOL."
+  },
+  "browserWalletRehearsal": "not performed in this pass",
+  "fundedMainnet": "not performed"
+}

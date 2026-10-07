@@ -1,19 +1,22 @@
 # Release readiness
 
-Not production-ready: no funded wallet has signed any transaction built by this app.
+The Observatory update is prepared for acceptance, but its public release is pending confirmed funded testing. No transaction has been signed or broadcast in this validation pass. The dedicated devnet QA wallet remains unfunded after the public faucet returned HTTP 429. See [the release procedure](OBSERVATORY_RELEASE.md) and the machine-readable evidence in `docs/qa/`.
 
 | Item | State | Evidence |
 |---|---|---|
-| Typecheck (`tsgo --noEmit -p .`) | Pass | 0 errors |
-| Unit tests (`vitest run`) | Pass — 64 tests, 4 files | core, hardening (tx runner incl. identity change during approval and hung block-height → unknown; indexed account verification vs SDK IDL discriminators; ≤100 chunking; open-orders pagination caps), anchor-runtime, app-routing |
-| Production build (`bun run build`) | Pass — exit 0 | |
+| Source + QA harness TypeScript | Pass | `npx tsc --noEmit -p .` and `npx tsc --noEmit -p scripts/qa/tsconfig.json`, 0 errors |
+| Unit tests | Pass — 172 tests, 14 files | Complete suite; machine-readable results captured, not inferred from exit status |
+| Production build (`npm run build`) | Pass — exit 0 | Client and Cloudflare Worker outputs generated |
+| Native mainnet rebalance, read-only | Pass for Spot, Curve and BidAsk at 46 bins | Exact simulation plus decoded position range, owner and pool; even width retained |
+| Curve native rebalance at 69 bins | Slippage refusal recorded | Two attempts returned protocol `ExceededAmountSlippageTolerance` (6003); signing remained blocked |
 | All routes render, WebGL disabled, 390 / 768 / 1280 px | Pass | 17 routes × 3 widths, 0 page errors, 0 document horizontal overflow; terminal table scrolls inside its own frame |
 | Hero art | Pass | Train and field visible at 390 and 1280; headline on clean sky |
 | Live pool list, real bins, limit-order mode detection | Pass | YZY-USDC active bin −124, mode Undetermined → order-capable per SDK |
 | Wallet absence | Pass | every action shows Connect wallet; nothing auto-transacts |
 | Keyboard focus, wallet modal, dialogs | Pass (pass 5, /app at 1280px) | Skip link first; nav, Settings, Connect wallet, tabs, Refresh, inputs all show focus (search via amber frame); Enter opens wallet dialog, Escape closes it; 0 page errors |
-| Devnet integration (create/add/swap/withdraw/close/orders) | **Not run** | no disposable devnet wallet run was performed this pass |
-| Funded wallet signing (all flows incl. native orders) | **Not run** | requires human approval |
+| Funded devnet native acceptance | **Blocked: test SOL required** | Dedicated devnet-only harness is ready; no signed receipts yet |
+| Funded mainnet signing and native orders | **Not run** | No funded mainnet transactions or native-order signatures in this pass |
+| Public release of this update | **Pending funded acceptance** | Prior production deployment remains published; this update has not been deployed |
 | Confidential protocol | **Not deployed** | educational simulation only |
 
 ## Pass 4 (2026-10-06 12:06 UTC)
@@ -73,9 +76,9 @@ Not production-ready: no funded wallet has signed any transaction built by this 
 ## Liquidity Agents (/app/agents)
 - [x] 128/128 tests (incl. src/test/agents.test.ts), tsgo typecheck clean, production build exit 0.
 - [x] Browser (dev): no-wallet empty state, practice scenario rule→arm→proposals→practice review at 1280px and 390px; no page errors, no horizontal overflow.
-- [ ] Live native rebalance built + simulated against a real owned mainnet position (needs a wallet with a position).
+- [x] Live native rebalance built + simulated using a real public mainnet position and sigVerify disabled; decoded post-state checked. No signing or ownership claim.
 - [ ] Funded signed rebalance / withdrawal (not performed; no funds used).
-- Known limit: SDK 1.9.14 balanced rebalance adds one bin to even-width ranges; such positions get a staged withdraw→add instead.
+- Historical limit, superseded below: SDK 1.9.14's convenience balanced helper adds one bin to even-width ranges. The explicit SDK strategy path now preserves the original width.
 
 ### Liquidity Agents review fixes (2026-10-07)
 - [x] 165/165 tests, clean TypeScript check, production build exit 0 and clean diff whitespace. React integration tests cover stale reads after rule edits, fresh arming, per-position volatility, short pauses, persisted pending signatures and cancelled preparation.
@@ -88,3 +91,13 @@ Not production-ready: no funded wallet has signed any transaction built by this 
 - Staged moves verify the destination's exact mint pair on chain and show its orientation, distribution and capped range width before withdrawing.
 - Read-only mainnet proof: an actual 25% withdrawal of a public SOL/USDC position simulated successfully (751 bytes, 297759 CU, 5000-lamport fee); no signature or broadcast. Same-pair discovery returned 40 valid pools; 12-candle 5m volatility was available. Even-width native rebalance correctly refused a changed width. Odd-width native instruction construction timed out; live native rebalance remains unverified.
 - Browser preview blocked in this session; screen behavior verified with React integration tests. Funded rebalance/withdrawal acceptance remains outstanding. This pass does not publish the site.
+
+### Native acceptance preparation (2026-10-07)
+- [x] Explicit SDK strategy construction replaces the convenience balanced helper. Target width is exactly `upper - lower + 1`, including even widths. A changed active-bin snapshot and zero gross redeposit are refused.
+- [x] Review expiry starts after all preparation and simulation finish; the visible UI clock updates immediately. A 25-second mocked build still receives a fresh 20-second window, and the execution guard refuses it after expiry.
+- [x] Native SDK instruction composition has a 45-second bound; individual wallet-provider RPC requests bound headers and response bodies at 15 seconds and disable automatic 429 retries. JobControl continues tracking underlying work until it drains.
+- [x] Mainnet even-width Spot: 901 bytes, 488807 CU. Curve: 901 bytes, 488974 CU. BidAsk: 901 bytes, 485851 CU. Each had a 5000-lamport exact network fee, kept 46 bins and verified the simulated position's owner and pool. These are unsigned simulations, not funded receipts.
+- [x] Curve amount-slippage failures are retained in the evidence. No tolerance was loosened and no failed simulation was signed.
+- [x] Dedicated signed-devnet harness verifies genesis/program, creates a synthetic-token pool, covers 20/21-bin Spot/Curve/BidAsk native moves, 25% per-bin share withdrawals and explicit cleanup through the shared runner. Persistent unknown signatures stop a rerun. The harness passed compilation and funding preflight only; its signed matrix remains unexecuted.
+- [ ] Fund the dedicated QA wallet, run the signed matrix and verify all confirmed receipts.
+- [ ] Verify preview behavior and publish only after funded acceptance passes, then re-check the production routes and relay.

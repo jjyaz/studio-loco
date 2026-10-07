@@ -6,8 +6,8 @@ import { Keypair, PublicKey, SystemProgram, Transaction } from "@solana/web3.js"
 import { JobControl, JobTimeout } from "@/lib/job-control";
 import { buildNativeRebalance, buildWithdraw, newAccountRentLamports, reviewCosts, verifyStagedDestination } from "@/lib/agents-chain";
 
-const mocked = vi.hoisted(() => ({ create: vi.fn() }));
-vi.mock("@/lib/dlmm", () => ({ loadSdk: async () => ({ default: { create: mocked.create } }) }));
+const mocked = vi.hoisted(() => ({ create: vi.fn(), parameters: vi.fn(() => ({ x0: new BN(1), y0: new BN(1), deltaX: new BN(0), deltaY: new BN(0) })) }));
+vi.mock("@/lib/dlmm", () => ({ loadSdk: async () => ({ default: { create: mocked.create }, buildLiquidityStrategyParameters: mocked.parameters, getLiquidityStrategyParameterBuilder: vi.fn() }) }));
 const owner = Keypair.generate().publicKey, poolAddress = Keypair.generate().publicKey.toBase58();
 const position = Keypair.generate().publicKey.toBase58();
 const mintX = "So11111111111111111111111111111111111111112", mintY = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
@@ -24,14 +24,14 @@ const pool = () => ({
   tokenX: { publicKey: new PublicKey(mintX) }, tokenY: { publicKey: new PublicKey(mintY) },
   getPosition: vi.fn(async () => ({ positionData: { owner, lowerBinId: 90, upperBinId: 110, totalXAmount: "1000", totalYAmount: "1000", feeX: new BN(0), feeY: new BN(0) } })),
   removeLiquidity: vi.fn(async (_args: unknown) => [tx()]),
-  simulateRebalancePositionWithBalancedStrategy: vi.fn(async () => ({ binArrayCost: 0.00203928, bitmapExtensionCost: 0, binArrayCount: 0, simulationResult: {
+  simulateRebalancePosition: vi.fn(async (..._args: unknown[]) => ({ rebalancePosition: { lbPair: { activeId: 100 } }, binArrayCost: 0.00203928, bitmapExtensionCost: 0, binArrayCount: 0, simulationResult: {
     // Real SDK offsets are NUMBERS, not BN. Actual deposits are net wallet top-ups.
     depositParams: [{ minDeltaId: -10, maxDeltaId: 10 }], actualAmountXDeposited: new BN(0), actualAmountYDeposited: new BN(0),
     amountXDeposited: new BN(997), amountYDeposited: new BN(998), actualAmountXWithdrawn: new BN(3), actualAmountYWithdrawn: new BN(2),
   } })),
   rebalancePosition: vi.fn(async () => ({ initBinArrayInstructions: [], rebalancePositionInstruction: tx().instructions })),
 });
-afterEach(() => { vi.useRealTimers(); mocked.create.mockReset(); });
+afterEach(() => { vi.useRealTimers(); mocked.create.mockReset(); mocked.parameters.mockClear(); });
 
 describe("chain review and SDK boundaries", () => {
   it("builds numeric SDK offsets, shows gross redeposit separately and preserves WSOL", async () => {
@@ -48,13 +48,46 @@ describe("chain review and SDK boundaries", () => {
     c.end(job);
   });
   it("rejects a small net top-up even when the position's gross holdings exceed it", async () => {
-    const p = pool(), response = await p.simulateRebalancePositionWithBalancedStrategy();
+    const p = pool(), response = await p.simulateRebalancePosition();
     response.simulationResult.actualAmountXDeposited = new BN(1);
-    p.simulateRebalancePositionWithBalancedStrategy.mockResolvedValue(response); mocked.create.mockResolvedValue(p);
+    p.simulateRebalancePosition.mockResolvedValue(response); mocked.create.mockResolvedValue(p);
     const c = new JobControl(), job = c.begin()!;
     const result = await buildNativeRebalance({ connection: connection() as never, owner, poolAddress, position, strategy: "Spot", slippageBps: 50, cluster: "mainnet-beta", job });
     expect(result.ok).toBe(false);
     expect(p.rebalancePosition).not.toHaveBeenCalled(); c.end(job);
+  });
+  it("passes an exact even-width range to the SDK's explicit native strategy", async () => {
+    const p = pool();
+    const pd = (await p.getPosition()).positionData;
+    pd.upperBinId = 109; p.getPosition.mockResolvedValue({ positionData: pd });
+    const response = await p.simulateRebalancePosition();
+    response.simulationResult.depositParams = [{ minDeltaId: -10, maxDeltaId: 9 }];
+    p.simulateRebalancePosition.mockResolvedValue(response); mocked.create.mockResolvedValue(p);
+    const c = new JobControl(), job = c.begin()!;
+    const result = await buildNativeRebalance({ connection: connection() as never, owner, poolAddress, position, strategy: "Spot", slippageBps: 50, cluster: "mainnet-beta", job });
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.built.target).toEqual({ lower: 90, upper: 109 });
+    const args = p.simulateRebalancePosition.mock.calls.at(-1)!;
+    const deposits = args[4] as { minDeltaId: BN; maxDeltaId: BN }[];
+    expect(deposits[0]!.minDeltaId.toNumber()).toBe(-10);
+    expect(deposits[0]!.maxDeltaId.toNumber()).toBe(9);
+    c.end(job);
+  });
+  it("refuses a moving active-bin snapshot before building an instruction", async () => {
+    const p = pool(), response = await p.simulateRebalancePosition();
+    response.rebalancePosition.lbPair.activeId = 101;
+    p.simulateRebalancePosition.mockResolvedValue(response); mocked.create.mockResolvedValue(p);
+    const c = new JobControl(), job = c.begin()!;
+    const result = await buildNativeRebalance({ connection: connection() as never, owner, poolAddress, position, strategy: "Spot", slippageBps: 50, cluster: "mainnet-beta", job });
+    expect(result.ok).toBe(false); expect(p.rebalancePosition).not.toHaveBeenCalled(); c.end(job);
+  });
+  it("refuses a rebalance that would redeposit nothing", async () => {
+    const p = pool(), response = await p.simulateRebalancePosition();
+    response.simulationResult.amountXDeposited = new BN(0); response.simulationResult.amountYDeposited = new BN(0);
+    p.simulateRebalancePosition.mockResolvedValue(response); mocked.create.mockResolvedValue(p);
+    const c = new JobControl(), job = c.begin()!;
+    const result = await buildNativeRebalance({ connection: connection() as never, owner, poolAddress, position, strategy: "Spot", slippageBps: 50, cluster: "mainnet-beta", job });
+    expect(result.ok).toBe(false); expect(p.rebalancePosition).not.toHaveBeenCalled(); c.end(job);
   });
   it("blocks a multi-transaction percentage withdrawal before simulation or signing", async () => {
     const p = pool(); p.removeLiquidity.mockResolvedValue([tx(), tx()]); mocked.create.mockResolvedValue(p);

@@ -11,6 +11,8 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "test": "vitest run",
+    "qa:mainnet": "vitest run --config scripts/qa/config.ts scripts/qa/native-mainnet.acceptance.ts",
+    "qa:devnet": "vitest run --config scripts/qa/config.ts scripts/qa/funded-devnet.acceptance.ts",
     "test:watch": "vitest"
   },
   "overrides": {

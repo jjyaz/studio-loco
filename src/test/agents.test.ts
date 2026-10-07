@@ -74,11 +74,12 @@ describe("price/bin math", () => {
     expect(pctMoveBetweenBins(10, 10, 25)).toBe(0);
     expect(pctMoveBetweenBins(n, 0, 25)).toBeLessThan(0);
   });
-  it("balanced target mirrors the SDK: odd widths preserved, even widths grow by one", () => {
+  it("preserves odd and even widths and rejects the SDK convenience builder's extra bin", () => {
     expect(balancedTarget(100, 21)).toEqual({ lower: 90, upper: 110 });
     const even = balancedTarget(100, 20);
-    expect(even).toEqual({ lower: 89, upper: 109 });
-    expect(verifyRebalanceTarget({ activeId: 100, width: 20, expected: even, deposits: [{ minDeltaId: new BN(-11), maxDeltaId: new BN(9) }], depositedX: new BN(0), depositedY: new BN(0), availX: new BN(0), availY: new BN(0) })).toMatch(/width/);
+    expect(even).toEqual({ lower: 90, upper: 109 });
+    expect(even.upper - even.lower + 1).toBe(20);
+    expect(verifyRebalanceTarget({ activeId: 100, width: 20, expected: even, deposits: [{ minDeltaId: new BN(-11), maxDeltaId: new BN(9) }], depositedX: new BN(0), depositedY: new BN(0), availX: new BN(0), availY: new BN(0) })).toMatch(/differs/);
   });
 });
 

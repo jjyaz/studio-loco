@@ -1,0 +1,336 @@
+{
+  "at": "2026-10-07T21:55:03.435Z",
+  "network": "mainnet-beta",
+  "signed": false,
+  "broadcast": false,
+  "calls": [
+    {
+      "method": "getGenesisHash",
+      "elapsedMs": 4016,
+      "status": 200
+    },
+    {
+      "method": "getMultipleAccounts",
+      "elapsedMs": 71,
+      "status": 200
+    },
+    {
+      "method": "getMultipleAccounts",
+      "elapsedMs": 106,
+      "status": 200
+    },
+    {
+      "method": "getProgramAccounts",
+      "elapsedMs": 218,
+      "status": 200
+    },
+    {
+      "method": "getAccountInfo",
+      "elapsedMs": 91,
+      "status": 200
+    },
+    {
+      "method": "getMultipleAccounts",
+      "elapsedMs": 122,
+      "status": 200
+    },
+    {
+      "method": "getAccountInfo",
+      "elapsedMs": 6542,
+      "status": 200
+    },
+    {
+      "method": "getAccountInfo",
+      "elapsedMs": 6625,
+      "status": 200
+    },
+    {
+      "method": "getAccountInfo",
+      "elapsedMs": 6636,
+      "status": 200
+    },
+    {
+      "method": "getAccountInfo",
+      "elapsedMs": 6645,
+      "status": 200
+    },
+    {
+      "method": "getAccountInfo",
+      "elapsedMs": 6655,
+      "status": 200
+    },
+    {
+      "method": "getAccountInfo",
+      "elapsedMs": 6670,
+      "status": 200
+    },
+    {
+      "method": "getAccountInfo",
+      "elapsedMs": 6679,
+      "status": 200
+    },
+    {
+      "method": "getAccountInfo",
+      "elapsedMs": 6687,
+      "status": 200
+    },
+    {
+      "method": "getAccountInfo",
+      "elapsedMs": 6683,
+      "status": 200
+    },
+    {
+      "method": "getMultipleAccounts",
+      "elapsedMs": 6291,
+      "status": 200
+    },
+    {
+      "method": "getMultipleAccounts",
+      "elapsedMs": 6336,
+      "status": 200
+    },
+    {
+      "method": "getMultipleAccounts",
+      "elapsedMs": 6467,
+      "status": 200
+    },
+    {
+      "method": "getMultipleAccounts",
+      "elapsedMs": 6376,
+      "status": 200
+    },
+    {
+      "method": "getMultipleAccounts",
+      "elapsedMs": 6332,
+      "status": 200
+    },
+    {
+      "method": "getMultipleAccounts",
+      "elapsedMs": 6373,
+      "status": 200
+    },
+    {
+      "method": "getMultipleAccounts",
+      "elapsedMs": 6297,
+      "status": 200
+    },
+    {
+      "method": "getMultipleAccounts",
+      "elapsedMs": 6395,
+      "status": 200
+    },
+    {
+      "method": "getMultipleAccounts",
+      "elapsedMs": 6328,
+      "status": 200
+    },
+    {
+      "method": "getAccountInfo",
+      "elapsedMs": 115,
+      "status": 200
+    },
+    {
+      "method": "getMultipleAccounts",
+      "elapsedMs": 65,
+      "status": 200
+    },
+    {
+      "method": "getMultipleAccounts",
+      "elapsedMs": 116,
+      "status": 200
+    },
+    {
+      "method": "getMultipleAccounts",
+      "elapsedMs": 84,
+      "status": 200
+    },
+    {
+      "method": "getAccountInfo",
+      "elapsedMs": 72,
+      "status": 200
+    },
+    {
+      "method": "getMultipleAccounts",
+      "elapsedMs": 73,
+      "status": 200
+    },
+    {
+      "method": "getMultipleAccounts",
+      "elapsedMs": 57,
+      "status": 200
+    },
+    {
+      "method": "getAccountInfo",
+      "elapsedMs": 101,
+      "status": 200
+    },
+    {
+      "method": "getMultipleAccounts",
+      "elapsedMs": 116,
+      "status": 200
+    },
+    {
+      "method": "getMultipleAccounts",
+      "elapsedMs": 78,
+      "status": 200
+    },
+    {
+      "method": "getAccountInfo",
+      "elapsedMs": 70,
+      "status": 200
+    },
+    {
+      "method": "getAccountInfo",
+      "elapsedMs": 68,
+      "status": 200
+    },
+    {
+      "method": "getAccountInfo",
+      "elapsedMs": 6170,
+      "status": 200
+    },
+    {
+      "method": "simulateTransaction",
+      "elapsedMs": 6734,
+      "status": 200
+    },
+    {
+      "method": "getLatestBlockhash",
+      "elapsedMs": 91,
+      "status": 200
+    },
+    {
+      "method": "getMultipleAccounts",
+      "elapsedMs": 75,
+      "status": 200
+    },
+    {
+      "method": "getFeeForMessage",
+      "elapsedMs": 83,
+      "status": 200
+    },
+    {
+      "method": "simulateTransaction",
+      "elapsedMs": 100,
+      "status": 200
+    }
+  ],
+  "stages": [
+    {
+      "label": "SDK load",
+      "elapsedMs": 1
+    },
+    {
+      "label": "Fresh pool load",
+      "elapsedMs": 288
+    },
+    {
+      "label": "Position read",
+      "elapsedMs": 238
+    },
+    {
+      "label": "Rebalance simulation",
+      "elapsedMs": 418
+    },
+    {
+      "label": "Rebalance instructions",
+      "elapsedMs": 13156
+    },
+    {
+      "label": "Blockhash",
+      "elapsedMs": 91
+    },
+    {
+      "label": "Wallet and rent accounts",
+      "elapsedMs": 122
+    },
+    {
+      "label": "Network fee",
+      "elapsedMs": 127
+    },
+    {
+      "label": "Exact simulation",
+      "elapsedMs": 135
+    }
+  ],
+  "strategy": "Curve",
+  "position": "1Be6ZXynELowU6JjN1VRR4pRMEeAywdgpQdeKJp44id",
+  "pool": "5rCf1DM8LjKTw4YqhnoLcngyZYeNnQqztScTogYHAS6",
+  "width": 46,
+  "result": {
+    "kind": "atomic",
+    "target": {
+      "lower": -5424,
+      "upper": -5379
+    },
+    "deposited": {
+      "x": "440443981",
+      "y": "1290768"
+    },
+    "walletOut": {
+      "x": "31",
+      "y": "51550"
+    },
+    "costs": {
+      "feeLamports": 5000,
+      "requiredLamports": 1493440,
+      "sizes": [
+        901
+      ],
+      "units": [
+        488974
+      ],
+      "simErrors": [
+        null
+      ],
+      "remaining": 0
+    },
+    "logs": [
+      [
+        "Program ComputeBudget111111111111111111111111111111 invoke [1]",
+        "Program ComputeBudget111111111111111111111111111111 success",
+        "Program ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL invoke [1]",
+        "Program log: CreateIdempotent",
+        "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA invoke [2]",
+        "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA consumed 179 of 1394499 compute units",
+        "Program return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=",
+        "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA success",
+        "Program 11111111111111111111111111111111 invoke [2]",
+        "Program 11111111111111111111111111111111 success",
+        "Program log: Initialize the associated token account",
+        "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA invoke [2]",
+        "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA consumed 37 of 1389410 compute units",
+        "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA success",
+        "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA invoke [2]",
+        "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA consumed 229 of 1386949 compute units",
+        "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA success",
+        "Program ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL consumed 13413 of 1399850 compute units",
+        "Program ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL success",
+        "Program LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo invoke [1]",
+        "Program log: Instruction: RebalanceLiquidity",
+        "Program log: process claim fee and reward",
+        "Program log: process removal",
+        "Program log: process deposit",
+        "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA invoke [2]",
+        "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA consumed 112 of 921151 compute units",
+        "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA success",
+        "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA invoke [2]",
+        "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA consumed 105 of 918685 compute units",
+        "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA success",
+        "Program LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo invoke [2]",
+        "Program LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo consumed 772 of 916478 compute units",
+        "Program LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo success",
+        "Program LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo invoke [2]",
+        "Program LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo consumed 772 of 912840 compute units",
+        "Program LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo success",
+        "Program LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo consumed 475411 of 1386437 compute units",
+        "Program LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo success"
+      ]
+    ]
+  },
+  "simulatedPositionRange": {
+    "lower": -5424,
+    "upper": -5379
+  },
+  "passed": true
+}

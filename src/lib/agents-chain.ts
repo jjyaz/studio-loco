@@ -1,6 +1,6 @@
 /**
  * Liquidity Agents chain layer: exact same-pair discovery, real OHLCV volatility,
- * native DLMM rebalance composition (SDK 1.9.14 balanced strategy) and partial withdrawals.
+ * native DLMM rebalance composition (explicit exact-width SDK strategy) and partial withdrawals.
  * Builds and SIMULATES only. Signing/sending happens exclusively in the shared runner (src/lib/tx.ts).
  */
 import BN from "bn.js";
@@ -14,6 +14,9 @@ import { activeBinSlippage, balancedTarget, knownLamports, pairOrientation, vola
 
 export const MAX_TX_BYTES = 1232;
 const T = 12_000;
+// SDK instruction composition contains several RPC reads plus an internal CU estimate.
+// Each request is transport-bounded; this stage also has a bounded total and a drain latch.
+export const NATIVE_BUILD_TIMEOUT_MS = 45_000;
 
 export interface PairPool { pool: ApiPool; orientation: "same" | "reversed" }
 export interface PairScan { rows: PairPool[]; rejected: number; fetchedAt: number; universe: string }
@@ -182,14 +185,22 @@ export async function buildNativeRebalance(o: { connection: Connection; owner: P
   const width = pd.upperBinId - pd.lowerBinId + 1;
   const activeId = pool.lbPair.activeId;
   const expected = balancedTarget(activeId, width);
-  const resp = await o.job.step(pool.simulateRebalancePositionWithBalancedStrategy(posKey, pd, STRATEGY_TYPE_VALUE[o.strategy] as never, new BN(0), new BN(0), new BN(0), new BN(0)), T, "Rebalance simulation");
-  const sim = resp.simulationResult;
   const availX = new BN(pd.totalXAmount.split(".")[0] ?? "0").add(pd.feeX);
   const availY = new BN(pd.totalYAmount.split(".")[0] ?? "0").add(pd.feeY);
+  // The SDK's convenience balanced builder adds one bin to even widths. Use its
+  // public explicit strategy API, with the SAME exact range shown in the review.
+  const minDeltaId = new BN(expected.lower - activeId), maxDeltaId = new BN(expected.upper - activeId);
+  const params = sdk.buildLiquidityStrategyParameters(availX, availY, minDeltaId, maxDeltaId, new BN(pool.lbPair.binStep), false, new BN(activeId), sdk.getLiquidityStrategyParameterBuilder(STRATEGY_TYPE_VALUE[o.strategy] as never));
+  const resp = await o.job.step(pool.simulateRebalancePosition(posKey, pd, true, true,
+    [{ minDeltaId, maxDeltaId, x0: params.x0, y0: params.y0, deltaX: params.deltaX, deltaY: params.deltaY, favorXInActiveBin: false }],
+    [{ minBinId: new BN(pd.lowerBinId), maxBinId: new BN(pd.upperBinId), bps: new BN(10_000) }]), T, "Rebalance simulation");
+  if (resp.rebalancePosition.lbPair.activeId !== activeId) return { ok: false, staged: true, reason: "The active bin changed during preparation. Rebuild from fresh pool state." };
+  const sim = resp.simulationResult;
   const why = verifyRebalanceTarget({ activeId, width, expected, deposits: sim.depositParams ?? [], depositedX: sim.actualAmountXDeposited, depositedY: sim.actualAmountYDeposited, availX, availY });
   if (why) return { ok: false, staged: true, reason: why };
+  if (sim.amountXDeposited.isZero() && sim.amountYDeposited.isZero()) return { ok: false, staged: true, reason: "This target would not redeposit any liquidity. Review a different range or a withdrawal instead." };
   const maxActive = activeBinSlippage(o.slippageBps, pool.lbPair.binStep);
-  const ixs = await o.job.step(pool.rebalancePosition(resp, new BN(maxActive), o.owner, o.slippageBps / 100), T, "Rebalance instructions");
+  const ixs = await o.job.step(pool.rebalancePosition(resp, new BN(maxActive), o.owner, o.slippageBps / 100), NATIVE_BUILD_TIMEOUT_MS, "Rebalance instructions");
   // Keep SDK compute-budget instructions; adding another SetComputeUnitLimit is invalid.
   const one = await freshTx(o.connection, o.owner, [...ixs.initBinArrayInstructions, ...ixs.rebalancePositionInstruction], o.job);
   let size = Infinity;

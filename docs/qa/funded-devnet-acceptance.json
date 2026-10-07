@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-07T21:33:08.779Z",
+  "network": "devnet",
+  "rpc": "https://api.devnet.solana.com",
+  "realMainnetFunds": false,
+  "passed": false,
+  "operations": [],
+  "wallet": "FpebsUzBXJ9PLAkFi1Kq4wEPHtyRPznh5e5FpdztpZQZ",
+  "initialBalanceLamports": 0,
+  "blocked": "devnet-funding-required",
+  "error": "Fund this dedicated wallet with 0.5 DEVNET SOL using https://faucet.solana.com, then rerun: FpebsUzBXJ9PLAkFi1Kq4wEPHtyRPznh5e5FpdztpZQZ. Nothing was signed.",
+  "unresolvedSignatures": []
+}

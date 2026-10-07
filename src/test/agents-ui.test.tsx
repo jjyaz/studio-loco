@@ -98,4 +98,34 @@ describe("Agents screen race and monitoring regressions", () => {
     expect(await screen.findByText(/previous transaction's settlement is unresolved/)).toBeInTheDocument();
     expect(mocks.rebalance).not.toHaveBeenCalled(); expect(mocks.run).not.toHaveBeenCalled();
   });
+  it("starts the review's full 20 seconds after a slow successful native build", async () => {
+    const start = Date.now(), clock = vi.spyOn(Date, "now").mockReturnValue(start);
+    try {
+      seed({ [position]: armed() }); render(<Agents />);
+      fireEvent.click(screen.getByRole("button", { name: "Run check" }));
+      const prepare = await screen.findByRole("button", { name: "Prepare review" });
+      let finish!: (r: unknown) => void;
+      mocks.rebalance.mockReturnValue(new Promise((resolve) => { finish = resolve; }));
+      fireEvent.click(prepare);
+      await waitFor(() => expect(mocks.rebalance).toHaveBeenCalledOnce());
+      clock.mockReturnValue(start + 25_000);
+      await act(async () => finish({ ok: true, built: {
+        kind: "atomic", txs: [{ label: "Native rebalance", tx: {} }], target: { lower: 110, upper: 130 }, activeId: 120, width: 21,
+        withdrawn: { x: "1000", y: "1000" }, deposited: { x: "997", y: "998" }, walletOut: { x: "3", y: "2" },
+        binArrayCost: 0, bitmapExtensionCost: 0, binArrayCount: 0, maxActiveBinSlippage: 1,
+        costs: { feeLamports: 5000, perTxFee: [5000], solOutLamports: 5000, requiredLamports: 5000, walletLamports: 10_000_000,
+          sizes: [800], units: [300_000], simErrors: [null], logs: [[]], remaining: 0 },
+      } }));
+      const approve = await screen.findByRole("button", { name: "Approve in wallet" });
+      expect(approve).toBeEnabled();
+      let finishRun!: (r: unknown[]) => void;
+      mocks.run.mockReturnValue(new Promise((resolve) => { finishRun = resolve; })); fireEvent.click(approve);
+      await waitFor(() => expect(mocks.run).toHaveBeenCalledOnce());
+      const options = mocks.run.mock.calls[0]![1];
+      expect(options.semanticGuard()).toBeNull();
+      clock.mockReturnValue(start + 45_001);
+      expect(options.semanticGuard()).toMatch(/expired/);
+      await act(async () => finishRun([]));
+    } finally { clock.mockRestore(); }
+  });
 });
