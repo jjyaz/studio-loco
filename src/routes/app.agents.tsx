@@ -14,7 +14,7 @@ import { JobCancelled, JobControl, JobTimeout } from "@/lib/job-control";
 import { MAX_UI_BINS, STRATEGIES, type StrategyName } from "@/lib/strategy";
 import { feeTvlPct, v24 } from "@/lib/meteora-api";
 import {
-  DEFAULT_RULE, REVIEW_TTL_MS, SUPPORTED_COMMANDS, allocation, armRule, disarmRule, editRule, evaluate, observeOut, observedMs,
+  DEFAULT_RULE, REVIEW_TTL_MS, balancedTarget, SUPPORTED_COMMANDS, allocation, armRule, disarmRule, editRule, evaluate, observeOut, observedMs,
   parseCommand, parseRuleStore, pctMoveBetweenBins, propose, rebaseAfterConfirmedRebalance, reviewStaleReason, rpcIdentity,
   rulesStorageKey, spendRefusal, type AgentMode, type BinLite, type FrozenReview, type LiveIdentity, type OutRun, type Proposal,
   type Rule, type RuleParams, type VolReading,
@@ -125,7 +125,7 @@ function Agents() {
 
   const live = useRef<LiveIdentity & { rules: Record<string, Rule>; rowKeys: Set<string> }>(null as never);
   live.current = { ruleRevision: undefined, wallet: wallet.publicKey?.toBase58() ?? "", cluster: settings.cluster, rpcId, practiceSetting: settings.practice, mode, slippageBps: settings.slippageBps, gen: genRef.current, positionPresent: false, rules, rowKeys: new Set((rows ?? []).map((r) => r.key)) };
-  const liveFor = (position: string): LiveIdentity => ({ ...live.current, ruleRevision: live.current.rules[position]?.revision, positionPresent: live.current.rowKeys.has(position) });
+  const liveFor = (position: string): LiveIdentity => ({ ...live.current, ruleRevision: live.current.rules[position]?.revision ?? -1, positionPresent: live.current.rowKeys.has(position) });
 
   const refusal = spendRefusal({ mode, practiceSetting: settings.practice, canSign: runner.canSign });
   const unresolved = runner.steps?.find((s) => s.phase === "unknown")?.pending ?? null;
@@ -407,7 +407,7 @@ function EmptyState({ onPractice, onWatch }: { onPractice: () => void; onWatch: 
 function PositionCard({ r, rule, vol, outRun, selected, onSelect }: { r: ViewRow; rule?: Rule; vol?: VolReading; outRun?: OutRun; selected: boolean; onSelect: () => void }) {
   const out = r.activeId < r.lower || r.activeId > r.upper;
   const ev = rule ? evaluate({ rule, pos: { key: r.key, pool: r.pair, activeId: r.activeId, lower: r.lower, upper: r.upper, binStep: r.binStep }, outRun, vol: vol ?? null, now: Date.now() }) : null;
-  const target = rule && ev?.triggers.find((t) => t.kind !== "out-time" && t.kind !== "volatility") ? (() => { const w = r.upper - r.lower + 1; const s = Math.floor(w / 2); return w % 2 === 0 ? { lower: r.activeId - s - 1, upper: r.activeId + s - 1 } : { lower: r.activeId - s, upper: r.activeId + s }; })() : null;
+  const target = rule && ev?.triggers.find((t) => t.kind !== "out-time" && t.kind !== "volatility") ? balancedTarget(r.activeId, r.upper - r.lower + 1) : null;
   return (
     <Panel className={cn(selected && "outline outline-2 outline-amber")}>
       <button type="button" onClick={onSelect} className="block w-full text-left" aria-pressed={selected}>
