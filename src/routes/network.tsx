@@ -9,6 +9,7 @@ import { explorerAccount, timeAgo } from "@/lib/format";
 import { redactUrls } from "@/lib/format";
 import { useSettings } from "@/lib/settings";
 import { CAPABILITIES } from "@/lib/capabilities";
+import { GENESIS, withTimeout } from "@/lib/tx";
 
 export const Route = createFileRoute("/network")({
   head: () => ({
@@ -26,21 +27,23 @@ function Network() {
   const { connection } = useConnection();
   const { settings } = useSettings();
   const rpc = useQuery({
-    queryKey: ["net-rpc", connection.rpcEndpoint],
+    queryKey: ["net-rpc", settings.cluster, connection.rpcEndpoint],
     refetchInterval: 15_000,
     retry: false,
     queryFn: async () => {
       const { PublicKey } = await import("@solana/web3.js");
       const t0 = performance.now();
-      const slot = await connection.getSlot("confirmed");
+      const genesis = await withTimeout(connection.getGenesisHash(), 15_000, "Network identity");
+      if (genesis !== GENESIS[settings.cluster]) throw new Error("RPC genesis does not match the selected network. Check Settings before proceeding.");
+      const slot = await withTimeout(connection.getSlot("confirmed"), 15_000, "Reading slot");
       const latency = Math.round(performance.now() - t0);
       const [height, version, epoch, program] = await Promise.all([
-        connection.getBlockHeight("confirmed"),
-        connection.getVersion(),
-        connection.getEpochInfo("confirmed"),
-        connection.getAccountInfo(new PublicKey(DLMM_PROGRAM_ID)),
+        withTimeout(connection.getBlockHeight("confirmed"), 15_000, "Reading block height"),
+        withTimeout(connection.getVersion(), 15_000, "Reading core version"),
+        withTimeout(connection.getEpochInfo("confirmed"), 15_000, "Reading epoch"),
+        withTimeout(connection.getAccountInfo(new PublicKey(DLMM_PROGRAM_ID)), 15_000, "Reading DLMM program"),
       ]);
-      return { slot, latency, height, version: version["solana-core"], features: version["feature-set"], epoch: epoch.epoch, progress: epoch.slotIndex / epoch.slotsInEpoch, program: program ? { executable: program.executable, owner: program.owner.toBase58() } : null };
+      return { genesis, slot, latency, height, version: version["solana-core"], features: version["feature-set"], epoch: epoch.epoch, progress: epoch.slotIndex / epoch.slotsInEpoch, program: program ? { executable: program.executable, owner: program.owner.toBase58() } : null };
     },
   });
   const api = useQuery({
@@ -68,6 +71,7 @@ function Network() {
               <Stat label="Epoch" value={rpc.data ? `${rpc.data.epoch} · ${(rpc.data.progress * 100).toFixed(1)}%` : "…"} />
               <Stat label="Core version" value={rpc.data?.version ?? "…"} />
               <Stat label="Feature set" value={rpc.data?.features ?? "…"} />
+              <div className="col-span-2"><Stat label="Network identity" value={rpc.data ? "Genesis verified" : "…"} sub={rpc.data ? <span className="break-all font-mono">{rpc.data.genesis}</span> : undefined} /></div>
             </div>
           )}
         </Panel>

@@ -350,6 +350,7 @@ export function Agents() {
         <p className="absolute bottom-3 left-4 station-code text-cream">ST-07 · The Observatory · rule-based observation</p>
       </div>
       <PageHead code="ST-07 · Liquidity Agents" title="The Observatory." intro="Arm rules on real DLMM positions. The agent observes while this tab is open and prepares proposals; your wallet approves every move. No keeper, no auto-signing, no forecasts." cap={mode === "practice" ? ["practice"] : ["live"]} />
+      <div className="-mt-2 mb-6 flex flex-wrap gap-x-5 gap-y-3 text-sm text-cream/75"><Link to="/app/replay" className="underline hover:text-amber">Test rules in the Replay Room</Link><Link to="/app/checks" className="underline hover:text-amber">Rehearse your wallet</Link></div>
 
       <Panel className="mb-6">
         <div className="flex flex-wrap items-end gap-4">

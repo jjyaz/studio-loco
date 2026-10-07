@@ -1,40 +1,54 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import type { Signer, Transaction } from "@solana/web3.js";
 import { assertCluster, browserPendingStore, checkSignature, UNSUPPORTED_WALLET, runSequence, summarize, TERMINAL_PHASES, type PendingTx, type TxStep } from "@/lib/tx";
 import { explorerTx, shortAddr } from "@/lib/format";
 import { useSettings, type Cluster } from "@/lib/settings";
 import { cn } from "@/lib/utils";
+import { noServerTransaction, txCoordinator } from "@/lib/tx-coordinator";
+
+export function useActiveTransaction() {
+  return useSyncExternalStore(txCoordinator.subscribe, txCoordinator.getSnapshot, noServerTransaction);
+}
 
 export function useTxRunner() {
   const { connection } = useConnection();
   const wallet = useWallet();
   const { settings } = useSettings();
   const [steps, setSteps] = useState<TxStep[] | null>(null);
-  const [running, setRunning] = useState(false);
-  const lock = useRef(false);
+  const active = useActiveTransaction();
+  const mounted = useRef(false);
+  const epoch = useRef(0);
   const [ranCluster, setRanCluster] = useState<Cluster>(settings.cluster);
   // live identity, read by the guard before every signature in a sequence
   const live = useRef({ wallet: "", cluster: settings.cluster as string, rpc: "" });
-  live.current = { wallet: wallet.publicKey?.toBase58() ?? "", cluster: settings.cluster, rpc: settings.rpc[settings.cluster] ?? "" };
+  const next = { wallet: wallet.publicKey?.toBase58() ?? "", cluster: settings.cluster, rpc: settings.rpc[settings.cluster] ?? "" };
+  if (live.current.wallet !== next.wallet || live.current.cluster !== next.cluster || live.current.rpc !== next.rpc) epoch.current++;
+  live.current = next;
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; epoch.current++; }; }, []);
   const canSign = !!wallet.publicKey && !!wallet.signTransaction;
   async function run(list: { label: string; tx: Transaction; signers?: Signer[] }[], extra: { semanticGuard?: () => string | null; maxFeeLamports?: number } = {}): Promise<TxStep[]> {
     if (!wallet.publicKey) throw new Error("Connect a wallet first");
     if (!wallet.signTransaction) throw new Error(UNSUPPORTED_WALLET);
-    if (lock.current) throw new Error("Another transaction is already in progress");
     if (list.length === 0) { setSteps([]); return []; }
-    lock.current = true;
-    setRunning(true);
     const start = { ...live.current };
+    const startedEpoch = epoch.current;
+    const lease = txCoordinator.acquire({ wallet: start.wallet, cluster: start.cluster, label: list[0]!.label });
     setRanCluster(settings.cluster);
     try {
       return await runSequence({
         connection,
         wallet: { publicKey: wallet.publicKey, signTransaction: wallet.signTransaction },
         steps: list,
-        onUpdate: setSteps,
+        onUpdate: (state) => {
+          if (mounted.current) setSteps(state);
+          const current = state.find((s) => s.phase !== "idle" && !TERMINAL_PHASES.includes(s.phase));
+          if (current) lease.update(current.label, current.phase);
+        },
         ctx: { cluster: settings.cluster, rpc: settings.rpc[settings.cluster] ? "custom" : "relay", store: browserPendingStore, ...extra,
           identityGuard: () => {
+            if (!mounted.current) return "This review's page was closed. The old approval was discarded; open a fresh review.";
+            if (epoch.current !== startedEpoch) return "Wallet, network or RPC changed after this action started. Open a fresh review.";
             const n = live.current;
             if (n.wallet !== start.wallet) return "The connected wallet changed during this sequence, so remaining steps were stopped.";
             if (n.cluster !== start.cluster || n.rpc !== start.rpc) return "The network or RPC changed during this sequence, so remaining steps were stopped.";
@@ -42,11 +56,20 @@ export function useTxRunner() {
           } },
       });
     } finally {
-      lock.current = false;
-      setRunning(false);
+      lease.release();
     }
   }
-  return { run, steps, running, canSign, ranCluster, reset: () => setSteps(null) };
+  return { run, steps, running: !!active, canSign, ranCluster, reset: () => setSteps(null) };
+}
+
+export function ActiveTxNotice() {
+  const active = useActiveTransaction();
+  if (!active) return null;
+  return <div className="mb-6 border border-amber p-4 text-sm" role="status">
+    <p className="station-code text-amber">Wallet action in progress · {active.cluster}</p>
+    <p className="mt-2 break-words">{active.label} · {PHASE_TEXT[active.phase]}</p>
+    <p className="mt-1 text-xs text-cream/75">Other wallet actions wait until this request settles. Changing pages invalidates an approval that has not been sent; already-broadcast transactions still need confirmation.</p>
+  </div>;
 }
 
 const PHASE_TEXT: Record<TxStep["phase"], string> = {

@@ -88,6 +88,17 @@ export function retryAfterMs(header: string | null, fallback: number, now = Date
   return Math.min(Math.max(0, ms), MAX_RETRY_WAIT_MS);
 }
 
+/** Bound headers AND body consumption, even if a fetch implementation ignores abort. */
+function abortable<T>(work: Promise<T>, signal: AbortSignal): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const onAbort = () => reject(new DOMException("Request cancelled", "AbortError"));
+    const clear = () => signal.removeEventListener("abort", onAbort);
+    signal.addEventListener("abort", onAbort, { once: true });
+    if (signal.aborted) onAbort();
+    work.then((value) => { clear(); resolve(value); }, (error) => { clear(); reject(error); });
+  });
+}
+
 /** fetch with timeout, cancellation, 429/5xx retry with backoff. */
 export async function fetchJson<T>(
   url: string,
@@ -99,9 +110,10 @@ export async function fetchJson<T>(
     const ctl = new AbortController();
     const onAbort = () => ctl.abort();
     signal?.addEventListener("abort", onAbort);
+    if (signal?.aborted) ctl.abort();
     const timer = setTimeout(() => ctl.abort(), timeoutMs);
     try {
-      const res = await fetchImpl(url, { signal: ctl.signal, headers: { accept: "application/json" } });
+      const res = await abortable(fetchImpl(url, { signal: ctl.signal, headers: { accept: "application/json" } }), ctl.signal);
       if (res.status === 429) {
         lastErr = new ApiError("Meteora API rate limit reached (429). Try again shortly.", "rate-limit", 429);
         if (attempt >= retries) throw lastErr;
@@ -117,8 +129,11 @@ export async function fetchJson<T>(
         throw lastErr;
       }
       try {
-        return (await res.json()) as T;
-      } catch {
+        const value = await abortable(res.json(), ctl.signal) as T;
+        if (signal?.aborted) throw new ApiError("Request cancelled", "aborted");
+        return value;
+      } catch (error) {
+        if (ctl.signal.aborted || error instanceof ApiError) throw error;
         throw new ApiError("Meteora API returned unreadable data", "parse");
       }
     } catch (e) {

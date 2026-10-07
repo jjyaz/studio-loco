@@ -1,0 +1,932 @@
+{
+  "success": true,
+  "numTotalTests": 202,
+  "numPassedTests": 202,
+  "numFailedTests": 0,
+  "numPendingTests": 0,
+  "startTime": 1791416450129,
+  "files": [
+    {
+      "file": "agents-chain.test.ts",
+      "status": "passed",
+      "tests": [
+        {
+          "name": "chain review and SDK boundaries builds numeric SDK offsets, shows gross redeposit separately and preserves WSOL",
+          "status": "passed"
+        },
+        {
+          "name": "chain review and SDK boundaries rejects a small net top-up even when the position's gross holdings exceed it",
+          "status": "passed"
+        },
+        {
+          "name": "chain review and SDK boundaries passes an exact even-width range to the SDK's explicit native strategy",
+          "status": "passed"
+        },
+        {
+          "name": "chain review and SDK boundaries refuses a moving active-bin snapshot before building an instruction",
+          "status": "passed"
+        },
+        {
+          "name": "chain review and SDK boundaries refuses a rebalance that would redeposit nothing",
+          "status": "passed"
+        },
+        {
+          "name": "chain review and SDK boundaries blocks a multi-transaction percentage withdrawal before simulation or signing",
+          "status": "passed"
+        },
+        {
+          "name": "chain review and SDK boundaries refuses a destination whose real mint pair differs from its API label",
+          "status": "passed"
+        },
+        {
+          "name": "chain review and SDK boundaries does not double-charge the simulated fee",
+          "status": "passed"
+        },
+        {
+          "name": "chain review and SDK boundaries does not let account refunds hide upfront rent",
+          "status": "passed"
+        },
+        {
+          "name": "chain review and SDK boundaries counts only the rent reserve of a new WSOL account, not withdrawn SOL",
+          "status": "passed"
+        },
+        {
+          "name": "chain review and SDK boundaries holds the drain latch until the original timed-out RPC settles",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "agents-regressions.test.ts",
+      "status": "passed",
+      "tests": [
+        {
+          "name": "Liquidity Agent regression guards keeps active-bin movement within configured slippage, including zero",
+          "status": "passed"
+        },
+        {
+          "name": "Liquidity Agent regression guards distinguishes different volatility rules on the same pool",
+          "status": "passed"
+        },
+        {
+          "name": "Liquidity Agent regression guards rejects future, duplicate and gapped candles instead of computing low risk",
+          "status": "passed"
+        },
+        {
+          "name": "Liquidity Agent regression guards invalidates queued proposals when a trigger clears, a rule changes or a higher risk wins",
+          "status": "passed"
+        },
+        {
+          "name": "Liquidity Agent regression guards refuses an unusable cost review: {\"walletLamports\":null}",
+          "status": "passed"
+        },
+        {
+          "name": "Liquidity Agent regression guards refuses an unusable cost review: {\"walletLamports\":null}",
+          "status": "passed"
+        },
+        {
+          "name": "Liquidity Agent regression guards refuses an unusable cost review: {\"walletLamports\":-1}",
+          "status": "passed"
+        },
+        {
+          "name": "Liquidity Agent regression guards refuses an unusable cost review: {\"perTxFee\":[null]}",
+          "status": "passed"
+        },
+        {
+          "name": "Liquidity Agent regression guards refuses an unusable cost review: {\"perTxFee\":[null]}",
+          "status": "passed"
+        },
+        {
+          "name": "Liquidity Agent regression guards refuses an unusable cost review: {\"perTxFee\":[-1]}",
+          "status": "passed"
+        },
+        {
+          "name": "Liquidity Agent regression guards refuses an unusable cost review: {\"requiredLamports\":null}",
+          "status": "passed"
+        },
+        {
+          "name": "Liquidity Agent regression guards refuses an unusable cost review: {\"requiredLamports\":0}",
+          "status": "passed"
+        },
+        {
+          "name": "Liquidity Agent regression guards refuses an unusable cost review: {\"requiredLamports\":9007199254740992}",
+          "status": "passed"
+        },
+        {
+          "name": "Liquidity Agent regression guards refuses an unusable cost review: {\"solOutLamports\":1.5}",
+          "status": "passed"
+        },
+        {
+          "name": "Liquidity Agent regression guards refuses an unusable cost review: {\"sizes\":[1233]}",
+          "status": "passed"
+        },
+        {
+          "name": "Liquidity Agent regression guards refuses an unusable cost review: {\"sizes\":[null]}",
+          "status": "passed"
+        },
+        {
+          "name": "Liquidity Agent regression guards refuses an unusable cost review: {\"units\":[null]}",
+          "status": "passed"
+        },
+        {
+          "name": "Liquidity Agent regression guards refuses an unusable cost review: {\"units\":[1400001]}",
+          "status": "passed"
+        },
+        {
+          "name": "Liquidity Agent regression guards refuses an unusable cost review: {\"simErrors\":[]}",
+          "status": "passed"
+        },
+        {
+          "name": "Liquidity Agent regression guards refuses an unusable cost review: {\"simErrors\":[\"Instruction failed\"]}",
+          "status": "passed"
+        },
+        {
+          "name": "Liquidity Agent regression guards uses the reviewed upfront requirement and does not add the fee twice",
+          "status": "passed"
+        },
+        {
+          "name": "Liquidity Agent regression guards keeps unresolved settlement locked across an RPC change and ignores another wallet/network",
+          "status": "passed"
+        },
+        {
+          "name": "Liquidity Agent regression guards converts fractional SOL rent estimates safely and rejects bad estimates",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "agents-ui.test.tsx",
+      "status": "passed",
+      "tests": [
+        {
+          "name": "Agents screen race and monitoring regressions cancels preparation on close and never reopens a late review",
+          "status": "passed"
+        },
+        {
+          "name": "Agents screen race and monitoring regressions discards an in-flight check after editing a rule and preserves the edited revision",
+          "status": "passed"
+        },
+        {
+          "name": "Agents screen race and monitoring regressions arms from a new chain read rather than a cached card",
+          "status": "passed"
+        },
+        {
+          "name": "Agents screen race and monitoring regressions uses each position's own volatility window in the same pool",
+          "status": "passed"
+        },
+        {
+          "name": "Agents screen race and monitoring regressions resets observed time even after a short pause and does not accrue manual checks",
+          "status": "passed"
+        },
+        {
+          "name": "Agents screen race and monitoring regressions blocks a new review from a pending signature restored after reload",
+          "status": "passed"
+        },
+        {
+          "name": "Agents screen race and monitoring regressions starts the review's full 20 seconds after a slow successful native build",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "agents.test.ts",
+      "status": "passed",
+      "tests": [
+        {
+          "name": "rule assistant grammar parses supported commands into explicit parameters",
+          "status": "passed"
+        },
+        {
+          "name": "rule assistant grammar rejects unknown, ambiguous and out-of-bounds commands instead of guessing",
+          "status": "passed"
+        },
+        {
+          "name": "rules, scope and baseline edits bump revision and disarm; invalid edits throw",
+          "status": "passed"
+        },
+        {
+          "name": "rules, scope and baseline storage keys are scoped and never contain a URL; malformed stored rules are dropped",
+          "status": "passed"
+        },
+        {
+          "name": "rules, scope and baseline baseline is anchored at arm time and does not move on polls",
+          "status": "passed"
+        },
+        {
+          "name": "rules, scope and baseline unarmed rules never trigger",
+          "status": "passed"
+        },
+        {
+          "name": "price/bin math is consistent in both directions",
+          "status": "passed"
+        },
+        {
+          "name": "price/bin math preserves odd and even widths and rejects the SDK convenience builder's extra bin",
+          "status": "passed"
+        },
+        {
+          "name": "observed-time continuity counts only contiguous observations and resets after gaps or returning in range",
+          "status": "passed"
+        },
+        {
+          "name": "trigger precedence, dedup and cooldown risk exit outranks rebalance and carries the chosen withdrawal",
+          "status": "passed"
+        },
+        {
+          "name": "trigger precedence, dedup and cooldown keeps a risk exit in charge during cooldown instead of proposing a conflicting rebalance",
+          "status": "passed"
+        },
+        {
+          "name": "volatility missing or stale data is unavailable, never low",
+          "status": "passed"
+        },
+        {
+          "name": "volatility computes and triggers on fresh data",
+          "status": "passed"
+        },
+        {
+          "name": "capital allocation separates active bin from other bins exactly; malformed is unavailable not zero",
+          "status": "passed"
+        },
+        {
+          "name": "capital allocation matches exact pairs including reversed orientation only",
+          "status": "passed"
+        },
+        {
+          "name": "spend gating and review freshness practice and watch-only can never transact",
+          "status": "passed"
+        },
+        {
+          "name": "spend gating and review freshness goes stale on any identity/config change, expiry or unknown cost",
+          "status": "passed"
+        },
+        {
+          "name": "spend gating and review freshness the runner refuses to sign when the semantic guard trips during wallet approval",
+          "status": "passed"
+        },
+        {
+          "name": "spend gating and review freshness unknown fee blocks signing via the runner fee cap",
+          "status": "passed"
+        },
+        {
+          "name": "spend gating and review freshness failed simulation never reaches the wallet",
+          "status": "passed"
+        },
+        {
+          "name": "native rebalance target verification accepts exactly the reviewed same-width target with zero top-up",
+          "status": "passed"
+        },
+        {
+          "name": "native rebalance target verification rejects a different target, width change, multiple ranges or a hidden top-up",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "anchor-runtime.test.ts",
+      "status": "passed",
+      "tests": [
+        {
+          "name": "published Anchor compatibility uses a browser entry without the Node-only CommonJS workspace branch",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "api-deadlines.test.ts",
+      "status": "passed",
+      "tests": [
+        {
+          "name": "public data request deadlines times out stalled headers even if the implementation ignores cancellation",
+          "status": "passed"
+        },
+        {
+          "name": "public data request deadlines times out stalled body even if the implementation ignores cancellation",
+          "status": "passed"
+        },
+        {
+          "name": "public data request deadlines caller cancellation during body consumption reports cancellation and never retries",
+          "status": "passed"
+        },
+        {
+          "name": "public data request deadlines a genuinely malformed body remains a parse error",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "app-routing.test.tsx",
+      "status": "passed",
+      "tests": [
+        {
+          "name": "App routing matches a page for / instead of falling back to not found",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "arb-guards.test.ts",
+      "status": "passed",
+      "tests": [
+        {
+          "name": "runner semantic guard + fee cap quote expiring during wallet approval discards the signed tx (no broadcast, nothing persisted)",
+          "status": "passed"
+        },
+        {
+          "name": "runner semantic guard + fee cap config change-away-and-back (ABA) still blocks: monotonic generation",
+          "status": "passed"
+        },
+        {
+          "name": "runner semantic guard + fee cap practice mode turned on during approval blocks broadcast",
+          "status": "passed"
+        },
+        {
+          "name": "runner semantic guard + fee cap guard failing before signing never opens the wallet",
+          "status": "passed"
+        },
+        {
+          "name": "runner semantic guard + fee cap fee rising above the reviewed cap, null fee, or fee RPC error blocks before signing",
+          "status": "passed"
+        },
+        {
+          "name": "runner semantic guard + fee cap fee within cap + passing guard confirms",
+          "status": "passed"
+        },
+        {
+          "name": "runner semantic guard + fee cap simulation failure and wallet rejection never broadcast",
+          "status": "passed"
+        },
+        {
+          "name": "runner semantic guard + fee cap messageFee returns null (unknown) on RPC null or error, never 0",
+          "status": "passed"
+        },
+        {
+          "name": "atomic round-trip composition orders wrap -> leg A -> leg B -> cleanup, strict WSOL create, no intermediate close",
+          "status": "passed"
+        },
+        {
+          "name": "atomic round-trip composition pre-existing WSOL is never created or closed; missing USDC uses idempotent create, never closed",
+          "status": "passed"
+        },
+        {
+          "name": "atomic round-trip composition enforces the floor on leg B and rejects a floor above leg B min",
+          "status": "passed"
+        },
+        {
+          "name": "atomic round-trip composition rejects duplicate pools, quote/pool binding mismatch, unfunded leg 2 and partial fills",
+          "status": "passed"
+        },
+        {
+          "name": "atomic round-trip composition reversed canonical mint order pool still composes with the same user-side accounts",
+          "status": "passed"
+        },
+        {
+          "name": "atomic round-trip composition oversized routes are rejected as non-atomic",
+          "status": "passed"
+        },
+        {
+          "name": "receipt truth missing owner balance index or unsafe numbers -> UNKNOWN, not zero",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "arb.test.ts",
+      "status": "passed",
+      "tests": [
+        {
+          "name": "arb math parses exact decimals and rejects bad configs",
+          "status": "passed"
+        },
+        {
+          "name": "arb math priority fee never exceeds budget and rounds up like the runtime",
+          "status": "passed"
+        },
+        {
+          "name": "arb math floor = input + base + priority + kept rent + min profit; unknown cost blocks",
+          "status": "passed"
+        },
+        {
+          "name": "arb math profitable route: DLMM fee not subtracted twice; conservative uses leg B min",
+          "status": "passed"
+        },
+        {
+          "name": "arb math unprofitable when min out cannot cover floor",
+          "status": "passed"
+        },
+        {
+          "name": "arb math unknown fee -> unprofitable/blocked, never zero",
+          "status": "passed"
+        },
+        {
+          "name": "arb math leg-2 funding bound: input must equal leg A minimum, not expected out",
+          "status": "passed"
+        },
+        {
+          "name": "arb math rejects mint orientation errors, duplicate pools and partial fills",
+          "status": "passed"
+        },
+        {
+          "name": "arb math realized deltas come from metadata, owner-scoped",
+          "status": "passed"
+        },
+        {
+          "name": "arb math fee split never double-counts priority; unknown stays unknown",
+          "status": "passed"
+        },
+        {
+          "name": "arb math missing metadata yields UNKNOWN deltas, not zeros",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "core.test.ts",
+      "status": "passed",
+      "tests": [
+        {
+          "name": "amount parsing parses exactly without floats",
+          "status": "passed"
+        },
+        {
+          "name": "amount parsing rejects bad input",
+          "status": "passed"
+        },
+        {
+          "name": "amount parsing formats",
+          "status": "passed"
+        },
+        {
+          "name": "strategy normalization Spot sums to 1 per side and respects sides",
+          "status": "passed"
+        },
+        {
+          "name": "strategy normalization Curve sums to 1 per side and respects sides",
+          "status": "passed"
+        },
+        {
+          "name": "strategy normalization BidAsk sums to 1 per side and respects sides",
+          "status": "passed"
+        },
+        {
+          "name": "strategy normalization shapes differ correctly",
+          "status": "passed"
+        },
+        {
+          "name": "strategy normalization one-sided ranges",
+          "status": "passed"
+        },
+        {
+          "name": "bin math round-trips price and bin",
+          "status": "passed"
+        },
+        {
+          "name": "bin math base fee from preset",
+          "status": "passed"
+        },
+        {
+          "name": "bin math range state",
+          "status": "passed"
+        },
+        {
+          "name": "api client retries 429 then succeeds",
+          "status": "passed"
+        },
+        {
+          "name": "api client throws typed http errors, no fallback",
+          "status": "passed"
+        },
+        {
+          "name": "api client practice data is clearly fictional",
+          "status": "passed"
+        },
+        {
+          "name": "lab tallies",
+          "status": "passed"
+        },
+        {
+          "name": "lab seals and verifies commitments",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "hardening.test.ts",
+      "status": "passed",
+      "tests": [
+        {
+          "name": "token programs and mint parsing uses the official program IDs",
+          "status": "passed"
+        },
+        {
+          "name": "token programs and mint parsing parses classic and Token-2022 mints",
+          "status": "passed"
+        },
+        {
+          "name": "token programs and mint parsing blocks hazardous extensions and rejects the old wrong ID",
+          "status": "passed"
+        },
+        {
+          "name": "token programs and mint parsing keeps a native SOL reserve on Max",
+          "status": "passed"
+        },
+        {
+          "name": "transaction runner simulates the exact signed message and confirms, with an ephemeral signer",
+          "status": "passed"
+        },
+        {
+          "name": "transaction runner never asks the wallet when simulation fails",
+          "status": "passed"
+        },
+        {
+          "name": "transaction runner refuses to send if the wallet changed the message",
+          "status": "passed"
+        },
+        {
+          "name": "transaction runner reports definitive onchain failure",
+          "status": "passed"
+        },
+        {
+          "name": "transaction runner expired only when history search succeeded and height passed",
+          "status": "passed"
+        },
+        {
+          "name": "transaction runner RPC outage gives bounded 'unknown', keeps public pending metadata and redacts URLs",
+          "status": "passed"
+        },
+        {
+          "name": "transaction runner a transport error on broadcast does not claim failure; it reconciles",
+          "status": "passed"
+        },
+        {
+          "name": "transaction runner preflight rejection is definitive",
+          "status": "passed"
+        },
+        {
+          "name": "transaction runner classifies rejection narrowly",
+          "status": "passed"
+        },
+        {
+          "name": "transaction runner sequence stops on unknown settlement; empty sequence is not success",
+          "status": "passed"
+        },
+        {
+          "name": "transaction runner rejection in a sequence skips later steps",
+          "status": "passed"
+        },
+        {
+          "name": "transaction runner checkSignature reconciles pending vs confirmed",
+          "status": "passed"
+        },
+        {
+          "name": "saved routes v2 validates real public keys",
+          "status": "passed"
+        },
+        {
+          "name": "saved routes v2 round trips and keeps cluster identity",
+          "status": "passed"
+        },
+        {
+          "name": "saved routes v2 refuses combined width over the cap everywhere",
+          "status": "passed"
+        },
+        {
+          "name": "saved routes v2 rejects non-finite / float-like amounts",
+          "status": "passed"
+        },
+        {
+          "name": "saved routes v2 migrates v1 without inventing a cluster",
+          "status": "passed"
+        },
+        {
+          "name": "plan identity changes with any bound input",
+          "status": "passed"
+        },
+        {
+          "name": "rpc relay validation accepts well-formed allowlisted calls",
+          "status": "passed"
+        },
+        {
+          "name": "rpc relay validation rejects malformed or out-of-scope calls",
+          "status": "passed"
+        },
+        {
+          "name": "rpc relay validation redacts URLs from messages",
+          "status": "passed"
+        },
+        {
+          "name": "data truth helpers sky labels need both readings",
+          "status": "passed"
+        },
+        {
+          "name": "data truth helpers splits order amounts exactly",
+          "status": "passed"
+        },
+        {
+          "name": "signing integrity (pass 3) refuses wallets without signTransaction and never calls sendTransaction",
+          "status": "passed"
+        },
+        {
+          "name": "signing integrity (pass 3) refuses to sign when the RPC genesis hash is a different cluster",
+          "status": "passed"
+        },
+        {
+          "name": "signing integrity (pass 3) stops a sequence when wallet/cluster identity changes between steps",
+          "status": "passed"
+        },
+        {
+          "name": "signing integrity (pass 3) discards a signed transaction when identity changes during wallet approval",
+          "status": "passed"
+        },
+        {
+          "name": "signing integrity (pass 3) checkSignature reports unknown (not expired) when block height hangs",
+          "status": "passed"
+        },
+        {
+          "name": "signing integrity (pass 3) bounds a hanging status RPC call",
+          "status": "passed"
+        },
+        {
+          "name": "Meteora API (pass 3) uses the verified fee_24h sort key",
+          "status": "passed"
+        },
+        {
+          "name": "Meteora API (pass 3) clamps Retry-After and handles HTTP dates",
+          "status": "passed"
+        },
+        {
+          "name": "Meteora API (pass 3) abort interrupts a backoff wait immediately",
+          "status": "passed"
+        },
+        {
+          "name": "Meteora API (pass 3) 429 with huge Retry-After stops on final attempt instead of waiting an hour",
+          "status": "passed"
+        },
+        {
+          "name": "Meteora API (pass 3) normalizes pools: drops bad addresses, non-finite numbers become undefined",
+          "status": "passed"
+        },
+        {
+          "name": "Meteora API (pass 3) fee_tvl_ratio is already a percent (live sample)",
+          "status": "passed"
+        },
+        {
+          "name": "Meteora API (pass 3) candles: validated, deduped, sorted; invalid rows dropped; bad shape errors",
+          "status": "passed"
+        },
+        {
+          "name": "Meteora API (pass 3) indexed portfolio paginates on hasNext and validates addresses",
+          "status": "passed"
+        },
+        {
+          "name": "Meteora API (pass 3) position header verification reads lb_pair and owner at fixed offsets",
+          "status": "passed"
+        },
+        {
+          "name": "indexed account verification accepts only matching program, discriminator, pool and owner",
+          "status": "passed"
+        },
+        {
+          "name": "indexed account verification matches the installed SDK IDL discriminators",
+          "status": "passed"
+        },
+        {
+          "name": "indexed account verification chunks account reads to at most 100",
+          "status": "passed"
+        },
+        {
+          "name": "indexed account verification paginates indexed open orders with explicit caps",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "job-control.test.ts",
+      "status": "passed",
+      "tests": [
+        {
+          "name": "JobControl (scan/requote lock) synchronous lock: a second job cannot start while one runs",
+          "status": "passed"
+        },
+        {
+          "name": "JobControl (scan/requote lock) invalidate (pause/hide/config) aborts the in-flight step, bumps generation and frees the lock only after the request drains",
+          "status": "passed"
+        },
+        {
+          "name": "JobControl (scan/requote lock) timeout reports draining and stops further steps; lock stays held by the drain latch",
+          "status": "passed"
+        },
+        {
+          "name": "JobControl (scan/requote lock) a result arriving after cancellation is discarded (step throws, no stale commit)",
+          "status": "passed"
+        },
+        {
+          "name": "JobControl (scan/requote lock) change-away-and-back (ABA) still kills the old job: generation is monotonic",
+          "status": "passed"
+        },
+        {
+          "name": "JobControl (scan/requote lock) an obsolete job's end() does not release a newer job's lock",
+          "status": "passed"
+        },
+        {
+          "name": "JobControl (scan/requote lock) unmount cancels and refuses new jobs",
+          "status": "passed"
+        },
+        {
+          "name": "JobControl (scan/requote lock) notifies subscribers on lock/drain changes (UI re-renders draining state)",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "relay-split.test.ts",
+      "status": "passed",
+      "tests": [
+        {
+          "name": "relay getMultipleAccounts split detects only >10-key calls",
+          "status": "passed"
+        },
+        {
+          "name": "relay getMultipleAccounts split chunks \u226410, preserves order and options",
+          "status": "passed"
+        },
+        {
+          "name": "relay getMultipleAccounts split fails the whole call when any chunk errors",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "replay-ui.test.tsx",
+      "status": "passed",
+      "tests": [
+        {
+          "name": "Replay Room data boundaries keeps historical errors visible without substituting a practice tape",
+          "status": "passed"
+        },
+        {
+          "name": "Replay Room data boundaries discards a late historical result after switching to the explicit practice source",
+          "status": "passed"
+        },
+        {
+          "name": "Replay Room data boundaries invalid rules remove computed results and stop playback rather than retaining old decisions",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "replay.test.ts",
+      "status": "passed",
+      "tests": [
+        {
+          "name": "historical replay integrity excludes incomplete/future candles and reports missing periods without interpolation",
+          "status": "passed"
+        },
+        {
+          "name": "historical replay integrity refuses duplicates, malformed prices and non-aligned timestamps",
+          "status": "passed"
+        },
+        {
+          "name": "historical replay integrity requests only completed aligned periods and enforces a bounded window",
+          "status": "passed"
+        },
+        {
+          "name": "prefix-only Observatory rules and modeled geometry future prices cannot change any earlier decision, range, volatility or modeled move",
+          "status": "passed"
+        },
+        {
+          "name": "prefix-only Observatory rules and modeled geometry preserves exact even widths and applies a frozen target only after the proposing close",
+          "status": "passed"
+        },
+        {
+          "name": "prefix-only Observatory rules and modeled geometry keeps a fixed range by default and never treats risk proposals as completed withdrawals",
+          "status": "passed"
+        },
+        {
+          "name": "prefix-only Observatory rules and modeled geometry restarts observed duration at gaps and makes discontinuous volatility unavailable",
+          "status": "passed"
+        },
+        {
+          "name": "prefix-only Observatory rules and modeled geometry does not use a mismatched volatility frame as a low-risk reading",
+          "status": "passed"
+        },
+        {
+          "name": "prefix-only Observatory rules and modeled geometry distinguishes close-sample coverage from intrabar excursions and excludes initialization",
+          "status": "passed"
+        },
+        {
+          "name": "prefix-only Observatory rules and modeled geometry changing distribution alone does not invent different range coverage",
+          "status": "passed"
+        },
+        {
+          "name": "prefix-only Observatory rules and modeled geometry exports the exact tape, rules and limitations without financial performance claims",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "rpc-fetch.test.ts",
+      "status": "passed",
+      "tests": [
+        {
+          "name": "RPC transport deadlines aborts a hung response body so an SDK job can drain",
+          "status": "passed"
+        },
+        {
+          "name": "RPC transport deadlines honors cancellation by its caller rather than waiting for the deadline",
+          "status": "passed"
+        },
+        {
+          "name": "RPC transport deadlines preserves error status and retry headers for explicit handling",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "signals-risk.test.ts",
+      "status": "passed",
+      "tests": [
+        {
+          "name": "risk rules clamps and defaults malformed rules",
+          "status": "passed"
+        },
+        {
+          "name": "risk rules tracks first-seen out-of-range time and resets when back in range",
+          "status": "passed"
+        },
+        {
+          "name": "risk rules flags plan-ready only after the threshold",
+          "status": "passed"
+        },
+        {
+          "name": "attention score returns undefined when any reading is missing",
+          "status": "passed"
+        },
+        {
+          "name": "attention score is bounded 0\u2013100",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "wallet-lifecycle.test.tsx",
+      "status": "passed",
+      "tests": [
+        {
+          "name": "wallet approval lifecycle through the real shared runner discards approval after the initiating page unmounts, then releases the global slot",
+          "status": "passed"
+        },
+        {
+          "name": "wallet approval lifecycle through the real shared runner cannot revive a review after a wallet changes away and back",
+          "status": "passed"
+        },
+        {
+          "name": "wallet approval lifecycle through the real shared runner cannot revive a review after a network changes away and back",
+          "status": "passed"
+        },
+        {
+          "name": "wallet approval lifecycle through the real shared runner cannot revive a review after a rpc changes away and back",
+          "status": "passed"
+        },
+        {
+          "name": "wallet approval lifecycle through the real shared runner blocks a second mounted page while an approval is pending, and unlocks on explicit rejection",
+          "status": "passed"
+        },
+        {
+          "name": "wallet approval lifecycle through the real shared runner blocks a restored unresolved signature before any RPC or wallet prompt, even from another RPC",
+          "status": "passed"
+        },
+        {
+          "name": "wallet approval lifecycle through the real shared runner keeps confirmation alive after navigation when broadcasting already happened",
+          "status": "passed"
+        },
+        {
+          "name": "transaction coordination ownership an old lease cannot release or update a later transaction",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "wallet-rehearsal.test.ts",
+      "status": "passed",
+      "tests": [
+        {
+          "name": "devnet wallet rehearsal prepares only the official memo and an exact fee review, without transfer or broadcast",
+          "status": "passed"
+        },
+        {
+          "name": "devnet wallet rehearsal refuses mainnet before RPC and mismatched devnet genesis before preparing",
+          "status": "passed"
+        },
+        {
+          "name": "devnet wallet rehearsal blocks unknown fees, inadequate balance and failed simulation before approval",
+          "status": "passed"
+        },
+        {
+          "name": "devnet wallet rehearsal expires at preparation time and refuses settings changes including away-and-back generations",
+          "status": "passed"
+        }
+      ]
+    }
+  ]
+}

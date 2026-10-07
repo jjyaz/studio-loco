@@ -15,6 +15,7 @@ export const DOCS: DocArticle[] = [
       "Studio Loco uses the standard Solana wallet adapter. Phantom and other Wallet Standard wallets are detected automatically; Solflare is registered explicitly. Click Connect wallet in the terminal header and approve the connection in your wallet.",
       "We never ask for a seed phrase or private key and never store keys. Every transaction is simulated against your RPC first, then sent to your wallet for approval. Nothing is signed automatically.",
       "Settings let you switch between mainnet and devnet and set a custom HTTPS RPC endpoint. The public mainnet RPC is rate-limited and may refuse large account scans (used for portfolios); a dedicated RPC provider is recommended.",
+      "Wallet Checks verifies the RPC's genesis hash and offers a devnet-only memo rehearsal. It transfers no tokens and creates no accounts, but its reviewed network fee is real devnet SOL. A frozen review lasts 20 seconds after exact simulation. Approve or decline in your own wallet; only a confirmed receipt means it passed. Network, wallet or page changes discard unsent approvals. A shared transaction slot prevents concurrent wallet actions, and unresolved signatures survive reload for Check status without automatic resend.",
     ],
   },
   {
@@ -85,6 +86,18 @@ export const DOCS: DocArticle[] = [
       "Agents preserve existing wrapped SOL accounts and return SOL as WSOL. Approval requires a known wallet balance, known exact-message fees and a successful simulation. The SOL requirement includes upfront account rent without counting the network fee twice or treating withdrawn WSOL as rent. Unresolved signatures block new actions even after reloading. Withdrawals that require multiple transactions are blocked in Agents before any signature; review those through the position withdrawal flow. Staged moves verify destination mints on chain and disclose any narrower add range before withdrawal.",
       "Release validation distinguishes an unsigned simulation from a confirmed, funded transaction. Native rebalance passed read-only mainnet simulation with decoded position post-state checks. Funded devnet acceptance passed Spot, Curve and BidAsk at both 20 and 21 bins: six native moves, six exact 25% share withdrawals, WSOL preservation and six position cleanups, with 27 confirmed transactions including setup. Funded mainnet signing and a browser-wallet rehearsal have not been performed. A protocol slippage refusal or unknown balance disables approval. The Observatory uses ordinary Meteora DLMM, not DLMM Pro, and has no background keeper.",
     ],
+  },
+  {
+    id: "replay",
+    group: "Tools",
+    title: "The Replay Room",
+    body: [
+      "Replay loads completed mainnet Meteora OHLCV candles: 24 hours at 5-minute resolution or seven days at hourly resolution. It requires pool bin step and both token decimals, refuses malformed or duplicate candles, and reports missing periods. Practice is a separately selected, deterministic fixture and never an API-error fallback. No wallet connection or signing is needed.",
+      "The same Observatory rules evaluate each completed close using only the history available then. Risk exits retain priority during cooldown. Out-of-range observation time restarts after gaps and volatility requires consecutive closes in the rule's requested frame. Bin IDs are inferred from candle prices and pool metadata; they are not historical on-chain active-bin records.",
+      "Coverage means close samples inside a modeled bin range, not continuous time in range. Intrabar high/low excursions are flagged without inventing their order. The first close initializes the range and is excluded from intrabar coverage. Template comparisons vary width and distribution; distribution alone does not change geometric coverage at the same width.",
+      "Optional modeled rebalances assume an approval at one close and apply that frozen target before the next observation. The model does not reconstruct execution delay, slippage, token balances, fees, rewards, impermanent loss or profit. Risk withdrawals remain proposals. Playback, a keyboard-accessible observation slider and JSON export let you inspect and reproduce the exact tape, rules, decisions and assumptions.",
+    ],
+    links: [{ label: "Meteora DLMM Data API", url: "https://github.com/MeteoraAg/docs/blob/main/developer-guides/dlmm/api-reference/overview.mdx" }],
   },
   {
     id: "launch",

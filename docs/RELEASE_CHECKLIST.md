@@ -1,5 +1,11 @@
 # Release readiness
 
+## Wallet Checks and The Replay Room
+
+The next application update adds browser-wide wallet lifecycle guards, a devnet memo rehearsal, fresh genesis status and historical rule replay. Automated validation passed: 202 tests across 19 files, source and QA-harness TypeScript, and a production build. Browser QA and publication are recorded in `docs/qa/wallet-replay-release-validation.json`. Browser-wallet signing and a funded mainnet pilot remain user-run checks. See [the acceptance procedure](WALLET_REPLAY_RELEASE.md).
+
+## Previous Observatory funded release
+
 The Observatory passed funded devnet acceptance: six 20/21-bin × Spot/Curve/BidAsk native moves, exact 25% share withdrawals, preserved WSOL and six confirmed position cleanups. There are 27 confirmed transaction receipts including setup and no unresolved signatures. Funded mainnet signing and a browser-wallet rehearsal remain unperformed. The verified application commit `b8a11bd7` is published at [The Observatory](https://studioloco.cfd/app/agents). Production desktop routes, hydration, real watch-only positions and RPC/program reads passed; mobile QA passed separately in Lovable dev runtime. See [the release procedure](OBSERVATORY_RELEASE.md) and the machine-readable evidence in `docs/qa/`.
 
 | Item | State | Evidence |

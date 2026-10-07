@@ -1,0 +1,60 @@
+{
+  "version": 1,
+  "recordedAt": "2026-10-07T23:44:26.979149+00:00",
+  "baseCommit": "2787f3c63b1149cda3c51d1f705013e224cdcc27",
+  "features": [
+    "Shared wallet transaction coordination and navigation/identity invalidation",
+    "Devnet-only memo wallet rehearsal",
+    "Historical rule replay and transparent data quality",
+    "Fresh network genesis display and bounded API body reads"
+  ],
+  "automated": {
+    "unitTests": {
+      "passed": 202,
+      "failed": 0,
+      "files": 19,
+      "evidence": "docs/qa/wallet-replay-unit-results.json"
+    },
+    "sourceTypeScript": {
+      "passed": true,
+      "command": "npx tsc --noEmit -p ."
+    },
+    "qaHarnessTypeScript": {
+      "passed": true,
+      "command": "npx tsc --noEmit -p scripts/qa/tsconfig.json"
+    },
+    "productionBuild": {
+      "passed": true,
+      "command": "npm run build"
+    }
+  },
+  "previewBrowser": {
+    "status": "pending"
+  },
+  "publication": {
+    "status": "pending"
+  },
+  "productionBrowser": {
+    "status": "pending"
+  },
+  "manualWalletAcceptance": {
+    "status": "not-performed",
+    "reason": "Mocked lifecycle tests do not substitute for the user browser wallet."
+  },
+  "fundedMainnetPilot": {
+    "status": "not-performed",
+    "reason": "User must select and approve a concrete mainnet move in their own wallet."
+  },
+  "priorFundedDevnet": {
+    "passed": true,
+    "cases": 6,
+    "confirmedTransactions": 27,
+    "evidence": "docs/qa/funded-devnet-acceptance.json"
+  },
+  "limits": [
+    "Ordinary DLMM; DLMM Pro not integrated.",
+    "No background keeper or automatic signing.",
+    "Replay reconstructs rules and range geometry, not financial returns.",
+    "Shared transaction coordination is per tab."
+  ]
+}

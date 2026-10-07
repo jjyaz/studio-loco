@@ -195,7 +195,12 @@ export async function runTransaction(opts: {
   if (!wallet.publicKey) throw new TxError("Wallet not connected", "rejected");
   if (!wallet.signTransaction) throw new TxError(UNSUPPORTED_WALLET, "sending");
   const signFn = wallet.signTransaction;
-  const guard = () => { const r = ctx.identityGuard?.() ?? ctx.semanticGuard?.(); if (r) throw new TxError(r, "sending"); };
+  const guard = () => {
+    const r = ctx.identityGuard?.() ?? ctx.semanticGuard?.();
+    if (r) throw new TxError(r, "sending");
+    const unresolved = ctx.store?.list().find((p) => p.wallet === wallet.publicKey!.toBase58() && p.cluster === ctx.cluster);
+    if (unresolved) throw new TxError("This wallet has an unresolved transaction on this network. Use Check status before preparing another action; nothing was signed or sent.", "sending");
+  };
   onPhase?.("preparing");
   guard();
   if (ctx.cluster !== "unknown") await assertCluster(connection, ctx.cluster);
@@ -209,7 +214,7 @@ export async function runTransaction(opts: {
     let fee: number | null;
     try { fee = (await withTimeout(connection.getFeeForMessage(tx.compileMessage(), "confirmed"), 10_000, "Fee lookup")).value; }
     catch (e) { throw new TxError(`Network fee unknown (${e instanceof Error ? e.message : String(e)}); nothing was signed.`, "sending"); }
-    if (fee === null || !Number.isSafeInteger(fee)) throw new TxError("Network fee unknown for the fresh message; nothing was signed.", "sending");
+    if (fee === null || !Number.isSafeInteger(fee) || fee < 0) throw new TxError("Network fee unknown for the fresh message; nothing was signed.", "sending");
     if (fee > ctx.maxFeeLamports) throw new TxError(`Network fee rose to ${fee} lamports, above the reviewed ${ctx.maxFeeLamports}; nothing was signed.`, "sending");
   }
   guard();
