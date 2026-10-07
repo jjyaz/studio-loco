@@ -75,6 +75,15 @@ export const DOCS: DocArticle[] = [
     ],
   },
   {
+    id: "agents",
+    group: "Tools",
+    title: "Liquidity Agents (The Observatory)",
+    body: [
+      "Liquidity Agents evaluate rules you arm on your verified DLMM positions: a % price move from an explicit baseline, leaving the range, approaching an edge buffer, observed time out of range, and observed volatility from real mainnet candles. Missing or stale price history is reported as unknown, never as low risk.",
+      "The agent only proposes. Monitoring is read-only, runs only while the tab is open and visible, and pauses during review. Each review freezes the rule revision, wallet, network, RPC, position, target, slippage and costs, expires after 20 seconds and is re-checked before and after wallet approval. Rebalances use the SDK's native rebalance with the same range width and no wallet top-up; when that cannot be built or does not fit one transaction, a staged withdraw-then-add is offered instead. Watch-only and practice modes can never transact.",
+    ],
+  },
+  {
     id: "launch",
     group: "Tools",
     title: "Launching a DLMM pool",
