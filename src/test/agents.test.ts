@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import BN from "bn.js";
 import {
@@ -73,11 +74,11 @@ describe("price/bin math", () => {
     expect(pctMoveBetweenBins(10, 10, 25)).toBe(0);
     expect(pctMoveBetweenBins(n, 0, 25)).toBeLessThan(0);
   });
-  it("balanced target mirrors the SDK and preserves width", () => {
+  it("balanced target mirrors the SDK: odd widths preserved, even widths grow by one", () => {
     expect(balancedTarget(100, 21)).toEqual({ lower: 90, upper: 110 });
     const even = balancedTarget(100, 20);
-    expect(even.upper - even.lower + 1).toBe(20);
-    expect(even).toEqual({ lower: 89, upper: 108 });
+    expect(even).toEqual({ lower: 89, upper: 109 });
+    expect(verifyRebalanceTarget({ activeId: 100, width: 20, expected: even, deposits: [{ minDeltaId: new BN(-11), maxDeltaId: new BN(9) }], depositedX: new BN(0), depositedY: new BN(0), availX: new BN(0), availY: new BN(0) })).toMatch(/width/);
   });
 });
 

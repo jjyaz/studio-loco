@@ -169,7 +169,11 @@ export function binsForPctMove(pct: number, binStep: number): number {
   return Math.ceil(Math.log(1 + pct / 100) / Math.log(1 + binStep / 10_000) - 1e-12);
 }
 
-/** Mirrors the SDK BalancedStrategyBuilder (favorXIfImbalance=false): width preserved around the active bin. */
+/**
+ * Mirrors the SDK 1.9.14 BalancedStrategyBuilder (favorXIfImbalance=false) exactly.
+ * Odd widths are preserved; for EVEN widths the SDK deposits width+1 bins (bid=side+1, ask=side-1),
+ * so callers must compare with the original width and fall back to a staged move.
+ */
 export function balancedTarget(activeId: number, width: number): { lower: number; upper: number } {
   if (!Number.isInteger(width) || width < 1) throw new Error("Invalid width");
   const side = Math.floor(width / 2);
