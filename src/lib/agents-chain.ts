@@ -62,6 +62,8 @@ export interface CostReview {
   units: (number | null)[];
   simErrors: (string | null)[];
   logs: string[][];
+  /** Only txs[0] is reviewed; callers must send just that one and rebuild for the rest. */
+  remaining: number;
 }
 
 export interface BuiltRebalance {
@@ -98,7 +100,7 @@ export function verifyRebalanceTarget(o: {
 async function reviewCosts(connection: Connection, owner: PK, txs: Transaction[]): Promise<CostReview> {
   const { VersionedTransaction } = await import("@solana/web3.js");
   const walletLamports = await withTimeout(connection.getBalance(owner, "confirmed"), T, "Wallet balance").catch(() => null);
-  const out: CostReview = { feeLamports: 0, perTxFee: [], solOutLamports: 0, walletLamports, sizes: [], units: [], simErrors: [], logs: [] };
+  const out: CostReview = { feeLamports: 0, perTxFee: [], solOutLamports: 0, walletLamports, sizes: [], units: [], simErrors: [], logs: [], remaining: Math.max(0, txs.length - 1) };
   let running = walletLamports;
   for (const tx of txs) {
     let size = Infinity;
@@ -120,8 +122,9 @@ async function reviewCosts(connection: Connection, owner: PK, txs: Transaction[]
     } catch (e) {
       out.units.push(null); out.logs.push([]); out.simErrors.push(e instanceof Error ? e.message : String(e)); out.solOutLamports = null;
     }
-    // Only the first tx simulates against real state; later txs depend on earlier ones landing.
-    if (txs.length > 1) break;
+    // Only the first tx can simulate against real state; later txs depend on it landing,
+    // so callers send ONLY the first and rebuild a fresh review for the rest.
+    break;
   }
   return out;
 }
