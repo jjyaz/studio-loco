@@ -78,5 +78,13 @@
     "blockedBy": "Funded devnet acceptance has no signed receipts; test wallet requires devnet SOL."
   },
   "browserWalletRehearsal": "not performed in this pass",
-  "fundedMainnet": "not performed"
+  "fundedMainnet": "not performed",
+  "previewBrowser": {
+    "passed": false,
+    "blocked": "Lovable preview redirects to sign-in; no authenticated browser test performed."
+  },
+  "localWorkerSmoke": {
+    "passed": false,
+    "blocked": "Wrangler local startup failed in the environment (uv_interface_addresses system error); no route smoke pass claimed."
+  }
 }

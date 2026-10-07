@@ -25,6 +25,8 @@ The agent proposes rule-based actions while its tab is visible. Each product act
 | Native Curve, 69 bins | Amount-slippage refusal; no signature | [Retained first refusal](qa/native-mainnet-odd-Curve-slippage-refusal.json), [fresh recheck](qa/native-mainnet-odd-Curve.json) |
 | Funded devnet matrix | Not executed; wallet balance zero | [Funding gate](qa/funded-devnet-acceptance.json), [faucet HTTP 429](qa/devnet-faucet.json) |
 | Funded mainnet/browser-wallet acceptance | Not performed | No mainnet funds used and no signatures claimed |
+| Current preview browser check | Blocked by Lovable sign-in | No authenticated preview or browser-wallet success claimed |
+| Current local Worker smoke | Not completed | Wrangler startup hit an environment system error; production bundling passed |
 | Publication of this update | Pending funded acceptance | Connected Lovable preview is the review target |
 
 The mainnet harness uses real public positions with signature verification disabled for simulation. Its broadcast methods throw, and it has no signer. Successful post-state checks verify range, owner and pool; they do not demonstrate settlement or ownership. Fees and compute are measurements of those specific messages, not fixed product costs. A protocol slippage error is a refusal to sign, not a successful rebalance.

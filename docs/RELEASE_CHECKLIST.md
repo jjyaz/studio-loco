@@ -9,8 +9,8 @@ The Observatory update is prepared for acceptance, but its public release is pen
 | Production build (`npm run build`) | Pass — exit 0 | Client and Cloudflare Worker outputs generated |
 | Native mainnet rebalance, read-only | Pass for Spot, Curve and BidAsk at 46 bins | Exact simulation plus decoded position range, owner and pool; even width retained |
 | Curve native rebalance at 69 bins | Slippage refusal recorded | Two attempts returned protocol `ExceededAmountSlippageTolerance` (6003); signing remained blocked |
-| All routes render, WebGL disabled, 390 / 768 / 1280 px | Pass | 17 routes × 3 widths, 0 page errors, 0 document horizontal overflow; terminal table scrolls inside its own frame |
-| Hero art | Pass | Train and field visible at 390 and 1280; headline on clean sky |
+| Earlier route/layout audit, WebGL disabled, 390 / 768 / 1280 px | Pass in earlier audit; not rerun this pass | 17 routes × 3 widths, 0 page errors, 0 document horizontal overflow; terminal table scrolls inside its own frame |
+| Hero art | Pass in earlier audit | Train and field visible at 390 and 1280; headline on clean sky |
 | Live pool list, real bins, limit-order mode detection | Pass | YZY-USDC active bin −124, mode Undetermined → order-capable per SDK |
 | Wallet absence | Pass | every action shows Connect wallet; nothing auto-transacts |
 | Keyboard focus, wallet modal, dialogs | Pass (pass 5, /app at 1280px) | Skip link first; nav, Settings, Connect wallet, tabs, Refresh, inputs all show focus (search via amber frame); Enter opens wallet dialog, Escape closes it; 0 page errors |
@@ -101,3 +101,4 @@ The Observatory update is prepared for acceptance, but its public release is pen
 - [x] Dedicated signed-devnet harness verifies genesis/program, creates a synthetic-token pool, covers 20/21-bin Spot/Curve/BidAsk native moves, 25% per-bin share withdrawals and explicit cleanup through the shared runner. Persistent unknown signatures stop a rerun. The harness passed compilation and funding preflight only; its signed matrix remains unexecuted.
 - [ ] Fund the dedicated QA wallet, run the signed matrix and verify all confirmed receipts.
 - [ ] Verify preview behavior and publish only after funded acceptance passes, then re-check the production routes and relay.
+- Current browser preview check redirects to Lovable sign-in. No authentication or browser wallet rehearsal was performed. An attempted local Worker smoke check could not start Wrangler in this environment (`uv_interface_addresses` system error); successful production bundling does not count as a runtime smoke pass.
