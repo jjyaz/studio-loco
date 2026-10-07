@@ -125,7 +125,7 @@ function Agents() {
 
   const live = useRef<LiveIdentity & { rules: Record<string, Rule>; rowKeys: Set<string> }>(null as never);
   live.current = { ruleRevision: undefined, wallet: wallet.publicKey?.toBase58() ?? "", cluster: settings.cluster, rpcId, practiceSetting: settings.practice, mode, slippageBps: settings.slippageBps, gen: genRef.current, positionPresent: false, rules, rowKeys: new Set((rows ?? []).map((r) => r.key)) };
-  const liveFor = (position: string): LiveIdentity => ({ ...live.current, ruleRevision: live.current.rules[position]?.revision ?? -1, positionPresent: live.current.rowKeys.has(position) });
+  const liveFor = (position: string): LiveIdentity => ({ ...live.current, gen: genRef.current, ruleRevision: live.current.rules[position]?.revision ?? -1, positionPresent: live.current.rowKeys.has(position) });
 
   const refusal = spendRefusal({ mode, practiceSetting: settings.practice, canSign: runner.canSign });
   const unresolved = runner.steps?.find((s) => s.phase === "unknown")?.pending ?? null;
