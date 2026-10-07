@@ -26,3 +26,5 @@
 - Money-moving flows with time- or input-sensitive reviews pass `semanticGuard` (and `maxFeeLamports` when the floor depends on the fee) to the shared runner — identity checks alone cannot catch expired quotes or config changes during wallet approval.
 
 - Dispatch scan/requote work runs through `src/lib/job-control.ts` (single-flight lock, monotonic generation, bounded steps, drain latch) — timed-out RPC promises cannot be aborted, so new jobs must wait for them to settle.
+
+- Liquidity Agents logic is split: pure rules/triggers/review-freshness in `src/lib/agents.ts`, SDK/API composition in `src/lib/agents-chain.ts`, practice fixture in `src/lib/agents-practice.ts` — keeps money-guard logic testable and practice data out of the live builder.

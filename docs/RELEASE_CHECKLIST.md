@@ -69,3 +69,10 @@ Not production-ready: no funded wallet has signed any transaction built by this 
 - [x] Pause, tab hide, config/identity change and unmount bump the generation, abort the job and clear reviews immediately; a timed-out request keeps a drain latch until it settles (UI shows Draining).
 - [x] Reset resets the form draft as well as saved config.
 - [x] Tests 101/101 (new `src/test/job-control.test.ts`, 8 tests against the real controller); typecheck 0 errors; `vite build` exit 0. No browser re-check of this pass; no funds used.
+
+## Liquidity Agents (/app/agents)
+- [x] 128/128 tests (incl. src/test/agents.test.ts), tsgo typecheck clean, production build exit 0.
+- [x] Browser (dev): no-wallet empty state, practice scenario rule→arm→proposals→practice review at 1280px and 390px; no page errors, no horizontal overflow.
+- [ ] Live native rebalance built + simulated against a real owned mainnet position (needs a wallet with a position).
+- [ ] Funded signed rebalance / withdrawal (not performed; no funds used).
+- Known limit: SDK 1.9.14 balanced rebalance adds one bin to even-width ranges; such positions get a staged withdraw→add instead.
