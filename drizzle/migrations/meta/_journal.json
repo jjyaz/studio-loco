@@ -15,6 +15,13 @@
       "when": 1791459748954,
       "tag": "0001_signal_lease_gated_commit_push_hardening",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791462218324,
+      "tag": "0002_recorder_evidence_monotonic",
+      "breakpoints": true
     }
   ]
 }

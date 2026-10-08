@@ -1,0 +1,96 @@
+{
+  "scope": "Signal Box + Flight Recorder",
+  "backendCommit": "d512fc1f5c18ab066ad65ff54f39253984ac93fb",
+  "unit": {
+    "passed": 270,
+    "failed": 0
+  },
+  "types": "source + QA scripts passed",
+  "productionBuild": "passed",
+  "database": {
+    "privacyAssertions": 15,
+    "watchCapConcurrent": "one success, one refusal, final count 5, scoped cleanup 0",
+    "recorderMonotonic": "stale copy refused, newer copy accepted, identity mismatch rejected"
+  },
+  "scheduler": {
+    "target": "hosted preview",
+    "cadenceMinutes": 5,
+    "allClientsClosed": true,
+    "alerts": [
+      {
+        "created_at": "2026-10-08T12:15:02.11225+00:00",
+        "push_status": "inbox only",
+        "reason": "Active bin -5453 is outside the range -5388\u2013-5343.",
+        "trigger": "left-range"
+      }
+    ],
+    "http": [
+      {
+        "body": "{\"tick\":13,\"processed\":1,\"errors\":0,\"alerts\":0,\"discarded\":0,\"late\":0}",
+        "created": "2026-10-08T12:20:00.027411+00:00",
+        "id": 12,
+        "status_code": 200
+      },
+      {
+        "body": "{\"tick\":12,\"processed\":1,\"errors\":0,\"alerts\":1,\"discarded\":0,\"late\":0}",
+        "created": "2026-10-08T12:15:00.080667+00:00",
+        "id": 11,
+        "status_code": 200
+      }
+    ],
+    "now": "2026-10-08T12:22:44.84773+00:00",
+    "observations": [
+      {
+        "error": null,
+        "id": 3,
+        "observed_at": "2026-10-08T12:15:02.11225+00:00",
+        "ok": true,
+        "summary": {
+          "activeId": -5453,
+          "binStep": 4,
+          "decX": 9,
+          "decY": 6,
+          "genesis": "verified",
+          "lower": -5388,
+          "observedOutMin": 0,
+          "slot": 454541807,
+          "source": "server-configured",
+          "state": "out-of-range",
+          "trigger": "left-range",
+          "upper": -5343,
+          "vol": null
+        },
+        "tick_id": 12
+      },
+      {
+        "error": null,
+        "id": 4,
+        "observed_at": "2026-10-08T12:20:02.60939+00:00",
+        "ok": true,
+        "summary": {
+          "activeId": -5450,
+          "binStep": 4,
+          "decX": 9,
+          "decY": 6,
+          "genesis": "verified",
+          "lower": -5388,
+          "observedOutMin": 5,
+          "slot": 454542934,
+          "source": "server-configured",
+          "state": "out-of-range",
+          "trigger": null,
+          "upper": -5343,
+          "vol": null
+        },
+        "tick_id": 13
+      }
+    ]
+  },
+  "notifications": {
+    "crypto": "official RFC 8291 Appendix A exact bytes passed",
+    "serverOnlyVapidSeed": true,
+    "allowlistedProviders": true,
+    "realDeviceDelivery": "not verified"
+  },
+  "wallet": "No new signing or on-chain transactions; user browser wallet approval remains a user-run check"
+}

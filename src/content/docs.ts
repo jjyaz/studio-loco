@@ -69,10 +69,10 @@ export const DOCS: DocArticle[] = [
   {
     id: "signals",
     group: "Tools",
-    title: "Signal Box and rebalancing",
+    title: "Signals and two-step rebalancing",
     body: [
-      "Signal Box watches your real positions while this tab is open and compares each range with the pool's actual active bin. You set a local alert buffer in bins for each position.",
-      "There is no keeper or background service: nothing happens when the tab is closed, and nothing is executed without your approval. A rebalance is shown as two separate, non-atomic steps — withdraw/close, then add — each requiring its own wallet approval.",
+      "The Signals page watches positions while the tab is open and compares each range with the pool's actual active bin. You set a local alert buffer in bins for each position. Signal Box is the separate hosted watch service for observations while the tab is closed.",
+      "The Signals page offers a two-step rebalance plan: withdraw/close, then add, each requiring wallet approval. The Observatory can also prepare a native rebalance when supported. Every action uses a fresh review, simulation and your own wallet approval.",
     ],
   },
   {
@@ -84,7 +84,28 @@ export const DOCS: DocArticle[] = [
       "The agent only proposes. Monitoring is read-only, runs only while the tab is open and visible, and pauses during review. Each review freezes the rule revision, wallet, network, RPC, position, target, slippage and costs. Its 20-second approval window starts when preparation and simulation finish, and is re-checked before and after wallet approval. Native rebalances preserve the exact original bin count, including even widths, using the SDK's explicit strategy parameters. They use withdrawn position assets rather than requiring a token top-up; SOL is still needed for network fees and any upfront account rent. When a native move cannot be built or does not fit one transaction, a staged withdraw-then-add is offered instead. Watch-only and practice modes can never transact.",
       "Arming fetches a fresh on-chain baseline. Pausing, hiding the tab or editing rules resets observed out-of-range time. A risk exit keeps precedence during its cooldown; stale proposals are removed. Volatility uses each position's own candle window, and missing, duplicate, gapped or future candles are unavailable rather than low risk.",
       "Agents preserve existing wrapped SOL accounts and return SOL as WSOL. Approval requires a known wallet balance, known exact-message fees and a successful simulation. The SOL requirement includes upfront account rent without counting the network fee twice or treating withdrawn WSOL as rent. Unresolved signatures block new actions even after reloading. Withdrawals that require multiple transactions are blocked in Agents before any signature; review those through the position withdrawal flow. Staged moves verify destination mints on chain and disclose any narrower add range before withdrawal.",
-      "Release validation distinguishes an unsigned simulation from a confirmed, funded transaction. Native rebalance passed read-only mainnet simulation with decoded position post-state checks. Funded devnet acceptance passed Spot, Curve and BidAsk at both 20 and 21 bins: six native moves, six exact 25% share withdrawals, WSOL preservation and six position cleanups, with 27 confirmed transactions including setup. Funded mainnet signing and a browser-wallet rehearsal have not been performed. A protocol slippage refusal or unknown balance disables approval. The Observatory uses ordinary Meteora DLMM, not DLMM Pro, and has no background keeper.",
+      "Release validation distinguishes an unsigned simulation from a confirmed, funded transaction. Native rebalance passed read-only mainnet simulation with decoded position post-state checks. Funded devnet acceptance passed Spot, Curve and BidAsk at both 20 and 21 bins: six native moves, six exact 25% share withdrawals, WSOL preservation and six position cleanups, with 27 confirmed transactions including setup. Funded mainnet signing and a browser-wallet rehearsal have not been performed. A protocol slippage refusal or unknown balance disables approval. The Observatory uses ordinary Meteora DLMM. Signal Box can observe hosted rules in the background and hand off to a fresh Observatory review; it cannot execute them.",
+    ],
+  },
+  {
+    id: "signal-box",
+    group: "Tools",
+    title: "Signal Box: hosted watches and alerts",
+    body: [
+      "Sign in to a private workspace, then add a mainnet position watch or one SOL/USDC arbitrage watch. Position creation verifies the pool, position, owner and token identities and captures a fresh arming baseline. Up to five watches are allowed per account, including at most one arbitrage watch. Watches expire after seven days and can be paused, renewed, edited or deleted.",
+      "A server scheduler runs every five minutes, independently of browser tabs. Position watches use the Observatory's deterministic rules, risk precedence and cooldowns. Arbitrage scans run at most once per fifteen-minute cadence and use estimated fees and rent, with no wallet funds or signing access. Each successful observation records a confirmed chain context; failed reads are unavailable. Observation gaps restart continuous out-of-range time.",
+      "Alerts are retained in a private inbox. Optional browser notifications require an explicit permission click and a device linked to the current account. A provider accepting a push request does not prove delivery; send a test and check that a notification appears. Email alerts are unavailable. The Scheduler health tab reports recent completed checks; quiet lamps alone do not prove a healthy watch.",
+      "Opening an alert carries identifiers only. Load watch rules in the Observatory or Dispatch to verify workspace ownership, current revision and expiry. Then run a fresh chain check or scan and prepare a new wallet-specific review. Edited, paused, expired or deleted watches cannot hand off stale rules. A previous arbitrage opportunity may have passed, and its old payload never becomes a transaction to sign.",
+    ],
+  },
+  {
+    id: "recorder",
+    group: "Tools",
+    title: "The Flight Recorder",
+    body: [
+      "The Recorder stores structured proposals, reviews, alert handoffs and shared-runner wallet actions in this browser. Each action has a timeline, reviewed context, per-step phases and public signatures. Reconciliation checks an unresolved signature without sending it again. A confirmation is distinct from a separate transaction metadata read; unavailable receipts do not show verified balance changes.",
+      "Wallet balance deltas use confirmed transaction metadata and exact raw token units. Unsafe numeric lamport values are omitted. They include fee and rent effects and are not a profit calculation or a separate position-state verification. Imported files carry their own identities and an import label; their confirmation claims have not been independently verified by this device.",
+      "Records contain no RPC URLs, credentials or signed transaction bytes. Export JSON for a portable copy, or sign in and explicitly sync a private cloud copy protected by account ownership. Newer cloud evidence wins over a stale device copy. Wallet actions and unresolved records are not automatically evicted; the latest two thousand other facts are retained. If browser storage fails, session-only records remain visible and can be exported before closing the tab.",
     ],
   },
   {
