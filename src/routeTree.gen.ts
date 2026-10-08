@@ -29,6 +29,7 @@ import { Route as JournalSlugRouteImport } from './routes/journal.$slug'
 import { Route as LabIndexRouteImport } from './routes/lab.index'
 import { Route as LabArchitectureRouteImport } from './routes/lab.architecture'
 import { Route as AppPoolAddressRouteImport } from './routes/app.pool.$address'
+import { Route as ApiPublicHooksSignalTickRouteImport } from './routes/api/public/hooks/signal-tick'
 import { Route as ApiPublicRpcClusterRouteImport } from './routes/api/public/rpc.$cluster'
 
 const IndexRoute = IndexRouteImport.update({
@@ -131,6 +132,12 @@ const AppPoolAddressRoute = AppPoolAddressRouteImport.update({
   path: '/pool/$address',
   getParentRoute: () => AppRoute,
 } as any)
+const ApiPublicHooksSignalTickRoute =
+  ApiPublicHooksSignalTickRouteImport.update({
+    id: '/api/public/hooks/signal-tick',
+    path: '/api/public/hooks/signal-tick',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiPublicRpcClusterRoute = ApiPublicRpcClusterRouteImport.update({
   id: '/api/public/rpc/$cluster',
   path: '/api/public/rpc/$cluster',
@@ -158,6 +165,7 @@ export interface FileRoutesByFullPath {
   '/journal/': typeof JournalIndexRoute
   '/lab/': typeof LabIndexRoute
   '/app/pool/$address': typeof AppPoolAddressRoute
+  '/api/public/hooks/signal-tick': typeof ApiPublicHooksSignalTickRoute
   '/api/public/rpc/$cluster': typeof ApiPublicRpcClusterRoute
 }
 export interface FileRoutesByTo {
@@ -180,6 +188,7 @@ export interface FileRoutesByTo {
   '/journal': typeof JournalIndexRoute
   '/lab': typeof LabIndexRoute
   '/app/pool/$address': typeof AppPoolAddressRoute
+  '/api/public/hooks/signal-tick': typeof ApiPublicHooksSignalTickRoute
   '/api/public/rpc/$cluster': typeof ApiPublicRpcClusterRoute
 }
 export interface FileRoutesById {
@@ -204,6 +213,7 @@ export interface FileRoutesById {
   '/journal/': typeof JournalIndexRoute
   '/lab/': typeof LabIndexRoute
   '/app/pool/$address': typeof AppPoolAddressRoute
+  '/api/public/hooks/signal-tick': typeof ApiPublicHooksSignalTickRoute
   '/api/public/rpc/$cluster': typeof ApiPublicRpcClusterRoute
 }
 export interface FileRouteTypes {
@@ -229,6 +239,7 @@ export interface FileRouteTypes {
     | '/journal/'
     | '/lab/'
     | '/app/pool/$address'
+    | '/api/public/hooks/signal-tick'
     | '/api/public/rpc/$cluster'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -251,6 +262,7 @@ export interface FileRouteTypes {
     | '/journal'
     | '/lab'
     | '/app/pool/$address'
+    | '/api/public/hooks/signal-tick'
     | '/api/public/rpc/$cluster'
   id:
     | '__root__'
@@ -274,6 +286,7 @@ export interface FileRouteTypes {
     | '/journal/'
     | '/lab/'
     | '/app/pool/$address'
+    | '/api/public/hooks/signal-tick'
     | '/api/public/rpc/$cluster'
   fileRoutesById: FileRoutesById
 }
@@ -288,6 +301,7 @@ export interface RootRouteChildren {
   LabArchitectureRoute: typeof LabArchitectureRoute
   JournalIndexRoute: typeof JournalIndexRoute
   LabIndexRoute: typeof LabIndexRoute
+  ApiPublicHooksSignalTickRoute: typeof ApiPublicHooksSignalTickRoute
   ApiPublicRpcClusterRoute: typeof ApiPublicRpcClusterRoute
 }
 
@@ -433,6 +447,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppPoolAddressRouteImport
       parentRoute: typeof AppRoute
     }
+    '/api/public/hooks/signal-tick': {
+      id: '/api/public/hooks/signal-tick'
+      path: '/api/public/hooks/signal-tick'
+      fullPath: '/api/public/hooks/signal-tick'
+      preLoaderRoute: typeof ApiPublicHooksSignalTickRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/rpc/$cluster': {
       id: '/api/public/rpc/$cluster'
       path: '/api/public/rpc/$cluster'
@@ -482,6 +503,7 @@ const rootRouteChildren: RootRouteChildren = {
   LabArchitectureRoute: LabArchitectureRoute,
   JournalIndexRoute: JournalIndexRoute,
   LabIndexRoute: LabIndexRoute,
+  ApiPublicHooksSignalTickRoute: ApiPublicHooksSignalTickRoute,
   ApiPublicRpcClusterRoute: ApiPublicRpcClusterRoute,
 }
 export const routeTree = rootRouteImport
