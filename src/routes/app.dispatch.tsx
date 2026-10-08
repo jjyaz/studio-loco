@@ -1,3 +1,5 @@
+import { z } from "zod";
+import { recordFact } from "@/lib/recorder-store";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -28,9 +30,15 @@ export const Route = createFileRoute("/app/dispatch")({
       { name: "twitter:card", content: "summary_large_image" },
     ],
   }),
+  validateSearch: (s: Record<string, unknown>) => z.object({ alert: z.string().uuid().optional() }).catch({}).parse(s),
   component: Dispatch,
 });
 
+function useAlertSearch(): string | undefined {
+  const [v, setV] = useState<string | undefined>();
+  useEffect(() => { const a = new URLSearchParams(window.location.search).get("alert"); if (a && z.string().uuid().safeParse(a).success) setV(a); }, []);
+  return v;
+}
 const SOL = (v: BN | null | undefined) => (v ? `${formatUnits(v, 9)} SOL` : "—");
 const FEE = (v: BN, mint: string) => `${formatUnits(v, DECIMALS[mint] ?? 0)} ${mint === WSOL_MINT ? "SOL" : mint === USDC_MINT ? "USDC" : "?"}`;
 const ARB_LABEL = "Round trip";
@@ -47,6 +55,8 @@ interface Review {
 }
 
 function Dispatch() {
+  const handoff = useAlertSearch();
+  const reviewRecord = useRef<string | null>(null);
   const { connection } = useConnection();
   const { publicKey } = useWallet();
   const { settings } = useSettings();
@@ -202,6 +212,10 @@ function Dispatch() {
       job.check();
       setReview({ at: quotedAt, quotedAt, gen: myGen, wallet: user.toBase58(), key, route, a, b, w, costs, floor: v.floor, conservativeProfit: v.conservativeProfit, expectedProfit: v.expectedProfit, residualUsdc: v.residualUsdc, built: final });
       push("info", `Review ready: ${route.nameA} → ${route.nameB}, ${final.bytes} bytes, quote valid ${QUOTE_TTL_MS / 1000}s.`);
+      void recordFact({ kind: "review", title: `Dispatch review ${route.nameA} → ${route.nameB}`, route: "/app/dispatch", cluster: "mainnet-beta", wallet: user.toBase58(),
+        links: handoff ? { alertId: handoff } : {}, detail: `Fresh wallet-specific requote; floor ${v.floor.toString()} lamports; quote valid ${QUOTE_TTL_MS / 1000}s; ${final.bytes} bytes; simulated before signing.`,
+        context: { poolA: a.pool, poolB: b.pool, inputLamports: a.requested.toString(), legAMin: a.min.toString(), legBMin: b.min.toString(), floorLamports: v.floor.toString(), expectedProfitLamports: v.expectedProfit.toString(), conservativeProfitLamports: v.conservativeProfit.toString(), networkFeeLamports: costs.networkFee?.toString() ?? null, slippageBps: chk.ok ? chk.cfg.slippageBps : null, quotedAt } })
+        .then((id) => { reviewRecord.current = id; });
     } catch (e) {
       // obsolete jobs never overwrite newer state; a timeout of the CURRENT job is reported
       if (!job.alive()) return;
@@ -232,7 +246,8 @@ function Dispatch() {
         if (Date.now() - r.quotedAt > QUOTE_TTL_MS) return "Quote expired — transaction discarded. Requote to try again.";
         return null;
       };
-      const steps = await runner.run([{ label: `${ARB_LABEL} ${r.route.nameA} → ${r.route.nameB}`, tx: r.built.tx }], { semanticGuard, maxFeeLamports: Number(r.costs.networkFee!.toString()) });
+      const steps = await runner.run([{ label: `${ARB_LABEL} ${r.route.nameA} → ${r.route.nameB}`, tx: r.built.tx }], { semanticGuard, maxFeeLamports: Number(r.costs.networkFee!.toString()),
+        evidence: { title: `Dispatch round trip ${r.route.nameA} → ${r.route.nameB}`, links: { ...(reviewRecord.current ? { recordId: reviewRecord.current, reviewId: reviewRecord.current } : {}), ...(handoff ? { alertId: handoff } : {}) }, context: { floorLamports: r.floor.toString(), networkFeeCapLamports: r.costs.networkFee!.toString(), poolA: r.a.pool, poolB: r.b.pool } } });
       const s = steps[0];
       push(s?.phase === "confirmed" ? "ok" : "warn", `Transaction ${s?.phase ?? "not run"}${s?.signature ? ` · ${shortAddr(s.signature, 6)}` : ""}${s?.error ? `: ${s.error}` : ""}`);
       if (s?.phase === "confirmed" && s.signature) {
@@ -268,6 +283,7 @@ function Dispatch() {
   return (
     <div>
       <PageHead code="ST-06 · Dispatch" title="Two pools, one train." intro="Finds SOL → USDC → SOL round trips across two Meteora DLMM pools using real SDK quotes. Scanning is read-only. A route executes only as one atomic transaction that you review, simulate and approve." cap={["live"]} />
+      {handoff && <div className="mb-4"><Notice tone="info" title="Opened from a Signal Box alert">The hosted scan used estimated costs. Scan again and use <strong>Requote &amp; Review</strong> for a fresh wallet-specific quote, exact fee and floor; it may no longer be profitable.</Notice></div>}
       <p className="-mt-2 mb-6 text-sm text-cream/75">Want armed rules with reviewable rebalance and withdrawal proposals? Open <Link to="/app/agents" className="underline hover:text-amber">Liquidity Agents</Link>.</p>
       {blocked && <div className="mb-6"><Notice tone="warn" title="Dispatch unavailable">{blocked}</Notice></div>}
       <div className="mb-6"><Notice tone="info" title="Read before using">Estimates are not guarantees. A transaction that fails onchain still pays its network and priority fees. Monitoring runs only in this open tab, finds proposals and never signs. Ordinary DLMM program only — DLMM Pro is not integrated.</Notice></div>

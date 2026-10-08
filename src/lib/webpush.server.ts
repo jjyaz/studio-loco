@@ -9,7 +9,8 @@ import { sha256 } from "@noble/hashes/sha256";
 const enc = new TextEncoder();
 export const b64u = (b: Uint8Array) => btoa(String.fromCharCode(...b)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 export const unb64u = (s: string) => { const t = s.replace(/-/g, "+").replace(/_/g, "/"); const p = t + "===".slice((t.length + 3) % 4); return Uint8Array.from(atob(p), (c) => c.charCodeAt(0)); };
-const cat = (...xs: Uint8Array[]) => { const o = new Uint8Array(xs.reduce((n, x) => n + x.length, 0)); let i = 0; for (const x of xs) { o.set(x, i); i += x.length; } return o; };
+const ab = (u: Uint8Array) => new Uint8Array(u) as Uint8Array<ArrayBuffer>;
+const cat = (...xs: Uint8Array[]): Uint8Array<ArrayBuffer> => { const o = new Uint8Array(xs.reduce((n, x) => n + x.length, 0)); let i = 0; for (const x of xs) { o.set(x, i); i += x.length; } return o; };
 
 export function vapidKeys(seed: string): { priv: Uint8Array; pub: Uint8Array } {
   if (!seed || seed.length < 32) throw new Error("VAPID seed missing");
@@ -19,8 +20,8 @@ export function vapidKeys(seed: string): { priv: Uint8Array; pub: Uint8Array } {
 }
 
 async function hkdf(salt: Uint8Array, ikm: Uint8Array, info: Uint8Array, len: number): Promise<Uint8Array> {
-  const k = await crypto.subtle.importKey("raw", ikm, "HKDF", false, ["deriveBits"]);
-  return new Uint8Array(await crypto.subtle.deriveBits({ name: "HKDF", hash: "SHA-256", salt, info }, k, len * 8));
+  const k = await crypto.subtle.importKey("raw", ab(ikm), "HKDF", false, ["deriveBits"]);
+  return new Uint8Array(await crypto.subtle.deriveBits({ name: "HKDF", hash: "SHA-256", salt: ab(salt), info: ab(info) }, k, len * 8));
 }
 
 /** RFC 8291 aes128gcm body. `asPriv`/`salt` injectable for tests. */
@@ -33,8 +34,8 @@ export async function encryptPayload(payload: Uint8Array, uaPublic: Uint8Array, 
   const salt = o.salt ?? crypto.getRandomValues(new Uint8Array(16));
   const cek = await hkdf(salt, ikm, enc.encode("Content-Encoding: aes128gcm\0"), 16);
   const nonce = await hkdf(salt, ikm, enc.encode("Content-Encoding: nonce\0"), 12);
-  const key = await crypto.subtle.importKey("raw", cek, "AES-GCM", false, ["encrypt"]);
-  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv: nonce }, key, cat(payload, new Uint8Array([2]))));
+  const key = await crypto.subtle.importKey("raw", ab(cek), "AES-GCM", false, ["encrypt"]);
+  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv: ab(nonce) }, key, cat(payload, new Uint8Array([2]))));
   const rs = new Uint8Array([0, 0, 16, 0]);
   return cat(salt, rs, new Uint8Array([65]), asPub, ct);
 }
@@ -66,7 +67,7 @@ export async function sendPush(sub: { endpoint: string; p256dh: string; auth: st
   const r = await fetch(sub.endpoint, {
     method: "POST",
     headers: { TTL: "86400", Urgency: "high", "Content-Encoding": "aes128gcm", "Content-Type": "application/octet-stream", Authorization: `vapid t=${vapidJwt(sub.endpoint, priv)}, k=${b64u(pub)}` },
-    body, signal: AbortSignal.timeout(10_000),
+    body: ab(body), signal: AbortSignal.timeout(10_000),
   });
   if (r.ok) return { ok: true, status: r.status };
   return { ok: false, status: r.status, gone: r.status === 404 || r.status === 410, error: (await r.text().catch(() => "")).slice(0, 200) };

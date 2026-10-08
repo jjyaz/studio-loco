@@ -1,3 +1,5 @@
+import { z } from "zod";
+import { recordFact } from "@/lib/recorder-store";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
@@ -35,8 +37,17 @@ export const Route = createFileRoute("/app/agents")({
       { name: "twitter:card", content: "summary_large_image" },
     ],
   }),
+  validateSearch: (s: Record<string, unknown>) => HandoffSchema.catch({}).parse(s),
   component: Agents,
 });
+
+/** Hand-off identifiers read after hydration (works outside a router too). Validated; never a transaction. */
+const HandoffSchema = z.object({ alert: z.string().uuid().optional(), inspect: z.string().regex(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/).optional(), focus: z.string().regex(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/).optional() });
+function useHandoffSearch(): z.infer<typeof HandoffSchema> {
+  const [v, setV] = useState<z.infer<typeof HandoffSchema>>({});
+  useEffect(() => { const p = HandoffSchema.safeParse(Object.fromEntries(new URLSearchParams(window.location.search))); if (p.success) setV(p.data); }, []);
+  return v;
+}
 
 const POLL_MS = 30_000;
 const MAX_GAP_MS = 75_000;
@@ -65,6 +76,8 @@ export function Agents() {
   const wallet = useWallet();
   const { connection } = useConnection();
   const runner = useTxRunner();
+  const handoff = useHandoffSearch();
+  const reviewRecord = useRef<Record<string, string>>({});
   const [mode, setMode] = useState<AgentMode>("wallet");
   const [watchInput, setWatchInput] = useState("");
   const [watchAddr, setWatchAddr] = useState<string | null>(null);
@@ -100,6 +113,15 @@ export function Agents() {
   useEffect(() => ctl.current!.subscribe(() => force((n) => n + 1)), []);
   useEffect(() => { const c = ctl.current!; c.mounted = true; return () => c.unmount(); }, []);
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, []);
+
+  // Signal Box hand-off: identifiers only. The user's own wallet stays in wallet mode; any other owner opens watch-only.
+  const handoffApplied = useRef(false);
+  useEffect(() => {
+    if (handoffApplied.current || !handoff.inspect) return;
+    handoffApplied.current = true;
+    if (handoff.focus) setSelected(handoff.focus);
+    if (wallet.publicKey?.toBase58() !== handoff.inspect) { setMode("watch"); setWatchInput(handoff.inspect); setWatchAddr(handoff.inspect); }
+  }, [handoff.inspect, handoff.focus, wallet.publicKey]);
 
   const addHistory = useCallback((kind: HistoryItem["kind"], text: string) => {
     setHistory((h) => [{ t: Date.now(), kind, text: redactUrls(text) }, ...h].slice(0, 100));
@@ -197,7 +219,10 @@ export function Agents() {
         const rule = ruleMap[r.key];
         if (!rule) continue;
         const p = propose({ rule, pos: { key: r.key, pool: r.pair, activeId: r.activeId, lower: r.lower, upper: r.upper, binStep: r.binStep }, outRun: runs[r.key], vol: vr[r.key] ?? null, now: t }, lastProposed.current);
-        if (p) { lastProposed.current[p.id] = t; fresh.push(p); }
+        if (p) {
+          lastProposed.current[p.id] = t; fresh.push(p);
+          if (mode !== "practice") void recordFact({ kind: "proposal", title: `${p.kind} proposal · ${p.trigger} · ${shortAddr(p.position)}`, route: "/app/agents", cluster: settings.cluster, wallet: owner ?? "", links: { proposalId: p.id, ...(handoff.alert ? { alertId: handoff.alert } : {}) }, detail: p.reason, context: { mode, trigger: p.trigger, ruleRevision: p.ruleRevision, pool: p.pool, position: p.position, activeId: r.activeId, lower: r.lower, upper: r.upper, withdrawPct: p.withdrawPct ?? null } });
+        }
       }
       setRows(next); setReport(rep); setVol(vr);
       setProposals((q) => [...fresh, ...q.filter((p) => {
@@ -267,6 +292,7 @@ export function Agents() {
         const readyAt = Date.now(); setNow(readyAt);
         const frozen: FrozenReview = { ...base, builtAt: readyAt, action: "rebalance", targetLower: b.target.lower, targetUpper: b.target.upper, feeLamports: b.costs.perTxFee[0] ?? null, solOutLamports: b.costs.solOutLamports };
         setReview({ state: "ready", proposal: p, frozen, built: { kind: "rebalance", b } });
+        void recordFact({ kind: "review", title: `Observatory rebalance review ${shortAddr(p.position)}`, route: "/app/agents", cluster: settings.cluster, wallet: ownerPk.toBase58(), links: { proposalId: p.id, ...(handoff.alert ? { alertId: handoff.alert } : {}) }, detail: `Target ${b.target.lower}–${b.target.upper}; ${b.costs.simErrors[0] ? `simulation failed: ${b.costs.simErrors[0]}` : "simulated OK"}`, context: { trigger: p.trigger, ruleRevision: p.ruleRevision, pool: p.pool, position: p.position, strategy: rule?.strategy ?? "Spot", slippageBps: settings.slippageBps, targetLower: b.target.lower, targetUpper: b.target.upper, feeLamports: frozen.feeLamports ?? null, simulation: b.costs.simErrors[0] ?? "ok", builtAt: readyAt } }).then((id) => { reviewRecord.current[p.id] = id; });
         addHistory("review", `Rebalance review built: target ${b.target.lower}–${b.target.upper}, ${b.kind}${b.costs.simErrors[0] ? `, simulation failed: ${b.costs.simErrors[0]}` : ", simulated OK"}.`);
       } else {
         const pct = opts.stagedTo ? 100 : p.withdrawPct ?? 100;
@@ -277,6 +303,7 @@ export function Agents() {
         const readyAt = Date.now(); setNow(readyAt);
         const frozen: FrozenReview = { ...base, builtAt: readyAt, action: "withdraw", withdrawBps: pct * 100, feeLamports: b.costs.perTxFee[0] ?? null, solOutLamports: b.costs.solOutLamports };
         setReview({ state: "ready", proposal: p, frozen, built: { kind: "withdraw", b, staged: opts.stagedTo && orientation ? { targetPool: opts.stagedTo.pool, width: Math.min(sourceWidth, MAX_UI_BINS), sourceWidth, strategy: rule?.strategy ?? "Spot", orientation, mintX: b.mintX, mintY: b.mintY } : undefined } });
+        void recordFact({ kind: "review", title: `Observatory ${pct}% withdrawal review ${shortAddr(p.position)}`, route: "/app/agents", cluster: settings.cluster, wallet: ownerPk.toBase58(), links: { proposalId: p.id, ...(handoff.alert ? { alertId: handoff.alert } : {}) }, detail: `${b.costs.simErrors[0] ? `simulation failed: ${b.costs.simErrors[0]}` : "simulated OK"}; outputs are estimates, no enforced X/Y floor`, context: { trigger: p.trigger, ruleRevision: p.ruleRevision, pool: p.pool, position: p.position, withdrawBps: pct * 100, slippageBps: settings.slippageBps, feeLamports: frozen.feeLamports ?? null, simulation: b.costs.simErrors[0] ?? "ok", staged: !!opts.stagedTo, builtAt: readyAt } }).then((id) => { reviewRecord.current[p.id] = id; });
         addHistory("review", `Withdrawal review built (${pct}%)${b.costs.simErrors[0] ? `, simulation failed: ${b.costs.simErrors[0]}` : ", simulated OK"}.`);
       }
     } catch (e) {
@@ -294,7 +321,8 @@ export function Agents() {
     addHistory("tx", `Wallet approval requested: ${first.label}.`);
     let steps;
     try {
-      steps = await runner.run([first], { semanticGuard: guard, maxFeeLamports: rv.frozen.feeLamports ?? undefined });
+      steps = await runner.run([first], { semanticGuard: guard, maxFeeLamports: rv.frozen.feeLamports ?? undefined,
+        evidence: { title: `Observatory ${rv.frozen.action} ${shortAddr(rv.proposal.position)}`, links: { proposalId: rv.proposal.id, ...(reviewRecord.current[rv.proposal.id] ? { recordId: reviewRecord.current[rv.proposal.id], reviewId: reviewRecord.current[rv.proposal.id] } : {}), ...(handoff.alert ? { alertId: handoff.alert } : {}) }, context: { trigger: rv.proposal.trigger, ruleRevision: rv.frozen.ruleRevision, pool: rv.frozen.pool, position: rv.frozen.position, action: rv.frozen.action, feeCapLamports: rv.frozen.feeLamports ?? null } } });
     } catch (e) { addHistory("error", e instanceof Error ? e.message : String(e)); return; }
     const s = steps[0];
     if (live.current.wallet !== rv.frozen.wallet || live.current.cluster !== rv.frozen.cluster || live.current.rpcId !== rv.frozen.rpcId || live.current.mode !== "wallet") return;
@@ -350,6 +378,7 @@ export function Agents() {
         <p className="absolute bottom-3 left-4 station-code text-cream">ST-07 · The Observatory · rule-based observation</p>
       </div>
       <PageHead code="ST-07 · Liquidity Agents" title="The Observatory." intro="Arm rules on real DLMM positions. The agent observes while this tab is open and prepares proposals; your wallet approves every move. No keeper, no auto-signing, no forecasts." cap={mode === "practice" ? ["practice"] : ["live"]} />
+      {handoff.alert && <div className="mb-4"><Notice tone="info" title="Opened from a Signal Box alert">The alert is only an observation. Press <strong>Run check</strong> for fresh verified chain state; any proposal and review prepared here is new, guarded and fee-capped. Nothing from the alert can be signed.</Notice></div>}
       <div className="-mt-2 mb-6 flex flex-wrap gap-x-5 gap-y-3 text-sm text-cream/75"><Link to="/app/replay" className="underline hover:text-amber">Test rules in the Replay Room</Link><Link to="/app/checks" className="underline hover:text-amber">Rehearse your wallet</Link></div>
 
       <Panel className="mb-6">
