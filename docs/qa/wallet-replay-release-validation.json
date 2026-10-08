@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "recordedAt": "2026-10-07T23:44:26.979149+00:00",
+  "recordedAt": "2026-10-08T00:15:12.840685+00:00",
   "baseCommit": "2787f3c63b1149cda3c51d1f705013e224cdcc27",
   "features": [
     "Shared wallet transaction coordination and navigation/identity invalidation",
@@ -29,16 +29,29 @@
     }
   },
   "previewBrowser": {
-    "status": "historical-loading-blocker-found",
+    "status": "passed",
     "firstPass": "docs/qa/wallet-replay-preview-first-pass.json",
-    "fix": "96-period sequential half-open partitions",
-    "regressionStatus": "pending"
+    "regression": "docs/qa/wallet-replay-preview-regression.json",
+    "viewports": [
+      1280,
+      390
+    ]
   },
   "publication": {
-    "status": "pending"
+    "status": "verified-public",
+    "deploymentId": "9c36cc6f-598f-478f-9400-77ebbc9058ce",
+    "toolStatusAtRequest": "pending",
+    "url": "https://studioloco.cfd/app/replay",
+    "verifiedUrls": [
+      "https://studioloco.cfd/app/replay",
+      "https://studioloco.cfd/app/checks"
+    ]
   },
   "productionBrowser": {
-    "status": "pending"
+    "status": "passed",
+    "evidence": "docs/qa/wallet-replay-production-verification.json",
+    "desktopWidth": 1348,
+    "mobileWidth": 390
   },
   "manualWalletAcceptance": {
     "status": "not-performed",
@@ -59,5 +72,13 @@
     "No background keeper or automatic signing.",
     "Replay reconstructs rules and range geometry, not financial returns.",
     "Shared transaction coordination is per tab."
-  ]
+  ],
+  "applicationCommit": "e59f30f9b67a0768cf47d0aab363940b148f2059",
+  "devnetMemo": {
+    "passed": true,
+    "evidence": "docs/qa/wallet-devnet-acceptance.json",
+    "feeLamports": 5000,
+    "browserWalletTest": false,
+    "signature": "4q13kptFoDwD7BXTtdTjUbCwRhtCioTC6N5msxym6Xds9oUziScBnxyFh1VbgUAyeBMESFFNU7uTWRZuN63gqK3b"
+  }
 }

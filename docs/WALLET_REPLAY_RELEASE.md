@@ -1,6 +1,6 @@
 # Wallet acceptance and historical rule replay
 
-This release adds `/app/checks` and `/app/replay`, hardens the shared wallet lifecycle, and exposes fresh genesis verification on `/network`. Existing native DLMM execution builders and funded devnet receipts are unchanged.
+The verified application commit `e59f30f9` is published at [The Replay Room](https://studioloco.cfd/app/replay) and [Wallet Checks](https://studioloco.cfd/app/checks). Public desktop (1348px) and mobile (390px) loading and interaction passed. This release hardens the shared wallet lifecycle and exposes fresh genesis verification on `/network`. Existing native DLMM execution builders and funded devnet receipts are unchanged.
 
 ## Wallet lifecycle
 
@@ -26,7 +26,7 @@ This release adds `/app/checks` and `/app/replay`, hardens the shared wallet lif
 
 `docs/qa/wallet-replay-unit-results.json` records 209 passing tests across 20 files, zero failures. The focused additions exercise real shared-runner code with a mocked adapter/RPC, strict tape parsing, causal replay, exact widths, cooldown, gap continuity, mismatched volatility, historical-error boundaries and cancellation of late results. These tests do not constitute real browser-wallet acceptance or funded mainnet transactions.
 
-The initial browser failure is retained in `docs/qa/wallet-replay-preview-first-pass.json`; repaired historical loading and recovery require a second browser pass. Source TypeScript, QA-harness TypeScript, production build and browser results are recorded separately in `docs/qa/wallet-replay-release-validation.json` as they are completed.
+The initial browser failure is retained in `docs/qa/wallet-replay-preview-first-pass.json`; repaired historical loading passed the second browser pass at 1280 and 390px, with 288/288 and 168/168 real candles, valid exports and successful outage recovery. See `docs/qa/wallet-replay-preview-regression.json`. A separate funded devnet memo rehearsal passed through the real shared runner with one confirmed signature, an exact 5,000-lamport fee and no asset transfer: `docs/qa/wallet-devnet-acceptance.json`. This was a headless QA signer, not browser-wallet acceptance. Source TypeScript, QA-harness TypeScript, production build and browser results are recorded separately in `docs/qa/wallet-replay-release-validation.json` as they are completed.
 
 ## Manual browser-wallet acceptance
 

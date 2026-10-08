@@ -1,0 +1,64 @@
+{
+  "verifiedAt": "2026-10-08T00:15:12.840323+00:00",
+  "applicationCommit": "e59f30f9b67a0768cf47d0aab363940b148f2059",
+  "deploymentId": "9c36cc6f-598f-478f-9400-77ebbc9058ce",
+  "passed": true,
+  "urls": [
+    "https://studioloco.cfd/app/replay",
+    "https://studioloco.cfd/app/checks"
+  ],
+  "desktop": {
+    "browser": "Cua Chrome public browser",
+    "documentWidth": 1348,
+    "scrollWidth": 1348,
+    "failedImages": 0,
+    "historicalPool": "5rCf1DM8LjKTw4YqhnoLcngyZYeNnQqztScTogYHAS6",
+    "frame": "5m",
+    "actualBars": 288,
+    "expectedBars": 288,
+    "missingBars": 0,
+    "internalGaps": 0,
+    "excludedBoundaries": 3,
+    "closeSamplesInRange": 15,
+    "observations": 287,
+    "proposals": 92,
+    "playPauseKeyboardSlider": true,
+    "genesisVerified": true,
+    "genesis": "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d",
+    "confirmedSlot": 454379326,
+    "disconnectedApprovalBlocked": true,
+    "applicationErrorsInCapturedLogs": 0,
+    "extensionMetadataErrorsInCapturedLogs": 10
+  },
+  "mobile": {
+    "surface": "Lovable isolated normal public browser",
+    "viewportWidth": 390,
+    "httpStatuses": [
+      200,
+      200
+    ],
+    "actualHistoricalBars": 288,
+    "expectedBars": 288,
+    "missingBars": 0,
+    "documentOverflowPx": 0,
+    "chartInnerScroll": true,
+    "navInnerScroll": true,
+    "imagesLoaded": true,
+    "playPauseKeyboardSlider": true,
+    "freshMainnetGenesisVerified": true,
+    "disconnectedApprovalBlocked": true,
+    "consoleErrors": 0,
+    "pageErrors": 0,
+    "failedRequests": 0,
+    "automationBlock": false
+  },
+  "screenshots": [
+    "docs/qa/studio-loco-replay-live-1791418290837.jpg",
+    "docs/qa/studio-loco-replay-chart-live-1791418335582.jpg"
+  ],
+  "signingLimits": [
+    "Actual browser-wallet approval remains user-run.",
+    "A funded devnet memo was confirmed by the dedicated headless QA signer.",
+    "No funded mainnet action was signed."
+  ]
+}

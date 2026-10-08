@@ -2,7 +2,7 @@
 
 ## Wallet Checks and The Replay Room
 
-The next application update adds browser-wide wallet lifecycle guards, a devnet memo rehearsal, fresh genesis status and historical rule replay. Automated validation passed: 209 tests across 20 files, source and QA-harness TypeScript, and a production build. Browser QA and publication are recorded in `docs/qa/wallet-replay-release-validation.json`. Browser-wallet signing and a funded mainnet pilot remain user-run checks. See [the acceptance procedure](WALLET_REPLAY_RELEASE.md).
+The published application update adds shared wallet lifecycle guards, a devnet memo rehearsal, fresh genesis status and historical rule replay. Automated validation passed: 209 tests across 20 files, source and QA-harness TypeScript, and a production build. Historical loading, playback, exports, outage recovery and mobile layout passed QA. Public desktop (1348px) and mobile (390px) checks passed on the deployed update. A funded devnet memo confirmed with an exact 5,000-lamport fee; this is separate from user browser-wallet approval. Browser QA and publication are recorded in `docs/qa/wallet-replay-release-validation.json`. Browser-wallet signing and a funded mainnet pilot remain user-run checks. See [the acceptance procedure](WALLET_REPLAY_RELEASE.md).
 
 ## Previous Observatory funded release
 

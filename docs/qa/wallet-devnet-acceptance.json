@@ -1,0 +1,25 @@
+{
+  "at": "2026-10-08T00:06:34.191Z",
+  "network": "devnet",
+  "wallet": "FpebsUzBXJ9PLAkFi1Kq4wEPHtyRPznh5e5FpdztpZQZ",
+  "passed": true,
+  "browserWalletTest": false,
+  "realMainnetFunds": false,
+  "signed": true,
+  "broadcast": true,
+  "reviewFeeLamports": 5000,
+  "units": 21838,
+  "initialBalanceLamports": 326215840,
+  "phase": "confirmed",
+  "signature": "4q13kptFoDwD7BXTtdTjUbCwRhtCioTC6N5msxym6Xds9oUziScBnxyFh1VbgUAyeBMESFFNU7uTWRZuN63gqK3b",
+  "slot": 508630204,
+  "confirmed": true,
+  "networkFeeLamports": 5000,
+  "finalBalanceLamports": 326210840,
+  "accountKeys": [
+    "FpebsUzBXJ9PLAkFi1Kq4wEPHtyRPznh5e5FpdztpZQZ",
+    "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr"
+  ],
+  "memoOnly": true,
+  "pending": 0
+}

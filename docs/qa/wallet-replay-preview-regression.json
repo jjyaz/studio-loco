@@ -1,0 +1,67 @@
+{
+  "testedCommit": "e59f30f9b67a0768cf47d0aab363940b148f2059",
+  "surface": "Lovable isolated dev browser",
+  "viewports": [
+    1280,
+    390
+  ],
+  "passed": true,
+  "pool": "5rCf1DM8LjKTw4YqhnoLcngyZYeNnQqztScTogYHAS6",
+  "windows": [
+    {
+      "frame": "5m",
+      "expectedBars": 288,
+      "actualBars": 288,
+      "missingBars": 0,
+      "gaps": 0,
+      "excludedBoundaries": 3,
+      "requests": 3,
+      "closesInRange": 15,
+      "observations": 287,
+      "proposals": 92
+    },
+    {
+      "frame": "1h",
+      "expectedBars": 168,
+      "actualBars": 168,
+      "missingBars": 0,
+      "gaps": 0,
+      "excludedBoundaries": 2,
+      "requests": 2,
+      "closesInRange": 24,
+      "observations": 167,
+      "proposals": 145
+    }
+  ],
+  "exports": {
+    "historicalSource": true,
+    "uniqueSortedAlignedCompletedTimestamps": true,
+    "requestPartitionsRecorded": true,
+    "assumptions": 7,
+    "profitMentionOnlyInLimitation": true
+  },
+  "controls": {
+    "playPause": true,
+    "slider": true,
+    "optInModeling": true,
+    "modeledMovesOnHourlyTape": 65
+  },
+  "mobileLayout": {
+    "documentScrollWidth": 390,
+    "documentClientWidth": 390,
+    "chartScrollWidth": 640,
+    "chartClientWidth": 314
+  },
+  "outageRecovery": {
+    "errorVisible": true,
+    "fixtureSubstitution": false,
+    "reloadSucceededAfterRestore": true,
+    "reloadedBars": 168
+  },
+  "console": {
+    "crashes": 0,
+    "onlyObservedErrors": "Three net::ERR_FAILED messages induced by the intentional Data API outage."
+  },
+  "signedOrSentTransactions": false,
+  "productionVerified": false
+}

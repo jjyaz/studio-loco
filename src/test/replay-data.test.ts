@@ -27,15 +27,13 @@ function chunk(url: string) {
   return { data };
 }
 beforeEach(() => {
-  mocks.pool
-    .mockReset()
-    .mockResolvedValue({
-      address,
-      name: "Pool",
-      token_x: { decimals: 6 },
-      token_y: { decimals: 6 },
-      pool_config: { bin_step: 25 },
-    });
+  mocks.pool.mockReset().mockResolvedValue({
+    address,
+    name: "Pool",
+    token_x: { decimals: 6 },
+    token_y: { decimals: 6 },
+    pool_config: { bin_step: 25 },
+  });
   mocks.candles.mockReset().mockImplementation(async (url: string) => chunk(url));
 });
 afterEach(() => {
