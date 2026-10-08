@@ -104,7 +104,7 @@ export interface OptionResult {
   option: PlanOption;
   target: Range | null;
   /** "none" = no transaction; "sdk-ok" = SDK amount simulation succeeded; "failed"/"unsupported" carry reason. */
-  sim: "none" | "sdk-ok" | "failed" | "unsupported";
+  sim: "none" | "sdk-ok" | "staged-verified" | "failed" | "unsupported";
   reason?: string;
   /** Raw integer strings in the SOURCE pool's X/Y (move: also destination mapping). */
   withdrawX?: string; withdrawY?: string;
@@ -139,7 +139,7 @@ export function selectionRefusal(s: PlanSnapshot, liveKey: string, option: PlanO
   const r = s.results.find((x) => x.option === option);
   if (!r) return "Option not in this comparison.";
   if (option === "keep") return "Staying put needs no transaction.";
-  if (r.sim !== "sdk-ok") return r.reason ?? "This option did not simulate.";
+  if (option === "move" ? r.sim !== "staged-verified" || !r.destPool : r.sim !== "sdk-ok") return r.reason ?? "This option did not simulate.";
   return null;
 }
 

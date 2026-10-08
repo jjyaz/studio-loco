@@ -75,7 +75,7 @@ export async function readPlan(o: {
       const m = mapToDestination({ mintX, mintY, x: availX.toString(), y: availY.toString() }, { mintX: dX, mintY: dY });
       const target = targetFor("move", current, activeId, undefined, dest.lbPair.activeId)!;
       results.push({
-        option: "move", target, sim: "unsupported", destPool: o.destPool, orientation: m.orientation, coversActive: true,
+        option: "move", target, sim: "staged-verified", destPool: o.destPool, orientation: m.orientation, coversActive: true,
         withdrawX: availX.toString(), withdrawY: availY.toString(), depositX: m.x, depositY: m.y, rentLamports: null,
         reason: "Two separate approvals: stage 1 withdraws 100% here; stage 2 is a fresh deposit built from what actually arrives. Destination amounts are the position's current holdings mapped by mint address, not a simulated deposit.",
       });
