@@ -13,16 +13,20 @@
     "test": "vitest run",
     "qa:mainnet": "vitest run --config scripts/qa/config.ts scripts/qa/native-mainnet.acceptance.ts",
     "qa:devnet": "vitest run --config scripts/qa/config.ts scripts/qa/funded-devnet.acceptance.ts",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "sdk:build": "tsc -p packages/sdk/tsconfig.json",
+    "sdk:release": "npm run sdk:build && node scripts/build-loco-sdk.mjs"
   },
   "overrides": {
     "rolldown": "1.2.1"
   },
   "dependencies": {
+    "@cfworker/json-schema": "4.1.1",
     "@coral-xyz/anchor": "^0.32.1",
     "@hookform/resolvers": "^5.2.2",
     "@lovable.dev/cloud-auth-js": "^1.2.1",
     "@meteora-ag/dlmm": "^1.9.14",
+    "@modelcontextprotocol/server": "2.3.1",
     "@noble/curves": "1.9.7",
     "@radix-ui/react-accordion": "^1.2.12",
     "@radix-ui/react-alert-dialog": "^1.1.15",
@@ -89,6 +93,7 @@
   "devDependencies": {
     "@eslint/js": "^9.32.0",
     "@lovable.dev/vite-tanstack-config": "2.25.3",
+    "@modelcontextprotocol/client": "2.3.1",
     "@testing-library/jest-dom": "^6.6.0",
     "@testing-library/react": "^16.0.0",
     "@types/bn.js": "^5.2.0",

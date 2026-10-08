@@ -17,6 +17,7 @@ export interface CapabilityEntry {
 }
 
 export const CAPABILITIES: CapabilityEntry[] = [
+  { id: "developer-sdk", area: "Developers", name: "Loco SDK, read-only API v1 and MCP", status: "live", notes: "Versioned installable ESM SDK with declarations, runtime validation, bounded cancellable reads; public mainnet Meteora-index pools and confirmed PositionV2/pool snapshots with genesis, program, discriminator, pool and mint checks. Official MCP v2 hosted Streamable HTTP + stdio; five read-only tools. Local range geometry is not native simulation. Recorder schema shared with the SDK; aggregate export analysis runs locally, opt-in in stdio and absent from hosted MCP. No signing, generic RPC, private cloud reads, profit forecasts or DLMM Pro. Direct versioned package distribution; not on the npm registry." },
   { id: "pool-list", area: "Terminal", name: "Pool list, search, sort, pagination", status: "live", notes: "Meteora data API, mainnet only." },
   { id: "practice", area: "Terminal", name: "Practice mode", status: "simulation", notes: "Seeded fictional pools; explicit opt-in; not transactable." },
   { id: "wallet", area: "Wallet", name: "Phantom / Solflare via wallet adapter", status: "live", notes: "No key custody, no emulation." },

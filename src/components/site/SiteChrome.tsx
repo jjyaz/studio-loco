@@ -10,6 +10,7 @@ const NAV = [
   { to: "/app", label: "Liquidity" },
   { to: "/lab", label: "Lab" },
   { to: "/journal", label: "Field Notes" },
+  { to: "/developers", label: "Developers" },
 ] as const;
 
 export function SiteNav({ overlay = false }: { overlay?: boolean }) {
@@ -59,7 +60,7 @@ export function Footer() {
   const cols: { title: string; links: { to: string; label: string; hash?: string }[] }[] = [
     { title: "Product", links: [{ to: "/app", label: "Liquidity Terminal" }, { to: "/app/studio", label: "Strategy Studio" }, { to: "/app/signals", label: "Signal Box" }, { to: "/app/launch", label: "Launch Station" }] },
     { title: "World", links: [{ to: "/lab", label: "Coordination Lab" }, { to: "/governance", label: "Decision Room" }, { to: "/token", label: "LOCO worksheet" }, { to: "/journal", label: "Field Notes" }] },
-    { title: "Help", links: [{ to: "/docs", label: "Docs" }, { to: "/network", label: "Status" }, { to: "/docs", hash: "risk", label: "Risk information" }, { to: "/docs", hash: "privacy", label: "Privacy distinction" }] },
+    { title: "Help", links: [{ to: "/docs", label: "Docs" }, { to: "/developers", label: "Developer Station" }, { to: "/network", label: "Status" }, { to: "/docs", hash: "risk", label: "Risk information" }, { to: "/docs", hash: "privacy", label: "Privacy distinction" }] },
   ];
   return (
     <footer className="border-t border-line bg-midnight">

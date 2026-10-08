@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AppRouteImport } from './routes/app'
+import { Route as DevelopersRouteImport } from './routes/developers'
 import { Route as DocsRouteImport } from './routes/docs'
 import { Route as GovernanceRouteImport } from './routes/governance'
 import { Route as NetworkRouteImport } from './routes/network'
@@ -33,6 +34,7 @@ import { Route as LabArchitectureRouteImport } from './routes/lab.architecture'
 import { Route as AppPoolAddressRouteImport } from './routes/app.pool.$address'
 import { Route as ApiPublicHooksSignalTickRouteImport } from './routes/api/public/hooks/signal-tick'
 import { Route as ApiPublicRpcClusterRouteImport } from './routes/api/public/rpc.$cluster'
+import { Route as ApiPublicLocoV1SplatRouteImport } from './routes/api/public/loco/v1/$'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -42,6 +44,11 @@ const IndexRoute = IndexRouteImport.update({
 const AppRoute = AppRouteImport.update({
   id: '/app',
   path: '/app',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DevelopersRoute = DevelopersRouteImport.update({
+  id: '/developers',
+  path: '/developers',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DocsRoute = DocsRouteImport.update({
@@ -155,10 +162,16 @@ const ApiPublicRpcClusterRoute = ApiPublicRpcClusterRouteImport.update({
   path: '/api/public/rpc/$cluster',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicLocoV1SplatRoute = ApiPublicLocoV1SplatRouteImport.update({
+  id: '/api/public/loco/v1/$',
+  path: '/api/public/loco/v1/$',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/app': typeof AppRouteWithChildren
+  '/developers': typeof DevelopersRoute
   '/docs': typeof DocsRoute
   '/governance': typeof GovernanceRoute
   '/network': typeof NetworkRoute
@@ -181,9 +194,11 @@ export interface FileRoutesByFullPath {
   '/app/pool/$address': typeof AppPoolAddressRoute
   '/api/public/hooks/signal-tick': typeof ApiPublicHooksSignalTickRoute
   '/api/public/rpc/$cluster': typeof ApiPublicRpcClusterRoute
+  '/api/public/loco/v1/$': typeof ApiPublicLocoV1SplatRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/developers': typeof DevelopersRoute
   '/docs': typeof DocsRoute
   '/governance': typeof GovernanceRoute
   '/network': typeof NetworkRoute
@@ -206,11 +221,13 @@ export interface FileRoutesByTo {
   '/app/pool/$address': typeof AppPoolAddressRoute
   '/api/public/hooks/signal-tick': typeof ApiPublicHooksSignalTickRoute
   '/api/public/rpc/$cluster': typeof ApiPublicRpcClusterRoute
+  '/api/public/loco/v1/$': typeof ApiPublicLocoV1SplatRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/app': typeof AppRouteWithChildren
+  '/developers': typeof DevelopersRoute
   '/docs': typeof DocsRoute
   '/governance': typeof GovernanceRoute
   '/network': typeof NetworkRoute
@@ -233,12 +250,14 @@ export interface FileRoutesById {
   '/app/pool/$address': typeof AppPoolAddressRoute
   '/api/public/hooks/signal-tick': typeof ApiPublicHooksSignalTickRoute
   '/api/public/rpc/$cluster': typeof ApiPublicRpcClusterRoute
+  '/api/public/loco/v1/$': typeof ApiPublicLocoV1SplatRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
     | '/app'
+    | '/developers'
     | '/docs'
     | '/governance'
     | '/network'
@@ -261,9 +280,11 @@ export interface FileRouteTypes {
     | '/app/pool/$address'
     | '/api/public/hooks/signal-tick'
     | '/api/public/rpc/$cluster'
+    | '/api/public/loco/v1/$'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/developers'
     | '/docs'
     | '/governance'
     | '/network'
@@ -286,10 +307,12 @@ export interface FileRouteTypes {
     | '/app/pool/$address'
     | '/api/public/hooks/signal-tick'
     | '/api/public/rpc/$cluster'
+    | '/api/public/loco/v1/$'
   id:
     | '__root__'
     | '/'
     | '/app'
+    | '/developers'
     | '/docs'
     | '/governance'
     | '/network'
@@ -312,11 +335,13 @@ export interface FileRouteTypes {
     | '/app/pool/$address'
     | '/api/public/hooks/signal-tick'
     | '/api/public/rpc/$cluster'
+    | '/api/public/loco/v1/$'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AppRoute: typeof AppRouteWithChildren
+  DevelopersRoute: typeof DevelopersRoute
   DocsRoute: typeof DocsRoute
   GovernanceRoute: typeof GovernanceRoute
   NetworkRoute: typeof NetworkRoute
@@ -327,6 +352,7 @@ export interface RootRouteChildren {
   LabIndexRoute: typeof LabIndexRoute
   ApiPublicHooksSignalTickRoute: typeof ApiPublicHooksSignalTickRoute
   ApiPublicRpcClusterRoute: typeof ApiPublicRpcClusterRoute
+  ApiPublicLocoV1SplatRoute: typeof ApiPublicLocoV1SplatRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -343,6 +369,13 @@ declare module '@tanstack/react-router' {
       path: '/app'
       fullPath: '/app'
       preLoaderRoute: typeof AppRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/developers': {
+      id: '/developers'
+      path: '/developers'
+      fullPath: '/developers'
+      preLoaderRoute: typeof DevelopersRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/docs': {
@@ -499,6 +532,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicRpcClusterRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/loco/v1/$': {
+      id: '/api/public/loco/v1/$'
+      path: '/api/public/loco/v1/$'
+      fullPath: '/api/public/loco/v1/$'
+      preLoaderRoute: typeof ApiPublicLocoV1SplatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -537,6 +577,7 @@ const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AppRoute: AppRouteWithChildren,
+  DevelopersRoute: DevelopersRoute,
   DocsRoute: DocsRoute,
   GovernanceRoute: GovernanceRoute,
   NetworkRoute: NetworkRoute,
@@ -547,6 +588,7 @@ const rootRouteChildren: RootRouteChildren = {
   LabIndexRoute: LabIndexRoute,
   ApiPublicHooksSignalTickRoute: ApiPublicHooksSignalTickRoute,
   ApiPublicRpcClusterRoute: ApiPublicRpcClusterRoute,
+  ApiPublicLocoV1SplatRoute: ApiPublicLocoV1SplatRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

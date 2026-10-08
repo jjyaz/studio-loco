@@ -1,0 +1,48 @@
+{
+  "name": "@studio-loco/sdk",
+  "version": "0.1.0",
+  "description": "Read-only Studio Loco client, DLMM range helpers, Flight Recorder analysis and MCP server",
+  "type": "module",
+  "sideEffects": false,
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./mcp": {
+      "types": "./dist/mcp.d.ts",
+      "import": "./dist/mcp.js"
+    }
+  },
+  "bin": {
+    "loco-mcp": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "examples"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "prepack": "npm run build"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jjyaz/studio-loco.git",
+    "directory": "packages/sdk"
+  },
+  "dependencies": {
+    "zod": "3.25.76",
+    "@modelcontextprotocol/server": "2.3.1",
+    "@cfworker/json-schema": "4.1.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3",
+    "@types/node": "^22.0.0"
+  }
+}

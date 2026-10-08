@@ -7,6 +7,13 @@ export interface DocArticle {
 }
 
 export const DOCS: DocArticle[] = [
+  { id: "developer-sdk", group: "Developers", title: "Build with the Loco SDK, API and MCP", body: [
+    "Developer Station at /developers includes a versioned downloadable npm package, TypeScript examples, OpenAPI specification, actual API explorer and both hosted and stdio MCP configuration. The package is distributed by Loco, not published to the npm registry.",
+    "API v1 distinguishes Meteora-index metadata from confirmed Solana snapshots. Every response carries source, mainnet cluster, version and observed time. Positions verify mainnet genesis, DLMM program, PositionV2 and LbPair discriminators, pool binding, mint programs and initialized decimals. Pool and position bounds share one confirmed slot; mints are read at or above it. Unavailable metrics remain null; invalid rows are counted and request caps are explicit.",
+    "The SDK's range helper is exact-width geometry only, not the app's native Rebalance Planner or a cost/profit forecast. Recorder export analysis uses the same strict schema as the app and returns aggregate evidence-consistency counts locally. Exports remain user-supplied claims; their confirmations are not independently checked on chain.",
+    "Hosted MCP registers five read-only tools with actual read-only handlers. No wallet signing, transaction submission, generic RPC, devnet, custom RPC URLs, private cloud history or DLMM Pro is exposed. An optional sixth Recorder analysis tool is local stdio only, explicitly enabled with --local-evidence. The hosted connection cannot receive or browse private Recorder exports.",
+  ], links: [{label: "Developer Station", url: "/developers"}, {label: "SDK source and examples", url: "https://github.com/jjyaz/studio-loco/tree/main/packages/sdk"}] },
+
   {
     id: "wallet",
     group: "Getting started",
