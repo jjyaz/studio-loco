@@ -581,7 +581,7 @@ export function ReplayRoom({ initialPool = "" }: { initialPool?: string }) {
                   />
                   <Stat label="Missing periods" value={tape.quality.missingBars} />
                   <Stat label="Internal gaps" value={tape.quality.gaps} />
-                  <Stat label="Excluded outside window" value={tape.quality.excludedOutside} />
+                  <Stat label="Excluded boundary rows" value={tape.quality.excludedOutside} />
                 </div>
                 <p className="mt-4 text-xs text-cream/70">
                   Requested:{" "}

@@ -227,8 +227,6 @@ export async function runTransaction(opts: {
 
   onPhase?.("awaiting-signature");
   if (signers.length) tx.partialSign(...signers);
-  let signature: string;
-  let pending: PendingTx;
   const mkPending = (sig: string): PendingTx => ({
     signature: sig, blockhash, lastValidBlockHeight, cluster: ctx.cluster, rpc: ctx.rpc,
     wallet: wallet.publicKey!.toBase58(), label: opts.label ?? "Transaction", createdAt: Date.now(),
@@ -250,8 +248,8 @@ export async function runTransaction(opts: {
   }
   const sigBytes = signed.signature;
   if (!sigBytes) throw new TxError("Wallet returned an unsigned transaction", "sending");
-  signature = bs58.encode(sigBytes);
-  pending = mkPending(signature);
+  const signature = bs58.encode(sigBytes);
+  const pending = mkPending(signature);
   ctx.store?.put(pending);
   onPhase?.("sending", { signature, pending });
   try {

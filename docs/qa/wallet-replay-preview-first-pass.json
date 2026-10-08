@@ -1,0 +1,70 @@
+{
+  "testedCommit": "a6bc0505cc864de1585508d5eff30d9d9d26b288",
+  "surface": "Lovable isolated dev browser",
+  "viewports": [
+    1280,
+    390
+  ],
+  "historical": {
+    "passed": false,
+    "pool": "5rCf1DM8LjKTw4YqhnoLcngyZYeNnQqztScTogYHAS6",
+    "error": "HTTP 400: time range too large",
+    "observedAcceptedWindows": [
+      "8h at 5m",
+      "4d at 1h"
+    ],
+    "observedRefusedWindows": [
+      "24h at 5m",
+      "7d at 1h"
+    ],
+    "fixedBy": "Sequential half-open requests of at most 96 periods; pending live regression QA"
+  },
+  "practice": {
+    "passed": true,
+    "candles": 94,
+    "expected": 96,
+    "missing": 2,
+    "playPauseReset": true,
+    "keyboardSlider": true,
+    "modelDefaultOff": true,
+    "modeledMovesAfterOptIn": 16,
+    "templates": true,
+    "exportParsed": true,
+    "profitMentionOnlyInLimitation": true
+  },
+  "connectionChecks": {
+    "mainnetGenesis": true,
+    "devnetGenesis": true,
+    "restoredMainnet": true,
+    "disconnectedSigningBlocked": true
+  },
+  "existingRoutes": {
+    "networkGenesis": true,
+    "agentsHydrated": true,
+    "dispatchHydrated": true,
+    "walletModalOpenEscapeClose": true
+  },
+  "layout": {
+    "documentOverflow": false,
+    "failedImages": 0
+  },
+  "outage": {
+    "errorVisible": true,
+    "fixtureSubstitution": false,
+    "recovery": false,
+    "reason": "Restored requests still hit the original oversized-window refusal"
+  },
+  "console": {
+    "crashes": 0,
+    "expectedErrors": [
+      "historical HTTP 400",
+      "simulated outage ERR_FAILED"
+    ],
+    "unattributedHttp403": 1,
+    "extensionsInvolved": false
+  },
+  "limits": [
+    "No real browser-wallet approval.",
+    "No production verification in this pass."
+  ]
+}

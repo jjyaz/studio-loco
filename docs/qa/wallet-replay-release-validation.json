@@ -10,9 +10,9 @@
   ],
   "automated": {
     "unitTests": {
-      "passed": 202,
+      "passed": 209,
       "failed": 0,
-      "files": 19,
+      "files": 20,
       "evidence": "docs/qa/wallet-replay-unit-results.json"
     },
     "sourceTypeScript": {
@@ -29,7 +29,10 @@
     }
   },
   "previewBrowser": {
-    "status": "pending"
+    "status": "historical-loading-blocker-found",
+    "firstPass": "docs/qa/wallet-replay-preview-first-pass.json",
+    "fix": "96-period sequential half-open partitions",
+    "regressionStatus": "pending"
   },
   "publication": {
     "status": "pending"

@@ -25,7 +25,15 @@ export function useTxRunner() {
   const next = { wallet: wallet.publicKey?.toBase58() ?? "", cluster: settings.cluster, rpc: settings.rpc[settings.cluster] ?? "" };
   if (live.current.wallet !== next.wallet || live.current.cluster !== next.cluster || live.current.rpc !== next.rpc) epoch.current++;
   live.current = next;
-  useEffect(() => { mounted.current = true; return () => { mounted.current = false; epoch.current++; }; }, []);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      // This is a live generation counter, not a DOM ref: invalidate its current value.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+      epoch.current++;
+    };
+  }, []);
   const canSign = !!wallet.publicKey && !!wallet.signTransaction;
   async function run(list: { label: string; tx: Transaction; signers?: Signer[] }[], extra: { semanticGuard?: () => string | null; maxFeeLamports?: number } = {}): Promise<TxStep[]> {
     if (!wallet.publicKey) throw new Error("Connect a wallet first");

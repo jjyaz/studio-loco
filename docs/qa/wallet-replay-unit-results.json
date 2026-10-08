@@ -1,10 +1,10 @@
 {
   "success": true,
-  "numTotalTests": 202,
-  "numPassedTests": 202,
+  "numTotalTests": 209,
+  "numPassedTests": 209,
   "numFailedTests": 0,
   "numPendingTests": 0,
-  "startTime": 1791416450129,
+  "startTime": 1791417592483,
   "files": [
     {
       "file": "agents-chain.test.ts",
@@ -752,6 +752,40 @@
         },
         {
           "name": "relay getMultipleAccounts split fails the whole call when any chunk errors",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "replay-data.test.ts",
+      "status": "passed",
+      "tests": [
+        {
+          "name": "bounded historical tape loading stitches 288 '5m' bars without double-counting inclusive boundaries",
+          "status": "passed"
+        },
+        {
+          "name": "bounded historical tape loading stitches 168 '1h' bars without double-counting inclusive boundaries",
+          "status": "passed"
+        },
+        {
+          "name": "bounded historical tape loading keeps an empty early shard as missing history for a newer pool",
+          "status": "passed"
+        },
+        {
+          "name": "bounded historical tape loading still refuses duplicates inside an individual response",
+          "status": "passed"
+        },
+        {
+          "name": "bounded historical tape loading fails the whole tape when a later shard fails instead of returning partial success",
+          "status": "passed"
+        },
+        {
+          "name": "bounded historical tape loading caller cancellation stops before requesting another shard",
+          "status": "passed"
+        },
+        {
+          "name": "bounded historical tape loading bounds the whole load and distinguishes a deadline from user cancellation",
           "status": "passed"
         }
       ]

@@ -13,7 +13,7 @@ This release adds `/app/checks` and `/app/replay`, hardens the shared wallet lif
 
 ## The Replay Room
 
-- Historical mainnet tapes contain completed Meteora candles: 288 five-minute periods or 168 hourly periods. The first close initializes the modeled range and baseline.
+- Historical mainnet tapes contain completed Meteora candles: 288 five-minute periods or 168 hourly periods. The API rejected these full windows in the first browser pass. The loader now fetches sequential windows of at most 96 periods, validates each half-open partition and stitches the tape without double-counting inclusive boundary rows. Empty partitions remain missing history; a failed partition stops the complete load. The whole load has a 40-second deadline. The first available close initializes the modeled range and baseline.
 - Strict parsing refuses malformed prices, nonaligned times and duplicate timestamps. Missing periods and excluded outside-window periods remain visible. API errors never substitute a practice fixture.
 - Observatory rule evaluation uses only the prefix available at each completed close. Cooldowns and risk precedence are preserved. Observed out-of-range duration resets across gaps; volatility needs consecutive closes and a matching frame.
 - Bin IDs are inferred from Y-per-X candle prices, bin step and both token decimals. They are not historical on-chain active-bin observations.
@@ -24,9 +24,9 @@ This release adds `/app/checks` and `/app/replay`, hardens the shared wallet lif
 
 ## Automated evidence
 
-`docs/qa/wallet-replay-unit-results.json` records 202 passing tests across 19 files, zero failures. The focused additions exercise real shared-runner code with a mocked adapter/RPC, strict tape parsing, causal replay, exact widths, cooldown, gap continuity, mismatched volatility, historical-error boundaries and cancellation of late results. These tests do not constitute real browser-wallet acceptance or funded mainnet transactions.
+`docs/qa/wallet-replay-unit-results.json` records 209 passing tests across 20 files, zero failures. The focused additions exercise real shared-runner code with a mocked adapter/RPC, strict tape parsing, causal replay, exact widths, cooldown, gap continuity, mismatched volatility, historical-error boundaries and cancellation of late results. These tests do not constitute real browser-wallet acceptance or funded mainnet transactions.
 
-Source TypeScript, QA-harness TypeScript, production build and browser results are recorded separately in `docs/qa/wallet-replay-release-validation.json` as they are completed.
+The initial browser failure is retained in `docs/qa/wallet-replay-preview-first-pass.json`; repaired historical loading and recovery require a second browser pass. Source TypeScript, QA-harness TypeScript, production build and browser results are recorded separately in `docs/qa/wallet-replay-release-validation.json` as they are completed.
 
 ## Manual browser-wallet acceptance
 

@@ -44,6 +44,7 @@ export interface ReplayTape {
   startSec: number;
   endSec: number;
   loadedAt: number;
+  requests?: readonly { startSec: number; endSec: number; rows: number; excludedOutside: number }[];
   candles: readonly ReplayCandle[];
   quality: { expectedBars: number; missingBars: number; excludedOutside: number; gaps: number };
 }
@@ -107,12 +108,13 @@ export function parseReplayCandles(
   frame: VolFrame,
   startSec: number,
   endSec: number,
+  minimumCandles: 0 | 2 = 2,
 ): Pick<ReplayTape, "candles" | "quality"> {
   const step = FRAME_MS[frame] / 1000;
   const expectedBars = (endSec - startSec) / step;
   if (
     !Number.isInteger(expectedBars) ||
-    expectedBars < 2 ||
+    expectedBars < 1 ||
     expectedBars > 500 ||
     startSec % step !== 0 ||
     endSec % step !== 0
@@ -164,7 +166,7 @@ export function parseReplayCandles(
     candles.push(candle);
   }
   candles.sort((a, b) => a.t - b.t);
-  if (candles.length < 2)
+  if (candles.length < minimumCandles)
     throw new Error(
       "Fewer than two completed candles were returned. Choose another pool or window.",
     );
