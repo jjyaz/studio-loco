@@ -11,7 +11,8 @@ const ttl = () => new Date(Date.now() + WATCH_TTL_DAYS * 86_400_000).toISOString
 async function admin() { return (await import("@/integrations/supabase/client.server")).supabaseAdmin; }
 async function conn() {
   const { Connection } = await import("@solana/web3.js");
-  return new Connection(process.env["SOLANA_MAINNET_RPC_URL"] || PUBLICNODE, { commitment: "confirmed", disableRetryOnRateLimit: true });
+  const { createRpcFetch } = await import("./rpc-fetch");
+  return new Connection(process.env["SOLANA_MAINNET_RPC_URL"] || PUBLICNODE, { commitment: "confirmed", disableRetryOnRateLimit: true, fetch: createRpcFetch(fetch, 15_000) });
 }
 
 /** Create a watch. Position watches are verified on chain now and armed at the CURRENT active bin. */
@@ -50,10 +51,15 @@ export const setWatchStatus = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => Id.extend({ status: z.enum(["active", "paused"]) }).parse(d))
   .handler(async ({ data, context }) => {
     const a = await admin();
-    const { data: w } = await a.from("signal_watches").select("revision").eq("id", data.id).eq("user_id", context.userId).maybeSingle();
+    const { data: w, error: re } = await a.from("signal_watches").select("revision,status").eq("id", data.id).eq("user_id", context.userId).maybeSingle();
+    if (re) return { ok: false as const, error: "Could not read the watch. Nothing changed." };
     if (!w) return { ok: false as const, error: "Watch not found" };
-    const { error } = await a.from("signal_watches").update({ status: data.status, revision: w.revision + 1, out_run: null, updated_at: new Date().toISOString() }).eq("id", data.id).eq("user_id", context.userId);
-    return error ? { ok: false as const, error: error.message } : { ok: true as const };
+    if (w.status === data.status) return { ok: true as const, revision: w.revision, unchanged: true as const };
+    const { data: rows, error } = await a.from("signal_watches").update({ status: data.status, revision: w.revision + 1, out_run: null, updated_at: new Date().toISOString() })
+      .eq("id", data.id).eq("user_id", context.userId).eq("revision", w.revision).select("revision");
+    if (error) return { ok: false as const, error: "Could not save the change. Nothing changed." };
+    if (!rows?.length) return { ok: false as const, error: "The watch changed in another window. Reload and try again." };
+    return { ok: true as const, revision: rows[0]!.revision };
   });
 
 export const renewWatch = createServerFn({ method: "POST" })
@@ -61,8 +67,10 @@ export const renewWatch = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => Id.parse(d))
   .handler(async ({ data, context }) => {
     const a = await admin();
-    const { error, count } = await a.from("signal_watches").update({ expires_at: ttl(), updated_at: new Date().toISOString() }, { count: "exact" }).eq("id", data.id).eq("user_id", context.userId);
-    return error || !count ? { ok: false as const, error: error?.message ?? "Watch not found" } : { ok: true as const };
+    const { data: rows, error } = await a.from("signal_watches").update({ expires_at: ttl(), updated_at: new Date().toISOString() }).eq("id", data.id).eq("user_id", context.userId).select("expires_at");
+    if (error) return { ok: false as const, error: "Could not renew the watch. Its expiry is unchanged." };
+    if (!rows?.length) return { ok: false as const, error: "Watch not found" };
+    return { ok: true as const, expiresAt: rows[0]!.expires_at };
   });
 
 /** Edit rule parameters; re-arms at a fresh verified active bin. Revision bump invalidates in-flight work. */
@@ -79,8 +87,14 @@ export const editPositionWatch = createServerFn({ method: "POST" })
       const prev = w.rule as { mintX: string; mintY: string };
       if (prev.mintX !== obs.mintX || prev.mintY !== obs.mintY) return { ok: false as const, error: "Pool mint identity changed" };
       const rule = armRule({ ...data.rule, armed: false, baseline: null, revision: (data.rule.revision ?? 0) + 1 }, obs.activeId, obs.binStep, Date.now());
-      const { error } = await a.from("signal_watches").update({ rule: { rule, mintX: obs.mintX, mintY: obs.mintY, binStep: obs.binStep } as never, revision: w.revision + 1, out_run: null, last_proposed: {}, updated_at: new Date().toISOString() }).eq("id", data.id).eq("user_id", context.userId);
-      return error ? { ok: false as const, error: error.message } : { ok: true as const, baseline: obs.activeId };
+      const prevStep = (w.rule as { binStep?: number }).binStep;
+      if (prevStep !== undefined && prevStep !== obs.binStep) return { ok: false as const, error: "Pool bin step changed" };
+      // Compare-and-swap on the revision read above: a concurrent pause/resume/edit wins and this edit is refused.
+      const { data: rows, error } = await a.from("signal_watches").update({ rule: { rule, mintX: obs.mintX, mintY: obs.mintY, binStep: obs.binStep } as never, revision: w.revision + 1, out_run: null, last_proposed: {}, updated_at: new Date().toISOString() })
+        .eq("id", data.id).eq("user_id", context.userId).eq("revision", w.revision).select("revision");
+      if (error) return { ok: false as const, error: "Could not save the edit. Nothing changed." };
+      if (!rows?.length) return { ok: false as const, error: "The watch changed in another window (paused, resumed or edited). Reload and try again." };
+      return { ok: true as const, baseline: obs.activeId, revision: rows[0]!.revision };
     } catch (e) {
       return { ok: false as const, error: redact(e instanceof Error ? e.message : String(e)) };
     }
@@ -89,48 +103,52 @@ export const editPositionWatch = createServerFn({ method: "POST" })
 /* ---------------- Web Push ---------------- */
 
 export const getPushConfig = createServerFn({ method: "GET" }).handler(async () => {
-  const seed = process.env["VAPID_PRIVATE_SEED"];
+  const { vapidKeys, b64u, loadVapidSeed } = await import("./webpush.server");
+  const seed = await loadVapidSeed();
   if (!seed) return { available: false as const };
-  const { vapidKeys, b64u } = await import("./webpush.server");
   return { available: true as const, publicKey: b64u(vapidKeys(seed).pub) };
 });
 
-const Sub = z.object({ endpoint: z.string().url().max(1024), p256dh: z.string().min(80).max(120), auth: z.string().min(16).max(32) });
+const Sub = z.object({ endpoint: z.string().max(1024), p256dh: z.string().min(80).max(100), auth: z.string().min(20).max(24) }).strict();
 
 export const savePushSubscription = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => Sub.parse(d))
   .handler(async ({ data, context }) => {
-    const { safeEndpoint } = await import("./webpush.server");
-    if (!safeEndpoint(data.endpoint)) return { ok: false as const, error: "Unsupported push endpoint" };
+    const { safeEndpoint, validSubscriptionKeys } = await import("./webpush.server");
+    if (!safeEndpoint(data.endpoint)) return { ok: false as const, error: "This browser's push service isn't supported." };
+    if (!validSubscriptionKeys(data.p256dh, data.auth)) return { ok: false as const, error: "The browser returned invalid subscription keys." };
     const a = await admin();
-    const { count } = await a.from("push_subscriptions").select("id", { count: "exact", head: true }).eq("user_id", context.userId);
-    if ((count ?? 0) >= 5) return { ok: false as const, error: "Up to 5 devices per account" };
-    // An endpoint belongs to one browser profile: re-subscribing moves it to the current account.
-    await a.from("push_subscriptions").delete().eq("endpoint", data.endpoint);
-    const { error } = await a.from("push_subscriptions").insert({ user_id: context.userId, ...data });
-    return error ? { ok: false as const, error: error.message } : { ok: true as const };
+    const { data: r, error } = await a.rpc("signal_save_push", { _user: context.userId, _endpoint: data.endpoint, _p256dh: data.p256dh, _auth: data.auth });
+    if (error) return { ok: false as const, error: "Could not save this device. Notifications are off." };
+    if (r === "conflict") return { ok: false as const, error: "This browser is already subscribed under a different account. Unsubscribe there first." };
+    if (r === "cap") return { ok: false as const, error: "Up to 5 devices per account" };
+    return { ok: true as const };
   });
 
 export const removePushSubscription = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: unknown) => z.object({ endpoint: z.string().max(1024) }).parse(d))
+  .inputValidator((d: unknown) => z.object({ endpoint: z.string().max(1024) }).strict().parse(d))
   .handler(async ({ data, context }) => {
     const a = await admin();
-    await a.from("push_subscriptions").delete().eq("endpoint", data.endpoint).eq("user_id", context.userId);
-    return { ok: true as const };
+    const { error } = await a.from("push_subscriptions").delete().eq("endpoint", data.endpoint).eq("user_id", context.userId);
+    return error ? { ok: false as const, error: "Could not remove this device on the server." } : { ok: true as const };
   });
 
 export const sendTestPush = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const seed = process.env["VAPID_PRIVATE_SEED"];
+    const { sendPush, loadVapidSeed } = await import("./webpush.server");
+    const seed = await loadVapidSeed();
     if (!seed) return { ok: false as const, error: "Push is not configured" };
     const a = await admin();
     const { data: subs } = await a.from("push_subscriptions").select("id,endpoint,p256dh,auth").eq("user_id", context.userId).limit(5);
     if (!subs?.length) return { ok: false as const, error: "No subscribed devices" };
-    const { sendPush } = await import("./webpush.server");
-    let sent = 0;
-    for (const s of subs) { const r = await sendPush(s, { title: "Signal Box test", body: "Notifications are working. This is a test, not an alert.", url: "/app/signal-box" }, seed); if (r.ok) sent++; else if (r.gone) await a.from("push_subscriptions").delete().eq("id", s.id); }
-    return { ok: true as const, sent, total: subs.length };
+    let accepted = 0;
+    for (const s of subs) {
+      const r = await sendPush(s, { title: "Signal Box test", body: "Notifications are working. This is a test, not an alert." }, seed).catch(() => null);
+      if (r?.ok) accepted++;
+      else if (r && !r.ok && r.gone) await a.from("push_subscriptions").delete().eq("id", s.id).eq("user_id", context.userId);
+    }
+    return { ok: true as const, accepted, total: subs.length };
   });

@@ -253,7 +253,7 @@ function Inbox({ userId, focus }: { userId: string; focus?: string }) {
   return (
     <div>
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm text-cream/80">An alert is an observation, not an approval. Opening it refetches fresh chain state and prepares a <strong>new</strong> review with the usual guards and fee caps.</p>
+        <p className="text-sm text-cream/80">An alert is an observation, not an approval. Its link opens Observatory or Dispatch with the alert and watch identifiers; any action still needs a <strong>new</strong> review there with the usual guards and fee caps.</p>
         <label className="station-code flex items-center gap-2"><input type="checkbox" checked={unreadOnly} onChange={(e) => setUnreadOnly(e.target.checked)} /> Unread only</label>
       </div>
       {!rows.length ? <Panel><p className="text-cream/80">No alerts. Quiet lamps mean no rule triggered in a successful observation — check Scheduler health and each watch's last good read before treating that as calm.</p></Panel> : (
@@ -322,13 +322,13 @@ function Notify() {
       const s = await subscribePush(c.publicKey);
       if (typeof s === "string") { setState(s); return; }
       const r = await save({ data: s });
-      setMsg(r.ok ? "This browser will receive Signal Box alerts." : r.error);
+      setMsg(r.ok ? "Subscribed. Use Send test to check this browser actually shows a notification." : r.error);
       setState(await currentPushState());
     } catch (e) { setMsg(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
   }
   async function disable() {
     setBusy(true);
-    try { const ep = await unsubscribePush(); if (ep) await remove({ data: { endpoint: ep } }); setMsg("Unsubscribed on this browser."); setState(await currentPushState()); } finally { setBusy(false); }
+    try { const ep = await unsubscribePush(); const r = ep ? await remove({ data: { endpoint: ep } }) : { ok: true as const }; setMsg(r.ok ? "Unsubscribed on this browser." : "Unsubscribed in this browser, but the server copy couldn't be removed. It will be dropped on the next failed send."); setState(await currentPushState()); } catch (e) { setMsg(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
   }
   const copy: Record<PushState, string> = {
     unsupported: "This browser doesn't support Web Push. Alerts still land in your inbox.",
@@ -337,16 +337,16 @@ function Notify() {
     denied: "Blocked in your browser's site settings. Allow notifications for this site there, then try again.",
     subscribed: "On for this browser.",
     "not-subscribed": "Off for this browser.",
-    "not-configured": "Push sending isn't configured on the server. Alerts still land in your inbox.",
+    "not-configured": "Browser notifications are unavailable right now. Alerts still land in your inbox.",
   };
   return (
     <Panel>
       <h2 className="display text-2xl">Browser notifications</h2>
-      <p className="mt-2 max-w-2xl text-sm text-cream/80">Optional. Studio Loco never requests permission on its own. Clicking a notification opens the alert in your inbox, from which you open a fresh review. Email delivery isn't offered: it would need a separate mail provider, so the inbox and Web Push are the channels.</p>
+      <p className="mt-2 max-w-2xl text-sm text-cream/80">Optional. Studio Loco never requests permission on its own. Clicking a notification opens that alert in your inbox. Alerts arrive in the inbox and, if you turn them on, as browser notifications; email alerts aren't available.</p>
       <p className="mt-3 station-code" role="status">{state ? copy[state] : "Checking…"}</p>
       <div className="mt-3 flex flex-wrap gap-2">
         {state !== "subscribed" ? <Btn onClick={enable} disabled={busy || state === "unsupported" || state === "open-in-new-tab"}>Enable on this browser</Btn> : <Btn variant="line" onClick={disable} disabled={busy}>Unsubscribe</Btn>}
-        {state === "subscribed" && <Btn variant="ghost" disabled={busy} onClick={async () => { const r = await test(); setMsg(r.ok ? `Test sent to ${r.sent}/${r.total} device(s).` : r.error); }}>Send test</Btn>}
+        {state === "subscribed" && <Btn variant="ghost" disabled={busy} onClick={async () => { const r = await test(); setMsg(r.ok ? `The push service accepted the test for ${r.accepted}/${r.total} device(s). Delivery isn't confirmed — check that a notification appeared.` : r.error); }}>Send test</Btn>}
       </div>
       {msg && <p className="mt-2 text-sm text-cream/85">{msg}</p>}
     </Panel>

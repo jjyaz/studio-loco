@@ -21,93 +21,148 @@ const redact = (s: string) => s.replace(/https?:\/\/[^\s"')]+/g, "[url]").slice(
 
 type Admin = Awaited<typeof import("@/integrations/supabase/client.server")>["supabaseAdmin"];
 
-interface WatchRow { id: string; user_id: string; kind: string; position: string | null; pool: string | null; owner: string | null; rule: unknown; revision: number; out_run: unknown; last_proposed: unknown; last_run_at: string | null }
+export interface WatchRow { id: string; user_id: string; kind: string; position: string | null; pool: string | null; owner: string | null; rule: unknown; revision: number; out_run: unknown; last_proposed: unknown; last_run_at: string | null }
 
-export async function runTick(admin: Admin): Promise<{ skipped?: string; tick?: number; processed: number; errors: number; alerts: number; discarded: number }> {
+const LEASE_TTL_S = 150;
+/** Work stops well before the lease can expire; the DB also refuses commits once it has. */
+export const TICK_BUDGET_MS = 110_000;
+const MIN_WATCH_BUDGET_MS = 15_000;
+const TOKEN_PROGRAMS = new Set(["TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA", "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"]);
+const MAINNET_GENESIS = "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d";
+
+export function rpcSource(): "server-configured" | "publicnode-default" {
+  return process.env["SOLANA_MAINNET_RPC_URL"] ? "server-configured" : "publicnode-default";
+}
+export async function mainnetConnection() {
+  const { Connection } = await import("@solana/web3.js");
+  const { createRpcFetch } = await import("./rpc-fetch");
+  return new Connection(process.env["SOLANA_MAINNET_RPC_URL"] || PUBLICNODE, { commitment: "confirmed", disableRetryOnRateLimit: true, fetch: createRpcFetch(fetch, 15_000) });
+}
+
+export interface TickDeps {
+  connection?: import("@solana/web3.js").Connection;
+  now?: () => number;
+  budgetMs?: number;
+  observe?: (w: WatchRow, lastProposed: Record<string, number>, budgetMs: number) => Promise<TickOutcome>;
+}
+
+export async function runTick(admin: Admin, deps: TickDeps = {}): Promise<{ skipped?: string; tick?: number; processed: number; errors: number; alerts: number; discarded: number; late: number }> {
   installNodeGlobals();
+  const now = deps.now ?? Date.now;
   const holder = crypto.randomUUID();
-  const { data: got, error: le } = await admin.rpc("signal_acquire_lease", { _holder: holder, _ttl_seconds: 150 });
+  const { data: got, error: le } = await admin.rpc("signal_acquire_lease", { _holder: holder, _ttl_seconds: LEASE_TTL_S });
   if (le) throw new Error(`lease: ${le.message}`);
-  if (!got) return { skipped: "another tick holds the lease", processed: 0, errors: 0, alerts: 0, discarded: 0 };
-  const { data: tickRow } = await admin.from("signal_ticks").insert({}).select("id").single();
-  const tick = tickRow?.id ?? null;
-  let processed = 0, errors = 0, alerts = 0, discarded = 0;
-  const started = Date.now();
+  if (!got) return { skipped: "another tick holds the lease", processed: 0, errors: 0, alerts: 0, discarded: 0, late: 0 };
+  const started = now();
+  const deadline = started + (deps.budgetMs ?? TICK_BUDGET_MS);
+  let tick: number | null = null;
+  let processed = 0, errors = 0, alerts = 0, discarded = 0, late = 0;
+  let note: string | null = null;
   try {
+    const { data: tickRow, error: te } = await admin.from("signal_ticks").insert({}).select("id").single();
+    if (te || !tickRow) { note = "tick row unavailable"; errors++; }
+    else tick = tickRow.id;
     const { data: watches, error } = await admin.from("signal_watches")
       .select("id,user_id,kind,position,pool,owner,rule,revision,out_run,last_proposed,last_run_at")
-      .eq("status", "active").gt("expires_at", new Date().toISOString())
+      .eq("status", "active").gt("expires_at", new Date(now()).toISOString())
       .order("last_run_at", { ascending: true, nullsFirst: true }).limit(MAX_WATCHES_PER_TICK);
     if (error) throw new Error(error.message);
-    const { Connection } = await import("@solana/web3.js");
-    const rpc = process.env["SOLANA_MAINNET_RPC_URL"] || PUBLICNODE;
-    const connection = new Connection(rpc, { commitment: "confirmed", disableRetryOnRateLimit: true });
+    const connection = deps.connection ?? (watches?.length ? await mainnetConnection() : null);
     for (const w of (watches ?? []) as WatchRow[]) {
-      if (Date.now() - started > TICK_DEADLINE_MS) break;
-      if (w.kind === "arb" && w.last_run_at && Date.now() - Date.parse(w.last_run_at) < ARB_MIN_INTERVAL_MS) continue;
+      const remaining = deadline - now();
+      if (remaining < MIN_WATCH_BUDGET_MS) break;
+      if (w.kind === "arb" && w.last_run_at && now() - Date.parse(w.last_run_at) < ARB_MIN_INTERVAL_MS) continue;
       const lastProposed = (w.last_proposed && typeof w.last_proposed === "object" ? w.last_proposed : {}) as Record<string, number>;
+      const budget = remaining - 5_000;
       let out: TickOutcome;
       try {
-        out = w.kind === "position" ? await positionWatch(connection, w, lastProposed) : await arbWatch(connection, w, lastProposed);
+        const work = deps.observe ? deps.observe(w, lastProposed, budget)
+          : w.kind === "position" ? positionWatch(connection!, w, lastProposed, budget) : arbWatch(connection!, w, lastProposed, budget);
+        out = await withTimeout(work, budget, "Observation");
       } catch (e) {
         out = failedTick(redact(e instanceof Error ? e.message : String(e)), lastProposed);
       }
       processed++;
+      // No late results: past the deadline the result is dropped, not committed.
+      if (now() > deadline) { late++; break; }
       if (!out.ok) errors++;
       const { data: res, error: ce } = await admin.rpc("signal_commit", {
-        _watch: w.id, _revision: w.revision, _tick: tick as number, _ok: out.ok, _summary: out.summary as never, _error: out.error as string,
+        _holder: holder, _watch: w.id, _revision: w.revision, _tick: tick as number, _ok: out.ok, _summary: out.summary as never, _error: out.error as string,
         _out_run: out.outRun as never, _last_proposed: out.lastProposed as never, _alert: out.alert as never,
       });
       if (ce) { errors++; continue; }
-      const r = res as { committed: boolean; alert_id?: string | null };
-      if (!r.committed) { discarded++; continue; }
-      if (r.alert_id) { alerts++; await notify(admin, w, r.alert_id, out.alert!); }
+      const r = res as { committed: boolean; reason?: string; alert_id?: string | null };
+      if (!r.committed) { discarded++; if (r.reason === "lease lost") { note = "lease lost; tick stopped"; break; } continue; }
+      if (r.alert_id) { alerts++; await notify(admin, w, r.alert_id, out.alert!).catch(() => undefined); }
     }
-    return { tick: tick ?? undefined, processed, errors, alerts, discarded };
+    return { tick: tick ?? undefined, processed, errors, alerts, discarded, late };
   } finally {
-    if (tick !== null) await admin.from("signal_ticks").update({ finished_at: new Date().toISOString(), processed, errors, alerts, note: discarded ? `${discarded} result(s) discarded after pause/edit/delete` : null }).eq("id", tick);
-    await admin.rpc("signal_release_lease", { _holder: holder });
+    const notes = [note, discarded ? `${discarded} result(s) discarded (pause/edit/delete/expiry/lease)` : null, late ? "deadline reached; late result dropped" : null].filter(Boolean).join("; ") || null;
+    if (tick !== null) await admin.from("signal_ticks").update({ finished_at: new Date(now()).toISOString(), processed, errors, alerts, note: notes }).eq("id", tick).then(() => undefined, () => undefined);
+    await admin.rpc("signal_release_lease", { _holder: holder }).then(() => undefined, () => undefined);
   }
 }
 
-async function positionWatch(connection: import("@solana/web3.js").Connection, w: WatchRow, lastProposed: Record<string, number>): Promise<TickOutcome> {
+async function positionWatch(connection: import("@solana/web3.js").Connection, w: WatchRow, lastProposed: Record<string, number>, budgetMs: number): Promise<TickOutcome> {
   const stored = StoredPositionRule.safeParse(w.rule);
   if (!stored.success || !w.position || !w.pool || !w.owner) return failedTick("Stored rule failed validation.", lastProposed);
-  const obs = await observePosition(connection, w.position, w.pool, w.owner, stored.data.rule.volatility);
+  const obs = await observePosition(connection, w.position, w.pool, w.owner, stored.data.rule.volatility, { mintX: stored.data.mintX, mintY: stored.data.mintY, binStep: stored.data.binStep }, budgetMs);
   const prevOut = (w.out_run && typeof w.out_run === "object" ? w.out_run : null) as OutRun | null;
-  return positionTick({ watchId: w.id, revision: w.revision, position: w.position, pool: w.pool, owner: w.owner, stored: stored.data, obs, prevOut, lastProposed, now: Date.now() });
+  const t = positionTick({ watchId: w.id, revision: w.revision, position: w.position, pool: w.pool, owner: w.owner, stored: stored.data, obs, prevOut, lastProposed, now: Date.now() });
+  if (t.ok) t.summary = { ...t.summary, slot: obs.slot, source: obs.source, genesis: "verified", decX: obs.decX, decY: obs.decY };
+  return t;
 }
 
-/** Fresh verified chain read: DLMM program owner, PositionV2 discriminator, pool + owner binding, live active bin. */
-export async function observePosition(connection: import("@solana/web3.js").Connection, position: string, poolAddr: string, owner: string, vol: StoredPositionRule["rule"]["volatility"]) {
+/** Fresh verified chain read: genesis, pool program/discriminator, PositionV2 program/discriminator/pool/owner,
+ *  token mint programs/decimals, optional stored identities. Any failure throws → observation unavailable. */
+export async function observePosition(connection: import("@solana/web3.js").Connection, position: string, poolAddr: string, owner: string,
+  vol: StoredPositionRule["rule"]["volatility"], expect: { mintX: string; mintY: string; binStep?: number } | null = null, budgetMs = 60_000) {
+  const end = Date.now() + budgetMs;
+  const left = (cap: number) => Math.max(1, Math.min(cap, end - Date.now()));
   const { PublicKey } = await import("@solana/web3.js");
   const { loadSdk, getPool, DLMM_PROGRAM_ID, invalidatePool } = await import("./dlmm");
   const { verifyDlmmAccount } = await import("./account-verify");
+  const genesis = await withTimeout(connection.getGenesisHash(), left(10_000), "Genesis read");
+  if (genesis !== MAINNET_GENESIS) throw new Error("RPC is not mainnet-beta (genesis mismatch).");
   const sdk = await loadSdk();
-  const disc = Uint8Array.from(sdk.getAccountDiscriminator("positionV2"));
-  invalidatePool(poolAddr);
-  const pool = await withTimeout(getPool(connection, poolAddr, "mainnet-beta"), 20_000, "Pool load");
-  const pk = new PublicKey(position);
-  const info = await withTimeout(connection.getAccountInfo(pk, "confirmed"), 10_000, "Position read");
-  if (!verifyDlmmAccount(info, { programId: DLMM_PROGRAM_ID, discriminator: disc, lbPair: pool.pubkey.toBytes(), owner: new PublicKey(owner).toBytes() })) {
+  const posDisc = Uint8Array.from(sdk.getAccountDiscriminator("positionV2"));
+  const pairDisc = Uint8Array.from(sdk.getAccountDiscriminator("lbPair"));
+  const poolPk = new PublicKey(poolAddr), pk = new PublicKey(position);
+  const raw = await withTimeout(connection.getMultipleAccountsInfoAndContext([poolPk, pk], "confirmed"), left(15_000), "Account read");
+  const [poolInfo, posInfo] = raw.value;
+  if (!poolInfo || poolInfo.owner.toBase58() !== DLMM_PROGRAM_ID || !Buffer.from(poolInfo.data.subarray(0, 8)).equals(Buffer.from(pairDisc))) {
+    throw new Error("Pool failed on-chain verification (not a DLMM LbPair).");
+  }
+  if (!verifyDlmmAccount(posInfo, { programId: DLMM_PROGRAM_ID, discriminator: posDisc, lbPair: poolPk.toBytes(), owner: new PublicKey(owner).toBytes() })) {
     throw new Error("Position failed on-chain verification (program, PositionV2 type, pool or owner mismatch, or closed).");
   }
-  const pos = await withTimeout(pool.getPosition(pk), 20_000, "Position decode");
+  invalidatePool(poolAddr);
+  const pool = await withTimeout(getPool(connection, poolAddr, "mainnet-beta"), left(20_000), "Pool load");
+  const pos = await withTimeout(pool.getPosition(pk), left(20_000), "Position decode");
+  const mintX = pool.tokenX.publicKey.toBase58(), mintY = pool.tokenY.publicKey.toBase58();
+  if (expect && (expect.mintX !== mintX || expect.mintY !== mintY)) throw new Error("Pool mint identity no longer matches the watched pair.");
+  if (expect?.binStep !== undefined && expect.binStep !== pool.lbPair.binStep) throw new Error("Pool bin step changed.");
+  const mints = await withTimeout(connection.getMultipleAccountsInfo([pool.tokenX.publicKey, pool.tokenY.publicKey], "confirmed"), left(10_000), "Mint read");
+  const decs = [pool.tokenX.mint.decimals, pool.tokenY.mint.decimals];
+  mints.forEach((m, i) => {
+    if (!m || !TOKEN_PROGRAMS.has(m.owner.toBase58()) || m.data.length < 82 || m.data[44] !== decs[i]) throw new Error("Token mint failed verification (program or decimals).");
+  });
   let volReading = null;
   if (vol) {
     const { readVolatility } = await import("./agents-chain");
-    volReading = await readVolatility(poolAddr, "mainnet-beta", vol.frame, vol.candles);
+    volReading = await withTimeout(readVolatility(poolAddr, "mainnet-beta", vol.frame, vol.candles), left(15_000), "Volatility read");
   }
   return {
     activeId: pool.lbPair.activeId, binStep: pool.lbPair.binStep,
     lower: pos.positionData.lowerBinId, upper: pos.positionData.upperBinId,
-    mintX: pool.tokenX.publicKey.toBase58(), mintY: pool.tokenY.publicKey.toBase58(),
-    decX: pool.tokenX.mint.decimals, decY: pool.tokenY.mint.decimals,
-    vol: volReading,
+    mintX, mintY, decX: decs[0]!, decY: decs[1]!,
+    vol: volReading, slot: raw.context.slot, source: rpcSource(),
   };
 }
 
-async function arbWatch(connection: import("@solana/web3.js").Connection, w: WatchRow, lastProposed: Record<string, number>): Promise<TickOutcome> {
+async function arbWatch(connection: import("@solana/web3.js").Connection, w: WatchRow, lastProposed: Record<string, number>, budgetMs: number): Promise<TickOutcome> {
+  const genesis = await withTimeout(connection.getGenesisHash(), Math.min(10_000, budgetMs), "Genesis read");
+  if (genesis !== MAINNET_GENESIS) throw new Error("RPC is not mainnet-beta (genesis mismatch).");
   const v = parseArbConfig(w.rule);
   if (!v.ok) return failedTick(`Stored config invalid: ${v.error}`, lastProposed);
   const { validateConfig } = await import("./arb-math");
@@ -115,29 +170,31 @@ async function arbWatch(connection: import("@solana/web3.js").Connection, w: Wat
   if (!chk.ok) return failedTick(chk.error, lastProposed);
   const { scanRoutes, readOnlyScanCosts } = await import("./arb");
   const costs = await readOnlyScanCosts(connection, chk.priorityBudget, chk.cfg.computeUnits);
-  const r = await withTimeout(scanRoutes(connection, { inLamports: chk.inLamports, minProfit: chk.minProfit, slippageBps: chk.cfg.slippageBps, maxPools: chk.cfg.maxPools, costs }), 80_000, "Arb scan");
+  const r = await withTimeout(scanRoutes(connection, { inLamports: chk.inLamports, minProfit: chk.minProfit, slippageBps: chk.cfg.slippageBps, maxPools: chk.cfg.maxPools, costs }), Math.max(1, Math.min(80_000, budgetMs - 10_000)), "Arb scan");
   const routes = r.routes.map((x) => ({
     poolA: x.a.pool, poolB: x.b?.pool ?? "", nameA: x.nameA, nameB: x.nameB, verdict: x.verdict.kind,
     expectedProfitLamports: x.verdict.kind === "profitable" ? x.verdict.expectedProfit.toString() : x.verdict.kind === "unprofitable" && x.verdict.expectedProfit ? x.verdict.expectedProfit.toString() : null,
   }));
-  return arbTick({ watchId: w.id, revision: w.revision, routes, complete: r.complete, poolCount: r.pools.length, inputSol: chk.cfg.inputSol, lastProposed, now: Date.now() });
+  const t = arbTick({ watchId: w.id, revision: w.revision, routes, complete: r.complete, poolCount: r.pools.length, inputSol: chk.cfg.inputSol, lastProposed, now: Date.now() });
+  if (t.ok) t.summary = { ...t.summary, source: rpcSource(), genesis: "verified" };
+  return t;
 }
 
 async function notify(admin: Admin, w: WatchRow, alertId: string, alert: NonNullable<TickOutcome["alert"]>) {
-  const seed = process.env["VAPID_PRIVATE_SEED"];
+  const { sendPush, loadVapidSeed } = await import("./webpush.server");
+  const seed = await loadVapidSeed();
   const { data: subs } = await admin.from("push_subscriptions").select("id,endpoint,p256dh,auth").eq("user_id", w.user_id).limit(5);
   if (!seed || !subs?.length) { await admin.from("signal_alerts").update({ push_status: subs?.length ? "push unavailable" : "inbox only" }).eq("id", alertId); return; }
-  const { sendPush } = await import("./webpush.server");
   let sent = 0;
   for (const s of subs) {
     try {
-      const r = await sendPush(s, { title: "Signal Box", body: alert.reason.slice(0, 180), alert: alertId, url: `/app/signal-box?alert=${alertId}` }, seed);
+      const r = await sendPush(s, { title: "Signal Box", body: alert.reason.slice(0, 180), alert: alertId }, seed);
       if (r.ok) { sent++; await admin.from("push_subscriptions").update({ last_ok_at: new Date().toISOString(), last_error: null }).eq("id", s.id); }
-      else if (r.gone) await admin.from("push_subscriptions").delete().eq("id", s.id);
+      else if (r.gone) await admin.from("push_subscriptions").delete().eq("id", s.id).eq("user_id", w.user_id);
       else await admin.from("push_subscriptions").update({ last_error: `HTTP ${r.status}` }).eq("id", s.id);
     } catch (e) {
       await admin.from("push_subscriptions").update({ last_error: redact(e instanceof Error ? e.message : String(e)) }).eq("id", s.id);
     }
   }
-  await admin.from("signal_alerts").update({ push_status: `push sent to ${sent}/${subs.length}` }).eq("id", alertId);
+  await admin.from("signal_alerts").update({ push_status: `push accepted by provider for ${sent}/${subs.length} device(s); delivery not confirmed` }).eq("id", alertId);
 }
