@@ -1,3 +1,5 @@
+import { z } from "zod";
+import { recordFact } from "@/lib/recorder-store";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -28,6 +30,7 @@ export const Route = createFileRoute("/app/dispatch")({
       { name: "twitter:card", content: "summary_large_image" },
     ],
   }),
+  validateSearch: z.object({ alert: z.string().uuid().optional() }),
   component: Dispatch,
 });
 
@@ -47,6 +50,8 @@ interface Review {
 }
 
 function Dispatch() {
+  const handoff = Route.useSearch().alert;
+  const reviewRecord = useRef<string | null>(null);
   const { connection } = useConnection();
   const { publicKey } = useWallet();
   const { settings } = useSettings();
@@ -202,6 +207,10 @@ function Dispatch() {
       job.check();
       setReview({ at: quotedAt, quotedAt, gen: myGen, wallet: user.toBase58(), key, route, a, b, w, costs, floor: v.floor, conservativeProfit: v.conservativeProfit, expectedProfit: v.expectedProfit, residualUsdc: v.residualUsdc, built: final });
       push("info", `Review ready: ${route.nameA} → ${route.nameB}, ${final.bytes} bytes, quote valid ${QUOTE_TTL_MS / 1000}s.`);
+      void recordFact({ kind: "review", title: `Dispatch review ${route.nameA} → ${route.nameB}`, route: "/app/dispatch", cluster: "mainnet-beta", wallet: user.toBase58(),
+        links: handoff ? { alertId: handoff } : {}, detail: `Fresh wallet-specific requote; floor ${v.floor.toString()} lamports; quote valid ${QUOTE_TTL_MS / 1000}s; ${final.bytes} bytes; simulated before signing.`,
+        context: { poolA: a.pool, poolB: b.pool, inputLamports: a.requested.toString(), legAMin: a.min.toString(), legBMin: b.min.toString(), floorLamports: v.floor.toString(), expectedProfitLamports: v.expectedProfit.toString(), conservativeProfitLamports: v.conservativeProfit.toString(), networkFeeLamports: costs.networkFee?.toString() ?? null, slippageBps: chk.ok ? chk.cfg.slippageBps : null, quotedAt } })
+        .then((id) => { reviewRecord.current = id; });
     } catch (e) {
       // obsolete jobs never overwrite newer state; a timeout of the CURRENT job is reported
       if (!job.alive()) return;
@@ -232,7 +241,8 @@ function Dispatch() {
         if (Date.now() - r.quotedAt > QUOTE_TTL_MS) return "Quote expired — transaction discarded. Requote to try again.";
         return null;
       };
-      const steps = await runner.run([{ label: `${ARB_LABEL} ${r.route.nameA} → ${r.route.nameB}`, tx: r.built.tx }], { semanticGuard, maxFeeLamports: Number(r.costs.networkFee!.toString()) });
+      const steps = await runner.run([{ label: `${ARB_LABEL} ${r.route.nameA} → ${r.route.nameB}`, tx: r.built.tx }], { semanticGuard, maxFeeLamports: Number(r.costs.networkFee!.toString()),
+        evidence: { title: `Dispatch round trip ${r.route.nameA} → ${r.route.nameB}`, links: { ...(reviewRecord.current ? { recordId: reviewRecord.current, reviewId: reviewRecord.current } : {}), ...(handoff ? { alertId: handoff } : {}) }, context: { floorLamports: r.floor.toString(), networkFeeCapLamports: r.costs.networkFee!.toString(), poolA: r.a.pool, poolB: r.b.pool } } });
       const s = steps[0];
       push(s?.phase === "confirmed" ? "ok" : "warn", `Transaction ${s?.phase ?? "not run"}${s?.signature ? ` · ${shortAddr(s.signature, 6)}` : ""}${s?.error ? `: ${s.error}` : ""}`);
       if (s?.phase === "confirmed" && s.signature) {
