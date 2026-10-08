@@ -6,6 +6,26 @@ import { explorerTx, shortAddr } from "@/lib/format";
 import { useSettings, type Cluster } from "@/lib/settings";
 import { cn } from "@/lib/utils";
 import { noServerTransaction, txCoordinator } from "@/lib/tx-coordinator";
+import { reconcileSignature, startWalletRecord, type Evidence } from "@/lib/recorder-store";
+import { deltasFromMeta, redact } from "@/lib/recorder";
+import type { Connection } from "@solana/web3.js";
+
+/** Separate verified post-state read from confirmed transaction metadata. Bounded; failure is recorded as unavailable. */
+async function verifyPostState(connection: Connection, wallet: string, signature: string) {
+  try {
+    const t = await Promise.race([
+      connection.getTransaction(signature, { commitment: "confirmed", maxSupportedTransactionVersion: 0 }),
+      new Promise<null>((_, rej) => setTimeout(() => rej(new Error("timed out")), 12_000)),
+    ]);
+    if (!t || !t.meta) return { verifiedAt: Date.now(), source: "getTransaction" as const, signature, slot: null, err: null, feeLamports: null, solDeltaLamports: null, tokenDeltas: [], note: "Transaction metadata not available from this RPC yet — post-state unverified." };
+    const keys = t.transaction.message.getAccountKeys({ accountKeysFromLookups: t.meta.loadedAddresses }).staticAccountKeys.map((k) => k.toBase58());
+    const tok = (xs: typeof t.meta.preTokenBalances) => (xs ?? []).map((b) => ({ owner: b.owner, mint: b.mint, amount: b.uiTokenAmount.amount, decimals: b.uiTokenAmount.decimals }));
+    const d = deltasFromMeta({ wallet, accountKeys: keys, preBalances: t.meta.preBalances, postBalances: t.meta.postBalances, fee: t.meta.fee, preToken: tok(t.meta.preTokenBalances), postToken: tok(t.meta.postTokenBalances) });
+    return { verifiedAt: Date.now(), source: "getTransaction" as const, signature, slot: t.slot, err: t.meta.err ? redact(JSON.stringify(t.meta.err)) : null, feeLamports: t.meta.fee, ...d, note: "Wallet balance change from transaction metadata. Not realized PnL; position post-state is not separately verified here." };
+  } catch (e) {
+    return { verifiedAt: Date.now(), source: "getTransaction" as const, signature, slot: null, err: null, feeLamports: null, solDeltaLamports: null, tokenDeltas: [], note: redact(`Post-state read failed: ${e instanceof Error ? e.message : String(e)}`).slice(0, 200) };
+  }
+}
 
 export function useActiveTransaction() {
   return useSyncExternalStore(txCoordinator.subscribe, txCoordinator.getSnapshot, noServerTransaction);
@@ -35,7 +55,7 @@ export function useTxRunner() {
     };
   }, []);
   const canSign = !!wallet.publicKey && !!wallet.signTransaction;
-  async function run(list: { label: string; tx: Transaction; signers?: Signer[] }[], extra: { semanticGuard?: () => string | null; maxFeeLamports?: number } = {}): Promise<TxStep[]> {
+  async function run(list: { label: string; tx: Transaction; signers?: Signer[] }[], extra: { semanticGuard?: () => string | null; maxFeeLamports?: number; evidence?: Evidence } = {}): Promise<TxStep[]> {
     if (!wallet.publicKey) throw new Error("Connect a wallet first");
     if (!wallet.signTransaction) throw new Error(UNSUPPORTED_WALLET);
     if (list.length === 0) { setSteps([]); return []; }
@@ -43,17 +63,20 @@ export function useTxRunner() {
     const startedEpoch = epoch.current;
     const lease = txCoordinator.acquire({ wallet: start.wallet, cluster: start.cluster, label: list[0]!.label });
     setRanCluster(settings.cluster);
+    const { evidence, ...guards } = extra;
+    const rec = startWalletRecord({ route: typeof window !== "undefined" ? window.location.pathname : "", cluster: settings.cluster, rpc: settings.rpc[settings.cluster] ? "custom" : "relay", wallet: start.wallet, labels: list.map((l) => l.label), evidence });
     try {
-      return await runSequence({
+      const out = await runSequence({
         connection,
         wallet: { publicKey: wallet.publicKey, signTransaction: wallet.signTransaction },
         steps: list,
         onUpdate: (state) => {
+          rec.update(state);
           if (mounted.current) setSteps(state);
           const current = state.find((s) => s.phase !== "idle" && !TERMINAL_PHASES.includes(s.phase));
           if (current) lease.update(current.label, current.phase);
         },
-        ctx: { cluster: settings.cluster, rpc: settings.rpc[settings.cluster] ? "custom" : "relay", store: browserPendingStore, ...extra,
+        ctx: { cluster: settings.cluster, rpc: settings.rpc[settings.cluster] ? "custom" : "relay", store: browserPendingStore, ...guards,
           identityGuard: () => {
             if (!mounted.current) return "This review's page was closed. The old approval was discarded; open a fresh review.";
             if (epoch.current !== startedEpoch) return "Wallet, network or RPC changed after this action started. Open a fresh review.";
@@ -63,6 +86,9 @@ export function useTxRunner() {
             return null;
           } },
       });
+      const confirmed = out.filter((s) => s.phase === "confirmed" && s.signature);
+      void (async () => { for (const s of confirmed) await rec.addPostState(await verifyPostState(connection, start.wallet, s.signature!)); })();
+      return out;
     } finally {
       lease.release();
     }
@@ -145,6 +171,7 @@ export function CheckStatus({ p, onResolved }: { p: PendingTx; onResolved?: () =
       try { await assertCluster(connection, p.cluster); }
       catch (e) { setState(e instanceof Error ? e.message : "Network check failed."); return; }
       const r = await checkSignature(connection, p.signature, p.lastValidBlockHeight);
+      void reconcileSignature(p.signature, r.kind === "confirmed" ? (r.err ? "failed" : "confirmed") : r.kind === "expired" ? "expired" : r.kind === "pending" ? "pending" : "unknown", r.kind === "unknown" ? r.reason : r.kind === "confirmed" && r.err ? JSON.stringify(r.err) : r.kind, p);
       if (r.kind === "confirmed") {
         browserPendingStore.remove(p.signature);
         setState(r.err ? `Landed but FAILED onchain: ${JSON.stringify(r.err)}` : "Confirmed onchain.");

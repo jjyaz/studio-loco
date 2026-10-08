@@ -21,7 +21,9 @@ import { Route as AppChecksRouteImport } from './routes/app.checks'
 import { Route as AppDispatchRouteImport } from './routes/app.dispatch'
 import { Route as AppLaunchRouteImport } from './routes/app.launch'
 import { Route as AppPortfolioRouteImport } from './routes/app.portfolio'
+import { Route as AppRecorderRouteImport } from './routes/app.recorder'
 import { Route as AppReplayRouteImport } from './routes/app.replay'
+import { Route as AppSignalBoxRouteImport } from './routes/app.signal-box'
 import { Route as AppSignalsRouteImport } from './routes/app.signals'
 import { Route as AppStudioRouteImport } from './routes/app.studio'
 import { Route as JournalIndexRouteImport } from './routes/journal.index'
@@ -29,6 +31,7 @@ import { Route as JournalSlugRouteImport } from './routes/journal.$slug'
 import { Route as LabIndexRouteImport } from './routes/lab.index'
 import { Route as LabArchitectureRouteImport } from './routes/lab.architecture'
 import { Route as AppPoolAddressRouteImport } from './routes/app.pool.$address'
+import { Route as ApiPublicHooksSignalTickRouteImport } from './routes/api/public/hooks/signal-tick'
 import { Route as ApiPublicRpcClusterRouteImport } from './routes/api/public/rpc.$cluster'
 
 const IndexRoute = IndexRouteImport.update({
@@ -91,9 +94,19 @@ const AppPortfolioRoute = AppPortfolioRouteImport.update({
   path: '/portfolio',
   getParentRoute: () => AppRoute,
 } as any)
+const AppRecorderRoute = AppRecorderRouteImport.update({
+  id: '/recorder',
+  path: '/recorder',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppReplayRoute = AppReplayRouteImport.update({
   id: '/replay',
   path: '/replay',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppSignalBoxRoute = AppSignalBoxRouteImport.update({
+  id: '/signal-box',
+  path: '/signal-box',
   getParentRoute: () => AppRoute,
 } as any)
 const AppSignalsRoute = AppSignalsRouteImport.update({
@@ -131,6 +144,12 @@ const AppPoolAddressRoute = AppPoolAddressRouteImport.update({
   path: '/pool/$address',
   getParentRoute: () => AppRoute,
 } as any)
+const ApiPublicHooksSignalTickRoute =
+  ApiPublicHooksSignalTickRouteImport.update({
+    id: '/api/public/hooks/signal-tick',
+    path: '/api/public/hooks/signal-tick',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiPublicRpcClusterRoute = ApiPublicRpcClusterRouteImport.update({
   id: '/api/public/rpc/$cluster',
   path: '/api/public/rpc/$cluster',
@@ -149,7 +168,9 @@ export interface FileRoutesByFullPath {
   '/app/dispatch': typeof AppDispatchRoute
   '/app/launch': typeof AppLaunchRoute
   '/app/portfolio': typeof AppPortfolioRoute
+  '/app/recorder': typeof AppRecorderRoute
   '/app/replay': typeof AppReplayRoute
+  '/app/signal-box': typeof AppSignalBoxRoute
   '/app/signals': typeof AppSignalsRoute
   '/app/studio': typeof AppStudioRoute
   '/journal/$slug': typeof JournalSlugRoute
@@ -158,6 +179,7 @@ export interface FileRoutesByFullPath {
   '/journal/': typeof JournalIndexRoute
   '/lab/': typeof LabIndexRoute
   '/app/pool/$address': typeof AppPoolAddressRoute
+  '/api/public/hooks/signal-tick': typeof ApiPublicHooksSignalTickRoute
   '/api/public/rpc/$cluster': typeof ApiPublicRpcClusterRoute
 }
 export interface FileRoutesByTo {
@@ -171,7 +193,9 @@ export interface FileRoutesByTo {
   '/app/dispatch': typeof AppDispatchRoute
   '/app/launch': typeof AppLaunchRoute
   '/app/portfolio': typeof AppPortfolioRoute
+  '/app/recorder': typeof AppRecorderRoute
   '/app/replay': typeof AppReplayRoute
+  '/app/signal-box': typeof AppSignalBoxRoute
   '/app/signals': typeof AppSignalsRoute
   '/app/studio': typeof AppStudioRoute
   '/journal/$slug': typeof JournalSlugRoute
@@ -180,6 +204,7 @@ export interface FileRoutesByTo {
   '/journal': typeof JournalIndexRoute
   '/lab': typeof LabIndexRoute
   '/app/pool/$address': typeof AppPoolAddressRoute
+  '/api/public/hooks/signal-tick': typeof ApiPublicHooksSignalTickRoute
   '/api/public/rpc/$cluster': typeof ApiPublicRpcClusterRoute
 }
 export interface FileRoutesById {
@@ -195,7 +220,9 @@ export interface FileRoutesById {
   '/app/dispatch': typeof AppDispatchRoute
   '/app/launch': typeof AppLaunchRoute
   '/app/portfolio': typeof AppPortfolioRoute
+  '/app/recorder': typeof AppRecorderRoute
   '/app/replay': typeof AppReplayRoute
+  '/app/signal-box': typeof AppSignalBoxRoute
   '/app/signals': typeof AppSignalsRoute
   '/app/studio': typeof AppStudioRoute
   '/journal/$slug': typeof JournalSlugRoute
@@ -204,6 +231,7 @@ export interface FileRoutesById {
   '/journal/': typeof JournalIndexRoute
   '/lab/': typeof LabIndexRoute
   '/app/pool/$address': typeof AppPoolAddressRoute
+  '/api/public/hooks/signal-tick': typeof ApiPublicHooksSignalTickRoute
   '/api/public/rpc/$cluster': typeof ApiPublicRpcClusterRoute
 }
 export interface FileRouteTypes {
@@ -220,7 +248,9 @@ export interface FileRouteTypes {
     | '/app/dispatch'
     | '/app/launch'
     | '/app/portfolio'
+    | '/app/recorder'
     | '/app/replay'
+    | '/app/signal-box'
     | '/app/signals'
     | '/app/studio'
     | '/journal/$slug'
@@ -229,6 +259,7 @@ export interface FileRouteTypes {
     | '/journal/'
     | '/lab/'
     | '/app/pool/$address'
+    | '/api/public/hooks/signal-tick'
     | '/api/public/rpc/$cluster'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -242,7 +273,9 @@ export interface FileRouteTypes {
     | '/app/dispatch'
     | '/app/launch'
     | '/app/portfolio'
+    | '/app/recorder'
     | '/app/replay'
+    | '/app/signal-box'
     | '/app/signals'
     | '/app/studio'
     | '/journal/$slug'
@@ -251,6 +284,7 @@ export interface FileRouteTypes {
     | '/journal'
     | '/lab'
     | '/app/pool/$address'
+    | '/api/public/hooks/signal-tick'
     | '/api/public/rpc/$cluster'
   id:
     | '__root__'
@@ -265,7 +299,9 @@ export interface FileRouteTypes {
     | '/app/dispatch'
     | '/app/launch'
     | '/app/portfolio'
+    | '/app/recorder'
     | '/app/replay'
+    | '/app/signal-box'
     | '/app/signals'
     | '/app/studio'
     | '/journal/$slug'
@@ -274,6 +310,7 @@ export interface FileRouteTypes {
     | '/journal/'
     | '/lab/'
     | '/app/pool/$address'
+    | '/api/public/hooks/signal-tick'
     | '/api/public/rpc/$cluster'
   fileRoutesById: FileRoutesById
 }
@@ -288,6 +325,7 @@ export interface RootRouteChildren {
   LabArchitectureRoute: typeof LabArchitectureRoute
   JournalIndexRoute: typeof JournalIndexRoute
   LabIndexRoute: typeof LabIndexRoute
+  ApiPublicHooksSignalTickRoute: typeof ApiPublicHooksSignalTickRoute
   ApiPublicRpcClusterRoute: typeof ApiPublicRpcClusterRoute
 }
 
@@ -377,11 +415,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppPortfolioRouteImport
       parentRoute: typeof AppRoute
     }
+    '/app/recorder': {
+      id: '/app/recorder'
+      path: '/recorder'
+      fullPath: '/app/recorder'
+      preLoaderRoute: typeof AppRecorderRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/app/replay': {
       id: '/app/replay'
       path: '/replay'
       fullPath: '/app/replay'
       preLoaderRoute: typeof AppReplayRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/signal-box': {
+      id: '/app/signal-box'
+      path: '/signal-box'
+      fullPath: '/app/signal-box'
+      preLoaderRoute: typeof AppSignalBoxRouteImport
       parentRoute: typeof AppRoute
     }
     '/app/signals': {
@@ -433,6 +485,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppPoolAddressRouteImport
       parentRoute: typeof AppRoute
     }
+    '/api/public/hooks/signal-tick': {
+      id: '/api/public/hooks/signal-tick'
+      path: '/api/public/hooks/signal-tick'
+      fullPath: '/api/public/hooks/signal-tick'
+      preLoaderRoute: typeof ApiPublicHooksSignalTickRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/rpc/$cluster': {
       id: '/api/public/rpc/$cluster'
       path: '/api/public/rpc/$cluster'
@@ -449,7 +508,9 @@ interface AppRouteChildren {
   AppDispatchRoute: typeof AppDispatchRoute
   AppLaunchRoute: typeof AppLaunchRoute
   AppPortfolioRoute: typeof AppPortfolioRoute
+  AppRecorderRoute: typeof AppRecorderRoute
   AppReplayRoute: typeof AppReplayRoute
+  AppSignalBoxRoute: typeof AppSignalBoxRoute
   AppSignalsRoute: typeof AppSignalsRoute
   AppStudioRoute: typeof AppStudioRoute
   AppIndexRoute: typeof AppIndexRoute
@@ -462,7 +523,9 @@ const AppRouteChildren: AppRouteChildren = {
   AppDispatchRoute: AppDispatchRoute,
   AppLaunchRoute: AppLaunchRoute,
   AppPortfolioRoute: AppPortfolioRoute,
+  AppRecorderRoute: AppRecorderRoute,
   AppReplayRoute: AppReplayRoute,
+  AppSignalBoxRoute: AppSignalBoxRoute,
   AppSignalsRoute: AppSignalsRoute,
   AppStudioRoute: AppStudioRoute,
   AppIndexRoute: AppIndexRoute,
@@ -482,6 +545,7 @@ const rootRouteChildren: RootRouteChildren = {
   LabArchitectureRoute: LabArchitectureRoute,
   JournalIndexRoute: JournalIndexRoute,
   LabIndexRoute: LabIndexRoute,
+  ApiPublicHooksSignalTickRoute: ApiPublicHooksSignalTickRoute,
   ApiPublicRpcClusterRoute: ApiPublicRpcClusterRoute,
 }
 export const routeTree = rootRouteImport

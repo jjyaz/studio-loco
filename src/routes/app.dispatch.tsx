@@ -119,12 +119,9 @@ function Dispatch() {
     setScanning(true); setScanErr(null);
     const c = chk.cfg;
     try {
-      const { scanRoutes, estimateFee, priorityFeeLamports, priorityPrice } = await job.step(import("@/lib/arb"), 30_000, "Load");
-      const rent = await job.step(connection.getMinimumBalanceForRentExemption(165, "confirmed"), 10_000, "Rent read");
-      const micro = priorityPrice(chk.priorityBudget, c.computeUnits);
-      const fee = await job.step(estimateFee(connection, micro, c.computeUnits), 25_000, "Fee estimate");
-      // Read-only: RPC-backed fee ESTIMATE for a representative message, and assumes a new kept USDC account.
-      const costs: Costs = { networkFee: fee, priorityPart: priorityFeeLamports(micro, c.computeUnits), feeSource: "estimate", nonRefundableRent: new BN(rent), refundableRent: new BN(rent) };
+      const { scanRoutes, readOnlyScanCosts } = await job.step(import("@/lib/arb"), 30_000, "Load");
+      // Shared with the hosted Signal Box arb watch: identical read-only cost assumptions.
+      const costs: Costs = await job.step(readOnlyScanCosts(connection, chk.priorityBudget, c.computeUnits), 35_000, "Cost read");
       const r = await job.step(scanRoutes(connection, { inLamports: chk.inLamports, minProfit: chk.minProfit, slippageBps: c.slippageBps, maxPools: c.maxPools, costs, signal: job.signal, log: (m) => { if (job.alive()) push("info", m); } }), 180_000, "Scan");
       setScan(r); failures.current = 0;
       const prof = r.routes.filter((x) => x.verdict.kind === "profitable").length;

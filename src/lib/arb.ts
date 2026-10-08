@@ -280,3 +280,16 @@ export async function buildArbTx(opts: { user: PK; poolA: DLMM; poolB: DLMM; a: 
 }
 
 export { evaluateRoute };
+
+/**
+ * Read-only scan costs, shared by Dispatch's in-tab scan and the hosted Signal Box arb watch
+ * so both evaluate the same floor: RPC fee ESTIMATE for a representative message, and a
+ * conservative assumption that a new USDC account is kept and a temporary WSOL account is refunded.
+ * A null fee stays null — evaluateRoute treats it as unknown, never as zero.
+ */
+export async function readOnlyScanCosts(connection: Connection, priorityBudget: BN, computeUnits: number): Promise<Costs> {
+  const rent = await withTimeout(connection.getMinimumBalanceForRentExemption(165, "confirmed"), 10_000, "Rent read");
+  const micro = priorityPrice(priorityBudget, computeUnits);
+  const fee = await withTimeout(estimateFee(connection, micro, computeUnits), 25_000, "Fee estimate");
+  return { networkFee: fee, priorityPart: priorityFeeLamports(micro, computeUnits), feeSource: "estimate", nonRefundableRent: new BN(rent), refundableRent: new BN(rent) };
+}
