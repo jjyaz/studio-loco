@@ -21,6 +21,7 @@ import { Route as AppChecksRouteImport } from './routes/app.checks'
 import { Route as AppDispatchRouteImport } from './routes/app.dispatch'
 import { Route as AppLaunchRouteImport } from './routes/app.launch'
 import { Route as AppPortfolioRouteImport } from './routes/app.portfolio'
+import { Route as AppRecorderRouteImport } from './routes/app.recorder'
 import { Route as AppReplayRouteImport } from './routes/app.replay'
 import { Route as AppSignalBoxRouteImport } from './routes/app.signal-box'
 import { Route as AppSignalsRouteImport } from './routes/app.signals'
@@ -93,6 +94,11 @@ const AppPortfolioRoute = AppPortfolioRouteImport.update({
   path: '/portfolio',
   getParentRoute: () => AppRoute,
 } as any)
+const AppRecorderRoute = AppRecorderRouteImport.update({
+  id: '/recorder',
+  path: '/recorder',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppReplayRoute = AppReplayRouteImport.update({
   id: '/replay',
   path: '/replay',
@@ -162,6 +168,7 @@ export interface FileRoutesByFullPath {
   '/app/dispatch': typeof AppDispatchRoute
   '/app/launch': typeof AppLaunchRoute
   '/app/portfolio': typeof AppPortfolioRoute
+  '/app/recorder': typeof AppRecorderRoute
   '/app/replay': typeof AppReplayRoute
   '/app/signal-box': typeof AppSignalBoxRoute
   '/app/signals': typeof AppSignalsRoute
@@ -186,6 +193,7 @@ export interface FileRoutesByTo {
   '/app/dispatch': typeof AppDispatchRoute
   '/app/launch': typeof AppLaunchRoute
   '/app/portfolio': typeof AppPortfolioRoute
+  '/app/recorder': typeof AppRecorderRoute
   '/app/replay': typeof AppReplayRoute
   '/app/signal-box': typeof AppSignalBoxRoute
   '/app/signals': typeof AppSignalsRoute
@@ -212,6 +220,7 @@ export interface FileRoutesById {
   '/app/dispatch': typeof AppDispatchRoute
   '/app/launch': typeof AppLaunchRoute
   '/app/portfolio': typeof AppPortfolioRoute
+  '/app/recorder': typeof AppRecorderRoute
   '/app/replay': typeof AppReplayRoute
   '/app/signal-box': typeof AppSignalBoxRoute
   '/app/signals': typeof AppSignalsRoute
@@ -239,6 +248,7 @@ export interface FileRouteTypes {
     | '/app/dispatch'
     | '/app/launch'
     | '/app/portfolio'
+    | '/app/recorder'
     | '/app/replay'
     | '/app/signal-box'
     | '/app/signals'
@@ -263,6 +273,7 @@ export interface FileRouteTypes {
     | '/app/dispatch'
     | '/app/launch'
     | '/app/portfolio'
+    | '/app/recorder'
     | '/app/replay'
     | '/app/signal-box'
     | '/app/signals'
@@ -288,6 +299,7 @@ export interface FileRouteTypes {
     | '/app/dispatch'
     | '/app/launch'
     | '/app/portfolio'
+    | '/app/recorder'
     | '/app/replay'
     | '/app/signal-box'
     | '/app/signals'
@@ -403,6 +415,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppPortfolioRouteImport
       parentRoute: typeof AppRoute
     }
+    '/app/recorder': {
+      id: '/app/recorder'
+      path: '/recorder'
+      fullPath: '/app/recorder'
+      preLoaderRoute: typeof AppRecorderRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/app/replay': {
       id: '/app/replay'
       path: '/replay'
@@ -489,6 +508,7 @@ interface AppRouteChildren {
   AppDispatchRoute: typeof AppDispatchRoute
   AppLaunchRoute: typeof AppLaunchRoute
   AppPortfolioRoute: typeof AppPortfolioRoute
+  AppRecorderRoute: typeof AppRecorderRoute
   AppReplayRoute: typeof AppReplayRoute
   AppSignalBoxRoute: typeof AppSignalBoxRoute
   AppSignalsRoute: typeof AppSignalsRoute
@@ -503,6 +523,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppDispatchRoute: AppDispatchRoute,
   AppLaunchRoute: AppLaunchRoute,
   AppPortfolioRoute: AppPortfolioRoute,
+  AppRecorderRoute: AppRecorderRoute,
   AppReplayRoute: AppReplayRoute,
   AppSignalBoxRoute: AppSignalBoxRoute,
   AppSignalsRoute: AppSignalsRoute,
