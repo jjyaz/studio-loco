@@ -125,3 +125,10 @@ The Observatory passed funded devnet acceptance: six 20/21-bin × Spot/Curve/Bid
 - [x] Status showed confirmed slot 454359334, block height 432396837 and an executable DLMM program account. Meteora Data API was OK. The status UI does not expose the genesis hash, so a direct production genesis lookup is not claimed.
 - [x] Captured error-level console entries contained no application errors; 27 unrelated browser-extension metadata errors were identified by their extension URL. This is a console audit, not a separate pageerror listener. Raw CLI GET probes were refused (403/code 1010); the normal browser worked, and no client bypass was attempted.
 - [x] [Machine-readable production evidence](qa/production-verification.json) and [live screenshot](qa/observatory-live-release-1791412927834.jpg) retained. Production mobile and connected browser-wallet signing were not rerun; the existing mobile dev-runtime check and funded devnet Node-runner checks are reported separately.
+
+## Signal Box + Flight Recorder — 8 Oct 2026
+- Scheduler: one job every 5 min (288 runs/day) POSTs the token-protected tick hook on the preview host. Hook was 404 on the hosted preview during this pass (preview not yet redeployed); local runs passed.
+- Worker evidence (real mainnet, real DB, temporary watch-only position 1Be6…44id): tick 1 → observation (active −5444, out of range) + 1 alert `left-range`, push "inbox only"; tick 2 → observation, 0 alerts (deduped by cooldown). Stale-revision commit refused ("revision changed"). Lease: second holder refused.
+- Isolation: another account sees 0 watches/alerts/observations and cannot delete; owner sees own rows; anon reads [] and cannot call commit.
+- Browser E2E (local, temporary confirmed account, then deleted): sign-in, verified watch created and armed, pause → rev 2, health table, notifications blocked state shown honestly; 1280/390 no overflow, no page errors.
+- Not yet verified: two scheduled hosted ticks after browser close; real Web Push delivery to a device; wallet signing/mainnet (user-run).

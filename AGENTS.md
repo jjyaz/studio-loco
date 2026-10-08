@@ -28,3 +28,6 @@
 - Dispatch scan/requote work runs through `src/lib/job-control.ts` (single-flight lock, monotonic generation, bounded steps, drain latch) — timed-out RPC promises cannot be aborted, so new jobs must wait for them to settle.
 
 - Liquidity Agents logic is split: pure rules/triggers/review-freshness in `src/lib/agents.ts`, SDK/API composition in `src/lib/agents-chain.ts`, practice fixture in `src/lib/agents-practice.ts` — keeps money-guard logic testable and practice data out of the live builder.
+
+- Signal Box: pure tick rules in `src/lib/signal-box.ts`, worker in `src/lib/signal-worker.server.ts` behind the token-checked hook `src/routes/api/public/hooks/signal-tick.ts`, commits only via the `signal_commit` DB function — revision/status/expiry are re-checked atomically so paused/edited/deleted watches drop in-flight results.
+- Flight Recorder records are written by the shared runner (`useTx.tsx` → `src/lib/recorder-store.ts`) — every route gets evidence without per-page wiring; records never contain RPC URLs or signed bytes.

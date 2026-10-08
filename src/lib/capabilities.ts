@@ -34,6 +34,8 @@ export const CAPABILITIES: CapabilityEntry[] = [
   { id: "studio-exec", area: "Studio", name: "Execute selected route", status: "live", notes: "v2 plans carry cluster + exact decimal X/Y amounts into the pool review; wrong-cluster plans are blocked; illustrative budget is never converted." },
   { id: "signals", area: "Signals", name: "In-tab range watch", status: "live", notes: "Polls positions while open. No keeper." },
   { id: "rebalance", area: "Signals", name: "Two-step rebalance plan", status: "live", notes: "Non-atomic: withdraw then add, each user-approved. removeLiquidity here enforces no minimum withdrawn amount; shown values are estimates." },
+  { id: "signal-box", area: "Signals", name: "Signal Box hosted watches", status: "live", notes: "Scheduler every 5 min, 7-day expiry, 5 watches/account, mainnet only. Position watches verified on chain; SOL/USDC arb watch is proposal-only. Inbox + opt-in Web Push; alerts open a fresh review, never a stored transaction. Hosted scheduler run awaits preview/publish deployment of the hook." },
+  { id: "recorder", area: "Signals", name: "Flight Recorder", status: "live", notes: "Shared-runner evidence in IndexedDB with optional private cloud copy. Reconciles unresolved signatures without resending. Transaction metadata is separate from unverified position post-state; no PnL." },
   { id: "fee-weather", area: "Signals", name: "Fee Weather", status: "live", notes: "Actual dynamic/base fees and activity from API. No predictions." },
   { id: "launch", area: "Launch", name: "createLbPair2 wizard", status: "live", notes: "PresetParameter2 fetched onchain, duplicate check, simulation." },
   { id: "dbc", area: "Launch", name: "DBC / DAMM v2 / Alpha Vault", status: "handoff", notes: "Documented only." },
