@@ -1,11 +1,11 @@
-# Studio Loco SDK · v0.1.0
+# Studio Loco SDK · v0.1.1
 
 A read-only TypeScript/ESM client for [Studio Loco](https://studioloco.cfd/developers), with range geometry, local Flight Recorder analysis and a genuine MCP server. Browser `fetch` or Node 20+; typed runtime validation, 15-second end-to-end timeout, bounded responses and cancellation. No private keys, signing, transaction submission or private cloud access.
 
 ## Install
 
 ```sh
-npm install https://studioloco.cfd/api/public/loco/v1/sdk/0.1.0.tgz
+npm install https://studioloco.cfd/api/public/loco/v1/sdk/0.1.1.tgz
 ```
 
 This is a versioned downloadable npm package, **not a release on the npm registry**. Check the SHA-256 download header or Developer Station. Only the original code in this package is MIT licensed; dependencies retain their licenses.
@@ -59,7 +59,7 @@ For stdio hosts:
   "mcpServers": {
     "studio-loco": {
       "command": "npx",
-      "args": ["--yes", "--package", "https://studioloco.cfd/api/public/loco/v1/sdk/0.1.0.tgz", "loco-mcp"]
+      "args": ["--yes", "--package", "https://studioloco.cfd/api/public/loco/v1/sdk/0.1.1.tgz", "loco-mcp"]
     }
   }
 }

@@ -32,7 +32,7 @@ export const Route = createFileRoute("/developers")({
   component: Developers,
 });
 const base = "https://studioloco.cfd/api/public/loco/v1";
-const install = `npm install ${base}/sdk/0.1.0.tgz`;
+const install = `npm install ${base}/sdk/0.1.1.tgz`;
 const example = `import { LocoClient } from '@studio-loco/sdk';\n\nconst loco = new LocoClient();\nconst { data, meta } = await loco.listPools({ perPage: 5 });\n\nconsole.log(meta.source, data.pools);\n// meteora-index · real mainnet pools`;
 function CopyCode({ text, label = "Copy" }: { text: string; label?: string }) {
   const [copied, setCopied] = useState(false),
@@ -123,7 +123,7 @@ function Developers() {
           <p className="station-code flex items-center gap-2 text-amber">
             <TrainFront size={17} /> DEV · Platform 01{" "}
             <span className="ml-3 rounded-full border border-amber/30 px-3 py-1 text-xs">
-              SDK v0.1.0
+              SDK v0.1.1
             </span>
           </p>
           <h1 className="display mt-5 max-w-3xl text-5xl leading-tight md:text-7xl">
@@ -191,11 +191,11 @@ function Developers() {
           </p>
           <CopyCode text={install} />
           <p className="mt-3 text-xs text-cream/60">
-            Downloadable npm package · ESM · v0.1.0 · not published to the npm registry.
+            Downloadable npm package · ESM · v0.1.1 · not published to the npm registry.
           </p>
           <a
             className="mt-4 inline-block text-sm text-amber underline"
-            href={`${base}/sdk/0.1.0.tgz`}
+            href={`${base}/sdk/0.1.1.tgz`}
           >
             Download package ↓
           </a>
@@ -312,7 +312,7 @@ function Developers() {
                 mcpServers: {
                   "studio-loco": {
                     command: "npx",
-                    args: ["--yes", "--package", `${base}/sdk/0.1.0.tgz`, "loco-mcp"],
+                    args: ["--yes", "--package", `${base}/sdk/0.1.1.tgz`, "loco-mcp"],
                   },
                 },
               },

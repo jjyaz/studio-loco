@@ -9,7 +9,7 @@ import {
   readJsonLimited,
 } from "../../packages/sdk/src/index";
 import { handleLocoRequest } from "../lib/loco-http.server";
-import { publicPool, verifiedAccount, withLocoBudget } from "../lib/loco-api.server";
+import { publicPool, verifiedAccount, withLocoBudget, readPools } from "../lib/loco-api.server";
 import { exportBundle, RecordSchema } from "../lib/recorder";
 import { Buffer } from "buffer";
 const base = "https://studioloco.cfd/api/public/loco/v1";
@@ -42,6 +42,13 @@ afterEach(() => {
   vi.useRealTimers();
 });
 describe("Loco SDK contract and bounded reads", () => {
+  it("binds the default fetch receiver for browsers", async () => {
+    vi.stubGlobal("fetch", async function (this: unknown) {
+      if (this !== globalThis) throw new TypeError("Illegal invocation");
+      return handleLocoRequest(new Request(`${base}/capabilities`));
+    });
+    expect((await new LocoClient().capabilities()).data.readOnly).toBe(true);
+  });
   it("validates decoded 32-byte addresses including PDAs and rejects superficially valid base58", () => {
     expect(isAddress(pool)).toBe(true);
     expect(isAddress("11111111111111111111111111111111")).toBe(true);
@@ -171,6 +178,20 @@ describe("Local planning and shared Flight Recorder evidence", () => {
   });
 });
 describe("Public API boundaries and genuine MCP", () => {
+  it("omits browser-only RequestInit fields on fixed Worker upstream reads", async () => {
+    vi.stubGlobal("fetch", async (_url: string, init: RequestInit) => {
+      expect(init).not.toHaveProperty("credentials");
+      expect(init.headers).not.toHaveProperty("Cookie");
+      return Response.json({
+        data: [{ address: pool, token_x: { address: pool }, token_y: { address: mint } }],
+        current_page: 1,
+        page_size: 1,
+        pages: 1,
+        total: 1,
+      });
+    });
+    expect((await readPools({ perPage: 1 })).data.pools).toHaveLength(1);
+  });
   it("rejects unknown/repeated query keys, mutation routes, invalid positions and generic RPC", async () => {
     const fetch = vi.fn();
     vi.stubGlobal("fetch", fetch);

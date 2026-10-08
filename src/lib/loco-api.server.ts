@@ -96,6 +96,8 @@ export async function withLocoBudget<T>(
     ]);
   } catch (e) {
     if (e instanceof LocoError) throw e;
+    if (e instanceof z.ZodError)
+      throw new LocoError("invalid-upstream", "Live data failed format verification", 502, true);
     throw new LocoError(
       "upstream-unavailable",
       "Live data could not be verified. Retry shortly.",
@@ -110,13 +112,17 @@ export async function withLocoBudget<T>(
   }
 }
 async function upstream(url: string, signal: AbortSignal, init?: RequestInit) {
-  const response = await fetch(url, {
-    ...init,
-    signal,
-    redirect: "error",
-    credentials: "omit",
-    headers: { Accept: "application/json", ...init?.headers },
-  });
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      ...init,
+      signal,
+      redirect: "error",
+      headers: { Accept: "application/json", ...init?.headers },
+    });
+  } catch {
+    throw new LocoError("upstream-network", "Live data source could not be reached", 502, true);
+  }
   if (!response.ok) {
     void response.body?.cancel();
     throw new LocoError(

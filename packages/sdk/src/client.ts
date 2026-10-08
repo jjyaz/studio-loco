@@ -41,13 +41,17 @@ export async function readJsonLimited(
   };
   signal?.addEventListener("abort", cancel, { once: true });
   const decoder = new TextDecoder();
+  let completed = false;
   let size = 0,
     text = "";
   try {
     for (;;) {
       if (signal?.aborted) throw new LocoError("aborted", "Request cancelled");
       const { done, value } = await reader.read();
-      if (done) break;
+      if (done) {
+        completed = true;
+        break;
+      }
       size += value.byteLength;
       if (size > maxBytes)
         throw new LocoError("response-too-large", "Response exceeds the size limit");
@@ -61,8 +65,12 @@ export async function readJsonLimited(
     }
   } finally {
     signal?.removeEventListener("abort", cancel);
-    void reader.cancel().catch(() => {});
-    reader.releaseLock();
+    if (!completed) void reader.cancel().catch(() => {});
+    try {
+      reader.releaseLock();
+    } catch {
+      /* Cancellation may still own the lock in a Worker runtime. */
+    }
   }
 }
 export type ReadOptions = { signal?: AbortSignal };
@@ -83,7 +91,8 @@ export class LocoClient {
     )
       throw new LocoError("invalid-input", "Use an HTTPS API URL or local development server");
     this.baseUrl = url.href.replace(/\/$/, "");
-    this.fetchImpl = options.fetch ?? globalThis.fetch;
+    // Browser fetch checks its receiver; invoking it as this.fetchImpl is otherwise illegal.
+    this.fetchImpl = (options.fetch ?? globalThis.fetch).bind(globalThis);
     this.timeoutMs = options.timeoutMs ?? 15000;
     if (!Number.isInteger(this.timeoutMs) || this.timeoutMs < 1 || this.timeoutMs > 60000)
       throw new LocoError("invalid-input", "Timeout must be between 1 and 60000 ms");
@@ -115,7 +124,7 @@ export class LocoClient {
       if (controller.signal.aborted) throw new LocoError("aborted", "Request cancelled");
       const response = await this.fetchImpl(`${this.baseUrl}/${path}`, {
         signal: controller.signal,
-        credentials: "omit",
+        ...(typeof location !== "undefined" ? { credentials: "omit" as const } : {}),
         redirect: "error",
         headers: { Accept: "application/json" },
       });

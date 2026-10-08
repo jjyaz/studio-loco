@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const SDK_VERSION = "0.1.0";
+export const SDK_VERSION = "0.1.1";
 export const API_VERSION = "1";
 export const DEFAULT_BASE_URL = "https://studioloco.cfd/api/public/loco/v1";
 const alphabet = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";

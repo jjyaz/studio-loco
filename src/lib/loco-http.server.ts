@@ -6,6 +6,7 @@ import { PoolQuerySchema } from "../../packages/sdk/src/contracts";
 import { publicReaders, readPool, readPools, readPosition } from "./loco-api.server";
 import { LOCO_OPENAPI } from "./loco-openapi";
 import release from "./loco-sdk-release.json";
+import initialRelease from "./loco-sdk-0.1.0.json";
 
 export const LOCO_PREFIX = "/api/public/loco/v1/";
 const cors = {
@@ -94,14 +95,15 @@ export async function handleLocoRequest(request: Request): Promise<Response> {
       queryObject(url, []);
       return json(LOCO_OPENAPI);
     }
-    if (path === `sdk/${release.version}.tgz`) {
+    const artifact = [release, initialRelease].find((r) => path === `sdk/${r.version}.tgz`);
+    if (artifact) {
       queryObject(url, []);
-      return new Response(Buffer.from(release.base64, "base64"), {
+      return new Response(Buffer.from(artifact.base64, "base64"), {
         headers: {
           ...cors,
           "Content-Type": "application/gzip",
-          "Content-Disposition": `attachment; filename=studio-loco-sdk-${release.version}.tgz`,
-          "X-Checksum-Sha256": release.sha256,
+          "Content-Disposition": `attachment; filename=studio-loco-sdk-${artifact.version}.tgz`,
+          "X-Checksum-Sha256": artifact.sha256,
           "Cache-Control": "public, max-age=31536000, immutable",
         },
       });

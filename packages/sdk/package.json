@@ -1,6 +1,6 @@
 {
   "name": "@studio-loco/sdk",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Read-only Studio Loco client, DLMM range helpers, Flight Recorder analysis and MCP server",
   "type": "module",
   "sideEffects": false,
