@@ -24,10 +24,12 @@ describe("Signal Box position ticks", () => {
   it("risk-first: out-time outranks left-range once observed long enough with continuous ticks", () => {
     const r = armed({ outMinutes: 10, outWithdrawPct: 50 });
     let t = 10_000_000, out = null as ReturnType<typeof positionTick>["outRun"], lp = {};
-    let last;
-    for (let i = 0; i < 4; i++) { last = positionTick({ ...base, stored: stored(r), obs: obs(120), prevOut: out, lastProposed: lp, now: t }); out = last.outRun; lp = last.lastProposed; t += 5 * 60_000; }
-    expect(last!.alert?.trigger).toBe("out-time");
-    expect(last!.alert?.payload["withdrawPct"]).toBe(50);
+    const triggers: (string | undefined)[] = [];
+    let hit;
+    for (let i = 0; i < 4; i++) { const k = positionTick({ ...base, stored: stored(r), obs: obs(120), prevOut: out, lastProposed: lp, now: t }); out = k.outRun; lp = k.lastProposed; t += 5 * 60_000; triggers.push(k.alert?.trigger); if (k.alert?.trigger === "out-time") hit = k; }
+    // 0, 5 min: left-range (first alert, then its cooldown); 10 min: out-time wins; 15 min: out-time cooldown
+    expect(triggers).toEqual(["left-range", undefined, "out-time", undefined]);
+    expect(hit!.alert?.payload["withdrawPct"]).toBe(50);
   });
   it("an observation gap restarts out-duration", () => {
     const r = armed({ outMinutes: 10 });
