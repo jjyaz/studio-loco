@@ -19,13 +19,14 @@ import {
 export interface PlannerRow { key: string; pair: string; lower: number; upper: number; activeId: number; mintX: string; mintY: string; decX: number; decY: number }
 type BaseIdentity = Omit<PlanIdentity, "widenLower" | "widenUpper" | "destPool">;
 
-export function RebalancePlanner({ row, base, connection, actionBlock, onReview }: {
+export function RebalancePlanner({ row, base, connection, actionBlock, onReview, onIdentityChange }: {
   row: PlannerRow;
   base: BaseIdentity;
   connection: Connection;
   /** Non-null when wallet actions are off (watch-only, settlement pending, etc.). */
   actionBlock: string | null;
   onReview: (s: PlanSnapshot, option: PlanOption, selectionRecordId: string) => void;
+  onIdentityChange?: (key: string) => void;
 }) {
   const [lo, setLo] = useState(String(row.lower - 5));
   const [hi, setHi] = useState(String(row.upper + 5));
@@ -46,7 +47,7 @@ export function RebalancePlanner({ row, base, connection, actionBlock, onReview 
   const identity: PlanIdentity = { ...base, widenLower: widen.ok ? widen.range.lower : null, widenUpper: widen.ok ? widen.range.upper : null, destPool: dest || null };
   const liveKey = planIdentityKey(identity);
   // Any identity change cancels in-flight planning and drops the old comparison.
-  useEffect(() => { ctl.current!.invalidate(); setSnap((p) => (p && p.s.identityKey !== liveKey ? null : p)); setLastSel(null); }, [liveKey]);
+  useEffect(() => { ctl.current!.invalidate(); setSnap((p) => (p && p.s.identityKey !== liveKey ? null : p)); setLastSel(null); onIdentityChange?.(liveKey); }, [liveKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const pairs = useQuery<PairScan>({
     queryKey: ["planner-pair", row.mintX, row.mintY],
