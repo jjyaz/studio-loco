@@ -8,6 +8,13 @@
       "when": 1791457479805,
       "tag": "0000_signal_box_and_recorder",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1791459748954,
+      "tag": "0001_signal_lease_gated_commit_push_hardening",
+      "breakpoints": true
     }
   ]
 }

@@ -277,6 +277,7 @@ export type Database = {
         Args: {
           _alert: Json
           _error: string
+          _holder: string
           _last_proposed: Json
           _ok: boolean
           _out_run: Json
@@ -287,7 +288,17 @@ export type Database = {
         }
         Returns: Json
       }
+      signal_push_seed: { Args: never; Returns: string }
       signal_release_lease: { Args: { _holder: string }; Returns: undefined }
+      signal_save_push: {
+        Args: {
+          _auth: string
+          _endpoint: string
+          _p256dh: string
+          _user: string
+        }
+        Returns: string
+      }
       signal_verify_cron: { Args: { _token: string }; Returns: boolean }
     }
     Enums: {

@@ -48,14 +48,36 @@ export function vapidJwt(endpoint: string, priv: Uint8Array, now = Date.now()): 
   return `${h}.${c}.${b64u(sig)}`;
 }
 
-/** Push endpoints must be https on a public host — prevents using the sender as an SSRF probe. */
+/** Real browser push services only (FCM, Mozilla autopush, Apple, Windows WNS). */
+const PUSH_HOSTS = [/^fcm\.googleapis\.com$/, /^(updates\.)?push\.services\.mozilla\.com$/, /^web\.push\.apple\.com$/, /^[a-z0-9-]+\.notify\.windows\.com$/];
+/** Exact provider allowlist — the sender can't be aimed at arbitrary hosts (SSRF). */
 export function safeEndpoint(endpoint: string): boolean {
+  if (typeof endpoint !== "string" || endpoint.length > 1024 || /[\\\s]/.test(endpoint)) return false;
   try {
     const u = new URL(endpoint);
-    if (u.protocol !== "https:") return false;
-    if (/^(localhost|127\.|10\.|192\.168\.|169\.254\.|\[)/.test(u.hostname) || !u.hostname.includes(".")) return false;
-    return endpoint.length <= 1024;
+    if (u.protocol !== "https:" || u.username || u.password || u.port) return false;
+    if (u.href !== endpoint && u.href !== endpoint + "/") return false;
+    return PUSH_HOSTS.some((r) => r.test(u.hostname));
   } catch { return false; }
+}
+
+/** p256dh must be an uncompressed point on P-256; auth exactly 16 bytes. */
+export function validSubscriptionKeys(p256dh: string, auth: string): boolean {
+  if (!/^[A-Za-z0-9_-]+$/.test(p256dh) || !/^[A-Za-z0-9_-]+$/.test(auth)) return false;
+  try {
+    const pk = unb64u(p256dh), a = unb64u(auth);
+    if (pk.length !== 65 || pk[0] !== 4 || a.length !== 16) return false;
+    p256.ProjectivePoint.fromHex(pk).assertValidity();
+    return true;
+  } catch { return false; }
+}
+
+/** Server-only VAPID seed: generated inside the database, read via a service-role-only function. */
+export async function loadVapidSeed(): Promise<string | null> {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const { data, error } = await supabaseAdmin.rpc("signal_push_seed");
+  if (error || typeof data !== "string" || data.length < 32) return null;
+  return data;
 }
 
 export type PushResult = { ok: true; status: number } | { ok: false; status: number; gone: boolean; error: string };
@@ -67,8 +89,9 @@ export async function sendPush(sub: { endpoint: string; p256dh: string; auth: st
   const r = await fetch(sub.endpoint, {
     method: "POST",
     headers: { TTL: "86400", Urgency: "high", "Content-Encoding": "aes128gcm", "Content-Type": "application/octet-stream", Authorization: `vapid t=${vapidJwt(sub.endpoint, priv)}, k=${b64u(pub)}` },
-    body: ab(body), signal: AbortSignal.timeout(10_000),
+    body: ab(body), redirect: "manual", signal: AbortSignal.timeout(10_000),
   });
+  if (r.status >= 300 && r.status < 400) return { ok: false, status: r.status, gone: false, error: "Redirect refused" };
   if (r.ok) return { ok: true, status: r.status };
   return { ok: false, status: r.status, gone: r.status === 404 || r.status === 410, error: (await r.text().catch(() => "")).slice(0, 200) };
 }
