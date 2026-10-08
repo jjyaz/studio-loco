@@ -14,13 +14,281 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      push_subscriptions: {
+        Row: {
+          auth: string
+          created_at: string
+          endpoint: string
+          id: string
+          last_error: string | null
+          last_ok_at: string | null
+          p256dh: string
+          user_id: string
+        }
+        Insert: {
+          auth: string
+          created_at?: string
+          endpoint: string
+          id?: string
+          last_error?: string | null
+          last_ok_at?: string | null
+          p256dh: string
+          user_id: string
+        }
+        Update: {
+          auth?: string
+          created_at?: string
+          endpoint?: string
+          id?: string
+          last_error?: string | null
+          last_ok_at?: string | null
+          p256dh?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      recorder_records: {
+        Row: {
+          id: string
+          record: Json
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          id: string
+          record: Json
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          id?: string
+          record?: Json
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      signal_alerts: {
+        Row: {
+          created_at: string
+          dedupe_key: string
+          id: string
+          payload: Json
+          push_status: string | null
+          read_at: string | null
+          reason: string
+          revision: number
+          trigger: string
+          user_id: string
+          watch_id: string | null
+          watch_kind: string
+        }
+        Insert: {
+          created_at?: string
+          dedupe_key: string
+          id?: string
+          payload?: Json
+          push_status?: string | null
+          read_at?: string | null
+          reason: string
+          revision: number
+          trigger: string
+          user_id: string
+          watch_id?: string | null
+          watch_kind: string
+        }
+        Update: {
+          created_at?: string
+          dedupe_key?: string
+          id?: string
+          payload?: Json
+          push_status?: string | null
+          read_at?: string | null
+          reason?: string
+          revision?: number
+          trigger?: string
+          user_id?: string
+          watch_id?: string | null
+          watch_kind?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "signal_alerts_watch_id_fkey"
+            columns: ["watch_id"]
+            isOneToOne: false
+            referencedRelation: "signal_watches"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      signal_observations: {
+        Row: {
+          error: string | null
+          id: number
+          observed_at: string
+          ok: boolean
+          revision: number
+          summary: Json
+          tick_id: number | null
+          user_id: string
+          watch_id: string
+        }
+        Insert: {
+          error?: string | null
+          id?: number
+          observed_at?: string
+          ok: boolean
+          revision: number
+          summary?: Json
+          tick_id?: number | null
+          user_id: string
+          watch_id: string
+        }
+        Update: {
+          error?: string | null
+          id?: number
+          observed_at?: string
+          ok?: boolean
+          revision?: number
+          summary?: Json
+          tick_id?: number | null
+          user_id?: string
+          watch_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "signal_observations_watch_id_fkey"
+            columns: ["watch_id"]
+            isOneToOne: false
+            referencedRelation: "signal_watches"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      signal_ticks: {
+        Row: {
+          alerts: number
+          errors: number
+          finished_at: string | null
+          id: number
+          note: string | null
+          processed: number
+          started_at: string
+        }
+        Insert: {
+          alerts?: number
+          errors?: number
+          finished_at?: string | null
+          id?: number
+          note?: string | null
+          processed?: number
+          started_at?: string
+        }
+        Update: {
+          alerts?: number
+          errors?: number
+          finished_at?: string | null
+          id?: number
+          note?: string | null
+          processed?: number
+          started_at?: string
+        }
+        Relationships: []
+      }
+      signal_watches: {
+        Row: {
+          cluster: string
+          consecutive_errors: number
+          created_at: string
+          expires_at: string
+          id: string
+          kind: string
+          label: string
+          last_error: string | null
+          last_ok_at: string | null
+          last_proposed: Json
+          last_run_at: string | null
+          out_run: Json | null
+          owner: string | null
+          pool: string | null
+          position: string | null
+          revision: number
+          rule: Json
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          cluster?: string
+          consecutive_errors?: number
+          created_at?: string
+          expires_at?: string
+          id?: string
+          kind: string
+          label?: string
+          last_error?: string | null
+          last_ok_at?: string | null
+          last_proposed?: Json
+          last_run_at?: string | null
+          out_run?: Json | null
+          owner?: string | null
+          pool?: string | null
+          position?: string | null
+          revision?: number
+          rule: Json
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          cluster?: string
+          consecutive_errors?: number
+          created_at?: string
+          expires_at?: string
+          id?: string
+          kind?: string
+          label?: string
+          last_error?: string | null
+          last_ok_at?: string | null
+          last_proposed?: Json
+          last_run_at?: string | null
+          out_run?: Json | null
+          owner?: string | null
+          pool?: string | null
+          position?: string | null
+          revision?: number
+          rule?: Json
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      signal_acquire_lease: {
+        Args: { _holder: string; _ttl_seconds: number }
+        Returns: boolean
+      }
+      signal_commit: {
+        Args: {
+          _alert: Json
+          _error: string
+          _last_proposed: Json
+          _ok: boolean
+          _out_run: Json
+          _revision: number
+          _summary: Json
+          _tick: number
+          _watch: string
+        }
+        Returns: Json
+      }
+      signal_release_lease: { Args: { _holder: string }; Returns: undefined }
+      signal_verify_cron: { Args: { _token: string }; Returns: boolean }
     }
     Enums: {
       [_ in never]: never
