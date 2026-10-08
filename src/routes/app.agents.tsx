@@ -211,7 +211,10 @@ export function Agents() {
         const rule = ruleMap[r.key];
         if (!rule) continue;
         const p = propose({ rule, pos: { key: r.key, pool: r.pair, activeId: r.activeId, lower: r.lower, upper: r.upper, binStep: r.binStep }, outRun: runs[r.key], vol: vr[r.key] ?? null, now: t }, lastProposed.current);
-        if (p) { lastProposed.current[p.id] = t; fresh.push(p); }
+        if (p) {
+          lastProposed.current[p.id] = t; fresh.push(p);
+          if (mode !== "practice") void recordFact({ kind: "proposal", title: `${p.kind} proposal · ${p.trigger} · ${shortAddr(p.position)}`, route: "/app/agents", cluster: settings.cluster, wallet: owner ?? "", links: { proposalId: p.id, ...(handoff.alert ? { alertId: handoff.alert } : {}) }, detail: p.reason, context: { mode, trigger: p.trigger, ruleRevision: p.ruleRevision, pool: p.pool, position: p.position, activeId: r.activeId, lower: r.lower, upper: r.upper, withdrawPct: p.withdrawPct ?? null } });
+        }
       }
       setRows(next); setReport(rep); setVol(vr);
       setProposals((q) => [...fresh, ...q.filter((p) => {
