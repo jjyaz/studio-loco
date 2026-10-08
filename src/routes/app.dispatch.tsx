@@ -30,10 +30,15 @@ export const Route = createFileRoute("/app/dispatch")({
       { name: "twitter:card", content: "summary_large_image" },
     ],
   }),
-  validateSearch: z.object({ alert: z.string().uuid().optional() }),
+  validateSearch: (s: Record<string, unknown>) => z.object({ alert: z.string().uuid().optional() }).catch({}).parse(s),
   component: Dispatch,
 });
 
+function useAlertSearch(): string | undefined {
+  const [v, setV] = useState<string | undefined>();
+  useEffect(() => { const a = new URLSearchParams(window.location.search).get("alert"); if (a && z.string().uuid().safeParse(a).success) setV(a); }, []);
+  return v;
+}
 const SOL = (v: BN | null | undefined) => (v ? `${formatUnits(v, 9)} SOL` : "—");
 const FEE = (v: BN, mint: string) => `${formatUnits(v, DECIMALS[mint] ?? 0)} ${mint === WSOL_MINT ? "SOL" : mint === USDC_MINT ? "USDC" : "?"}`;
 const ARB_LABEL = "Round trip";
@@ -50,7 +55,7 @@ interface Review {
 }
 
 function Dispatch() {
-  const handoff = Route.useSearch().alert;
+  const handoff = useAlertSearch();
   const reviewRecord = useRef<string | null>(null);
   const { connection } = useConnection();
   const { publicKey } = useWallet();

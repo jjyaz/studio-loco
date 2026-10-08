@@ -37,9 +37,17 @@ export const Route = createFileRoute("/app/agents")({
       { name: "twitter:card", content: "summary_large_image" },
     ],
   }),
-  validateSearch: z.object({ alert: z.string().uuid().optional(), inspect: z.string().regex(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/).optional(), focus: z.string().regex(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/).optional() }),
+  validateSearch: (s: Record<string, unknown>) => HandoffSchema.catch({}).parse(s),
   component: Agents,
 });
+
+/** Hand-off identifiers read after hydration (works outside a router too). Validated; never a transaction. */
+const HandoffSchema = z.object({ alert: z.string().uuid().optional(), inspect: z.string().regex(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/).optional(), focus: z.string().regex(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/).optional() });
+function useHandoffSearch(): z.infer<typeof HandoffSchema> {
+  const [v, setV] = useState<z.infer<typeof HandoffSchema>>({});
+  useEffect(() => { const p = HandoffSchema.safeParse(Object.fromEntries(new URLSearchParams(window.location.search))); if (p.success) setV(p.data); }, []);
+  return v;
+}
 
 const POLL_MS = 30_000;
 const MAX_GAP_MS = 75_000;
@@ -68,7 +76,7 @@ export function Agents() {
   const wallet = useWallet();
   const { connection } = useConnection();
   const runner = useTxRunner();
-  const handoff = Route.useSearch();
+  const handoff = useHandoffSearch();
   const reviewRecord = useRef<Record<string, string>>({});
   const [mode, setMode] = useState<AgentMode>("wallet");
   const [watchInput, setWatchInput] = useState("");
