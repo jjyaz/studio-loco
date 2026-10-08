@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { z } from "zod";
 import { zodValidator } from "@tanstack/zod-adapter";
 import BN from "bn.js";
@@ -26,6 +26,10 @@ import { splitAmount } from "@/lib/derive";
 import { simulateExact } from "@/lib/tx";
 import { spendable, WSOL_MINT, SOL_RESERVE_LAMPORTS } from "@/lib/chain";
 import { cn } from "@/lib/utils";
+import { recordFact } from "@/lib/recorder-store";
+import { executionReadiness, REVIEW_TTL_MS } from "@/lib/agents";
+import { reviewCosts, type CostReview } from "@/lib/agents-chain";
+import { JobControl } from "@/lib/job-control";
 import nightAsset from "@/assets/studio-loco-night-station.png.asset.json";
 
 const search = z.object({
@@ -37,6 +41,9 @@ const search = z.object({
   y: z.string().max(40).optional().catch(undefined),
   /** cluster a Studio plan was built for; mismatches block review */
   cluster: z.enum(["mainnet-beta", "devnet"]).optional().catch(undefined),
+  /** Evidence links only. They never import transaction data or bypass a fresh add review. */
+  plan: z.string().regex(/^plan-[a-z0-9-]{8,70}$/).optional().catch(undefined),
+  record: z.string().regex(/^[a-z0-9-]{8,80}$/).optional().catch(undefined),
 });
 
 export const Route = createFileRoute("/app/pool/$address")({
@@ -178,7 +185,7 @@ function usePlanContext(address: string) {
   const { publicKey } = useWallet();
   const { connection } = useConnection();
   const { settings } = useSettings();
-  return { wallet: publicKey?.toBase58(), cluster: settings.cluster, rpc: connection.rpcEndpoint, pool: address, slippage: settings.slippageBps };
+  return { wallet: publicKey?.toBase58(), cluster: settings.cluster, rpc: connection.rpcEndpoint, pool: address, slippage: settings.slippageBps, practice: settings.practice };
 }
 
 /** Balance + native SOL reserve check. Returns an error string, or null when the amount is affordable. */
@@ -253,52 +260,81 @@ function AddLiquidity({ address, snap, symX, symY, prefill }: { address: string;
   const canReview = !clusterBlock && !!publicKey && !rangeErr && !widthErr && !amtErr && !!sdk.data && balancesReady;
 
   type CostQuote = { positionCost: number; positionReallocCost: number; bitmapExtensionCost: number; binArraysCount: number; binArrayCost: number } | null;
-  type Review = { tx: Transaction; signer: Keypair; feeLamports: number | null; rentLamports: number; cost: CostQuote; position: string; sim: string | null; strategy: StrategyName; minBin: number; maxBin: number; x: BN; y: BN; slippageBps: number; activeId: number };
-  const liveKey = planKey({ ...ctxKey, strategy, minBin, maxBin, x: xRaw?.toString(), y: yRaw?.toString() });
+  type Review = { tx: Transaction; signer: Keypair; feeLamports: number | null; rentLamports: number; cost: CostQuote; position: string; sim: string | null; strategy: StrategyName; minBin: number; maxBin: number; x: BN; y: BN; slippageBps: number; activeId: number; builtAt: number; identityKey: string; identityEpoch: number; recordId?: string; costs?: CostReview };
+  const liveKey = planKey({ ...ctxKey, strategy, minBin, maxBin, x: xRaw?.toString(), y: yRaw?.toString(), plan: prefill.plan, record: prefill.record });
+  const keyRef = useRef(liveKey);
+  const identityEpoch = useRef(0);
+  if (keyRef.current !== liveKey) identityEpoch.current++;
+  keyRef.current = liveKey;
+  const planning = useRef(new JobControl());
+  const [, refreshPlanning] = useState(0);
+  const [reviewNow, setReviewNow] = useState(() => Date.now());
+  useEffect(() => planning.current.subscribe(() => refreshPlanning((n) => n + 1)), []);
+  useEffect(() => { const id = setInterval(() => setReviewNow(Date.now()), 1000); return () => clearInterval(id); }, []);
+  useEffect(() => { planning.current.invalidate(); }, [liveKey]);
+  useEffect(() => () => planning.current.unmount(), []);
   const { plan: review, begin, clear } = usePlan<Review>(liveKey);
 
   async function prepare() {
-    if (!sdk.data || !publicKey || !xRaw || !yRaw || preparing) return;
+    if (!sdk.data || !publicKey || !xRaw || !yRaw || preparing || planning.current.busy || clusterBlock) return;
     const job = begin();
+    const chainJob = prefill.plan ? planning.current.begin() : null;
+    const bounded = <T,>(p: Promise<T>, label: string) => chainJob ? chainJob.step(p, 45_000, label) : p;
     setPreparing(true);
     setPrepErr(null);
     try {
       const { Keypair } = await import("@solana/web3.js");
-      const sdkMod = await loadSdk();
+      const sdkMod = await bounded(loadSdk(), "SDK load");
       const positionKp = Keypair.generate(); // ephemeral: lives only inside this in-memory plan; never persisted or logged
-      await sdk.data.refetchStates();
+      await bounded(sdk.data.refetchStates(), "Fresh destination read");
+      if (prefill.plan && sdk.data.lbPair.activeId !== snap.activeId) throw new Error("The destination active bin moved. Refresh the pool and rebuild the range.");
       const slippageBps = settings.slippageBps;
-      const tx = await sdk.data.initializePositionAndAddLiquidityByStrategy({
+      const tx = await bounded(sdk.data.initializePositionAndAddLiquidityByStrategy({
         positionPubKey: positionKp.publicKey,
         totalXAmount: xRaw, // base units (BN), per SDK types
         totalYAmount: yRaw,
         strategy: { minBinId: minBin, maxBinId: maxBin, strategyType: STRATEGY_TYPE_VALUE[strategy] },
         user: publicKey,
         slippage: slippageBps / 100,
-      });
-      const { blockhash } = await connection.getLatestBlockhash("confirmed");
+      }), "Destination deposit build");
+      const { blockhash } = await bounded(connection.getLatestBlockhash("confirmed"), "Recent blockhash");
       tx.recentBlockhash = blockhash;
       tx.feePayer = publicKey;
       const msg = tx.serializeMessage();
-      const [fee, rent, sim, cost] = await Promise.all([
+      const [fee, rent, sim, cost] = await bounded(Promise.all([
         connection.getFeeForMessage(tx.compileMessage(), "confirmed").then((r) => r.value).catch(() => null),
         connection.getMinimumBalanceForRentExemption(sdkMod.POSITION_MIN_SIZE),
         simulateExact(connection, msg),
         // SDK quote (values in SOL): position, realloc, bitmap-extension and new bin-array rent. Null if the SDK call fails.
         sdk.data.quoteCreatePosition({ strategy: { minBinId: minBin, maxBinId: maxBin, strategyType: STRATEGY_TYPE_VALUE[strategy] } }).catch(() => null),
-      ]);
-      job.commit({ tx, signer: positionKp, feeLamports: fee, rentLamports: rent, cost, position: positionKp.publicKey.toBase58(), sim: simText(sim), strategy, minBin, maxBin, x: xRaw, y: yRaw, slippageBps, activeId: snap.activeId });
+      ]), "Destination simulation and rent");
+      const costs = chainJob ? await reviewCosts(connection, publicKey, [tx], chainJob) : undefined;
+      chainJob?.check();
+      const recordId = prefill.plan ? await recordFact({
+        kind: "review", status: "info", title: "Planner stage 2: fresh destination deposit review", route: "/app/pool/$address", cluster: settings.cluster, wallet: publicKey.toBase58(),
+        links: { proposalId: prefill.plan, recordId: prefill.record ?? prefill.plan },
+        detail: "New unsigned destination deposit, built from user-entered amounts and current wallet balances. Separate approval required.",
+        context: { stage: 2, pool: address, position: positionKp.publicKey.toBase58(), mintX: snap.mintX, mintY: snap.mintY, strategy, lower: minBin, upper: maxBin, amountX: xRaw.toString(), amountY: yRaw.toString(), feeLamports: costs?.feeLamports ?? null, requiredLamports: costs?.requiredLamports ?? null, simulationError: costs?.simErrors[0] ?? null },
+      }) : undefined;
+      chainJob?.check();
+      job.commit({ tx, signer: positionKp, feeLamports: costs?.feeLamports ?? fee, rentLamports: rent, cost, position: positionKp.publicKey.toBase58(), sim: simText(sim), strategy, minBin, maxBin, x: xRaw, y: yRaw, slippageBps, activeId: snap.activeId, builtAt: Date.now(), identityKey: liveKey, identityEpoch: identityEpoch.current, ...(recordId ? { recordId } : {}), ...(costs ? { costs } : {}) });
     } catch (e) {
       if (job.isCurrent()) setPrepErr(redactUrls(e instanceof Error ? e.message : String(e)));
     } finally {
       setPreparing(false);
+      if (chainJob) planning.current.end(chainJob);
     }
   }
 
   async function execute() {
     if (!review || runner.running) return;
     const r = review;
-    const res = await runner.run([{ label: "Create position and add liquidity", tx: r.tx, signers: [r.signer] }]);
+    const guard = () => keyRef.current !== r.identityKey || identityEpoch.current !== r.identityEpoch ? "Destination inputs changed. Build a new review." : Date.now() - r.builtAt > REVIEW_TTL_MS ? "Destination review expired after 20 seconds. Rebuild it." : r.feeLamports === null ? "Network fee is unknown. Rebuild the review." : r.sim ? "Destination simulation failed." : r.costs ? executionReadiness(r.costs, false) : null;
+    if (guard()) { setPrepErr(guard()); return; }
+    const res = await runner.run([{ label: "Create position and add liquidity", tx: r.tx, signers: [r.signer] }], {
+      semanticGuard: guard, maxFeeLamports: r.feeLamports ?? undefined,
+      ...(prefill.plan ? { evidence: { title: "Planner stage 2: destination liquidity deposit", links: { proposalId: prefill.plan, ...(r.recordId ? { reviewId: r.recordId, recordId: r.recordId } : {}) }, context: { stage: 2, pool: address, position: r.position, amountX: r.x.toString(), amountY: r.y.toString(), lower: r.minBin, upper: r.maxBin } } } : {}),
+    });
     clear(); // drop the plan (and the ephemeral key with it) whatever the outcome
     if (res.length && res.every((x) => x.phase === "confirmed")) {
       qc.invalidateQueries({ queryKey: ["bal"] });
@@ -314,6 +350,7 @@ function AddLiquidity({ address, snap, symX, symY, prefill }: { address: string;
     <div className="grid gap-6 lg:grid-cols-[1fr_1.2fr]">
       <Panel>
         <h2 className="display text-2xl">Add liquidity</h2>
+        {prefill.plan && <p className="mt-2 text-sm text-cream/75">Planner stage 2 · enter deposit amounts from your current balances. <Link to="/app/recorder" search={{ id: prefill.plan }} className="underline">View the original comparison</Link>.</p>}
         <div className="mt-5 flex flex-col gap-5">
           <div>
             <p className="station-code mb-2 text-cream/80">Strategy</p>
@@ -345,7 +382,7 @@ function AddLiquidity({ address, snap, symX, symY, prefill }: { address: string;
           {amtErr && (xAmt || yAmt) && <p role="alert" className="text-sm text-destructive">{amtErr}</p>}
           {publicKey && !balancesReady && <p className="text-xs text-cream/70">{balX.isError || balY.isError ? "Balance check failed — review is disabled until balances can be read." : "Checking balances before review…"}</p>}
           {clusterBlock && <Notice tone="error" title="Wrong cluster for this plan">{clusterBlock}</Notice>}
-          {!publicKey ? <WalletButton /> : <Btn onClick={prepare} disabled={!canReview || preparing}>{preparing ? "Building with SDK…" : "Review transaction"}</Btn>}
+          {!publicKey ? <WalletButton /> : <Btn onClick={prepare} disabled={!canReview || preparing || planning.current.busy}>{preparing ? "Building with SDK…" : planning.current.draining ? "Waiting for request to drain…" : "Review transaction"}</Btn>}
           {prepErr && <Notice tone="error" title="Couldn't build the transaction">{prepErr}</Notice>}
         </div>
       </Panel>
@@ -366,7 +403,7 @@ function AddLiquidity({ address, snap, symX, symY, prefill }: { address: string;
         {review && (
           <Panel tone="cobalt">
             <h3 className="display text-2xl">Review</h3>
-            <p className="station-code mt-1 text-cream/65">Frozen plan · changes to the form discard it</p>
+            <p className="station-code mt-1 text-cream/65">Frozen plan · changes to the form discard it · {Math.max(0, Math.ceil((REVIEW_TTL_MS - (reviewNow - review.builtAt)) / 1000))}s remaining</p>
             <dl className="mt-4 grid grid-cols-2 gap-y-2 text-sm">
               <dt className="text-cream/70">Pool</dt><dd className="font-mono">{shortAddr(address, 6)}</dd>
               <dt className="text-cream/70">Strategy</dt><dd>{review.strategy}</dd>
@@ -388,7 +425,9 @@ function AddLiquidity({ address, snap, symX, symY, prefill }: { address: string;
             ) : <p className="mt-3 text-xs text-cream/70">Full cost estimate unavailable — {DASH}.</p>}
             <p className="mt-2 text-xs text-cream/70">Estimates exclude any new token-account rent (~0.002 SOL each). The exact simulation above checks you can afford it; the wallet preview shows the final amount.</p>
             {review.sim ? <Notice tone="error" title="Simulation failed — not sent">{review.sim}</Notice> : <p className="mt-3 station-code text-success">Exact message simulation passed</p>}
-            <Btn className="mt-4 w-full" onClick={execute} disabled={!!review.sim || runner.running}>{runner.running ? "Working…" : "Sign & send with wallet"}</Btn>
+            {review.costs && <p className="mt-2 text-sm text-cream/80">Required SOL: {review.costs.requiredLamports === null ? "unavailable" : formatUnits(review.costs.requiredLamports, 9)} · {executionReadiness(review.costs, false) ?? "Exact balance and cost checks passed"}</p>}
+            {reviewNow - review.builtAt > REVIEW_TTL_MS && <p className="mt-2 text-sm text-amber">Review expired. Rebuild before signing.</p>}
+            <Btn className="mt-4 w-full" onClick={execute} disabled={!!review.sim || review.feeLamports === null || reviewNow - review.builtAt > REVIEW_TTL_MS || !!(review.costs && executionReadiness(review.costs, false)) || runner.running}>{runner.running ? "Working…" : "Sign & send with wallet"}</Btn>
           </Panel>
         )}
         <TxSteps steps={runner.steps} />
@@ -438,7 +477,7 @@ function Swap({ address, snap, symX, symY }: { address: string; snap: PoolSnapsh
   const liveKey = planKey({ ...ctxKey, xToY, amt: parsed?.ok ? parsed.raw.toString() : amt });
   const { plan: quote, begin, clear } = usePlan<Quote>(liveKey);
   const expired = quote ? now - quote.at > QUOTE_TTL : false;
-  const ready = !!publicKey ? !!bal.data : true;
+  const ready = publicKey ? !!bal.data : true;
 
   async function getQuote() {
     if (!sdk.data || !parsed?.ok || busy) return;

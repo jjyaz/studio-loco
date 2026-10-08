@@ -84,6 +84,7 @@ export interface BuiltRebalance {
   withdrawn: { x: string; y: string };
   deposited: { x: string; y: string };
   walletOut: { x: string; y: string };
+  positionRentLamports?: string;
   maxActiveBinSlippage: number;
   costs: CostReview;
 }
@@ -172,7 +173,7 @@ async function freshTx(connection: Connection, owner: PK, ixs: TransactionInstru
   return tx;
 }
 
-/** Native rebalance: withdraw 100% + redeposit around the active bin with the SAME width and zero wallet top-up. */
+/** Native rebalance: full removal and zero-top-up redeposit; default preserves width, Planner may explicitly widen. */
 export async function buildNativeRebalance(o: { connection: Connection; owner: PK; poolAddress: string; position: string; strategy: StrategyName; slippageBps: number; cluster: "mainnet-beta" | "devnet"; job: Job; target?: { lower: number; upper: number } }): Promise<RebalanceResult> {
   if (!Number.isInteger(o.slippageBps) || o.slippageBps < 0 || o.slippageBps > 10_000) throw new Error("Invalid slippage.");
   const { PublicKey } = await import("@solana/web3.js");
@@ -186,6 +187,7 @@ export async function buildNativeRebalance(o: { connection: Connection; owner: P
   // Planner "widen" passes an explicit absolute range; default = recenter at the SAME width.
   const expected = o.target ?? balancedTarget(activeId, pd.upperBinId - pd.lowerBinId + 1);
   const width = expected.upper - expected.lower + 1;
+  if (!Number.isSafeInteger(expected.lower) || !Number.isSafeInteger(expected.upper) || width < 1 || width > sdk.POSITION_MAX_LENGTH.toNumber() || expected.lower < -sdk.MAX_BIN_ID_PER_BIN_STEP || expected.upper > sdk.MAX_BIN_ID_PER_BIN_STEP) throw new Error("Target range exceeds the SDK's position or bin bounds.");
   const availX = new BN(pd.totalXAmount.split(".")[0] ?? "0").add(pd.feeX);
   const availY = new BN(pd.totalYAmount.split(".")[0] ?? "0").add(pd.feeY);
   // The SDK's convenience balanced builder adds one bin to even widths. Use its
@@ -225,6 +227,7 @@ export async function buildNativeRebalance(o: { connection: Connection; owner: P
     withdrawn: { x: sim.amountXDeposited.add(sim.actualAmountXWithdrawn).toString(), y: sim.amountYDeposited.add(sim.actualAmountYWithdrawn).toString() },
     deposited: { x: sim.amountXDeposited.toString(), y: sim.amountYDeposited.toString() },
     walletOut: { x: sim.actualAmountXWithdrawn.toString(), y: sim.actualAmountYWithdrawn.toString() },
+    positionRentLamports: sim.rentalCostLamports?.toString(),
     maxActiveBinSlippage: maxActive, costs,
   } };
 }

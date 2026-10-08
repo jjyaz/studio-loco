@@ -142,6 +142,7 @@ export function useTxRunner() {
     list: { label: string; tx: Transaction; signers?: Signer[] }[],
     extra: {
       semanticGuard?: () => string | null;
+      asyncSemanticGuard?: () => Promise<string | null>;
       maxFeeLamports?: number;
       evidence?: Evidence;
     } = {},

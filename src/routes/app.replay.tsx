@@ -67,6 +67,7 @@ const TRIGGER_LABELS = {
   "left-range": "Range exit",
   "price-move": "Baseline price move",
   edge: "Range edge",
+  planner: "Manual planner selection",
 };
 const priceText = (n: number) =>
   n >= 100 ? n.toFixed(2) : n >= 0.01 ? n.toFixed(5) : n.toPrecision(5);

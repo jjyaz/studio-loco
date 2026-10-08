@@ -83,7 +83,7 @@ import {
 } from "@/lib/agents-chain";
 import { PRACTICE_OWNER, practiceRow } from "@/lib/agents-practice";
 import { RebalancePlanner } from "@/components/app/RebalancePlanner";
-import type { PlanOption, PlanSnapshot } from "@/lib/planner";
+import { selectionRefusal, type PlanOption, type PlanSnapshot } from "@/lib/planner";
 import nightAsset from "@/assets/studio-loco-night-station.png.asset.json";
 
 export const Route = createFileRoute("/app/agents")({
@@ -263,6 +263,7 @@ export function Agents({ handoffSearch }: { handoffSearch?: z.infer<typeof Hando
   const [pending, setPending] = useState<PendingTx[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const [review, setReview] = useState<Review | null>(null);
+  const [planContinuation, setPlanContinuation] = useState<Proposal | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const [practiceStep, setPracticeStep] = useState(0);
   const [staged, setStaged] = useState<{
@@ -270,6 +271,8 @@ export function Agents({ handoffSearch }: { handoffSearch?: z.infer<typeof Hando
     width: number;
     strategy: StrategyName;
     cluster: "mainnet-beta" | "devnet";
+    planId?: string;
+    withdrawalRecordId?: string;
   } | null>(null);
   const outRuns = useRef<Record<string, OutRun | undefined>>({});
   const lastProposed = useRef<Record<string, number>>({});
@@ -651,7 +654,7 @@ export function Agents({ handoffSearch }: { handoffSearch?: z.infer<typeof Hando
                 route: "/app/agents",
                 cluster: settings.cluster,
                 wallet: owner ?? "",
-                links: { proposalId: p.id, ...(opts.plan ? { recordId: opts.plan.selectionRecordId } : {}), ...cloudLinks(p.position) },
+                links: { proposalId: p.id, ...cloudLinks(p.position) },
                 detail: p.reason,
                 context: {
                   mode,
@@ -776,6 +779,7 @@ export function Agents({ handoffSearch }: { handoffSearch?: z.infer<typeof Hando
     p: Proposal,
     opts: { stagedTo?: { pool: string }; plan?: { selectionRecordId: string; target?: { lower: number; upper: number } } } = {},
   ) {
+    if (opts.plan && (planLive.current !== planReviewed.current || planRequest.current?.proposalId !== p.id)) return;
     if (mode === "practice") {
       setReview({ state: "practice", proposal: p });
       addHistory("review", `Practice review opened for ${p.kind}. Nothing can be signed.`);
@@ -1072,6 +1076,13 @@ export function Agents({ handoffSearch }: { handoffSearch?: z.infer<typeof Hando
     try {
       steps = await runner.run([first], {
         semanticGuard: guard,
+        ...(appliedHandoff?.h.position === rv.proposal.position ? {
+          asyncSemanticGuard: async () => {
+            const current = await loadSignalHandoff(appliedHandoff.h.alertId, "position");
+            return current.watchRevision !== appliedHandoff.h.watchRevision || current.accountId !== appliedHandoff.h.accountId
+              ? "The private watch changed during approval. Rebuild using its current rules." : null;
+          },
+        } : {}),
         maxFeeLamports: rv.frozen.feeLamports ?? undefined,
         evidence: {
           title: `Observatory ${rv.frozen.action} ${shortAddr(rv.proposal.position)}`,
@@ -1126,6 +1137,7 @@ export function Agents({ handoffSearch }: { handoffSearch?: z.infer<typeof Hando
           width: rv.built.staged.width,
           strategy: rv.built.staged.strategy,
           cluster: settings.cluster,
+          ...(rv.proposal.trigger === "planner" ? { planId: rv.proposal.id, withdrawalRecordId: reviewRecord.current[rv.proposal.id] } : {}),
         });
       setProposals((q) => (remaining === 0 ? q.filter((x) => x.id !== rv.proposal.id) : q));
       if (remaining > 0)
@@ -1133,6 +1145,7 @@ export function Agents({ handoffSearch }: { handoffSearch?: z.infer<typeof Hando
           "tx",
           `${remaining} more step(s) remain. Build a fresh review to continue — nothing continues automatically.`,
         );
+      if (remaining > 0 && rv.proposal.trigger === "planner") setPlanContinuation(rv.proposal);
       setReview(null);
       void runCheck("manual");
     }
@@ -1140,26 +1153,29 @@ export function Agents({ handoffSearch }: { handoffSearch?: z.infer<typeof Hando
 
   const planLive = useRef<string | null>(null);
   const planReviewed = useRef<string | null>(null);
-  const onPlannerKey = (key: string) => {
+  const planRequest = useRef<{ proposalId: string; selectionRecordId: string; target?: { lower: number; upper: number }; destPool?: string } | null>(null);
+  const onPlannerKey = useCallback((key: string) => {
     planLive.current = key;
     if (planReviewed.current !== null && planReviewed.current !== key) {
       planReviewed.current = null;
+      setPlanContinuation(null);
       genRef.current++;
       ctl.current!.invalidate();
       setReview((r) => (r && r.proposal.id.startsWith("plan-") ? null : r));
     }
-  };
+  }, []);
   function reviewPlan(s: PlanSnapshot, option: PlanOption, selectionRecordId: string) {
-    if (!sel || s.identity.position !== sel.key) return;
+    if (!sel || s.identity.position !== sel.key || selectionRefusal(s, planLive.current ?? "", option, Date.now()) || refusal || ctl.current!.busy || runner.running || reviewing) return;
     const r = s.results.find((x) => x.option === option);
     if (!r) return;
     planReviewed.current = s.identityKey;
+    planRequest.current = { proposalId: s.id, selectionRecordId, ...(option === "widen" && r.target ? { target: { ...r.target } } : {}), ...(option === "move" && r.destPool ? { destPool: r.destPool } : {}) };
     const p: Proposal = {
       id: s.id,
       position: sel.key,
       pool: sel.pair,
       kind: option === "move" ? "reduce" : "rebalance",
-      trigger: "edge",
+      trigger: "planner",
       reason: `Planner: ${option}`,
       withdrawPct: option === "move" ? 100 : undefined,
       ruleRevision: rules[sel.key]?.revision ?? -1,
@@ -1444,7 +1460,7 @@ export function Agents({ handoffSearch }: { handoffSearch?: z.infer<typeof Hando
           )}
           {rows && rows.length > 0 && (
             <div className="grid gap-6 xl:grid-cols-[1.1fr_1fr]">
-              <div className="flex flex-col gap-4">
+              <div className="flex max-h-[36rem] flex-col gap-4 overflow-y-auto pr-1">
                 <p className="station-code text-cream/60">
                   Last check {load.at ? timeAgo(load.at) : "—"}
                   {load.at && now - load.at > 2 * POLL_MS ? " · stale" : ""}
@@ -1556,6 +1572,9 @@ export function Agents({ handoffSearch }: { handoffSearch?: z.infer<typeof Hando
               onRebuild={() =>
                 prepare(
                   review.proposal,
+                  review.proposal.trigger === "planner" && planRequest.current?.proposalId === review.proposal.id
+                    ? { plan: planRequest.current, ...(planRequest.current.destPool ? { stagedTo: { pool: planRequest.current.destPool } } : {}) }
+                    :
                   review.state === "ready" &&
                     review.built.kind === "withdraw" &&
                     review.built.staged
@@ -1571,6 +1590,15 @@ export function Agents({ handoffSearch }: { handoffSearch?: z.infer<typeof Hando
             />
           )}
           <TxSteps steps={runner.steps} />
+          {planContinuation && planRequest.current?.proposalId === planContinuation.id && (
+            <Notice tone="info" title="Price-level accounts confirmed — rebuild the rebalance">
+              The account-creation step finished. Liquidity has not been rebalanced. Continue with a new simulation and separate wallet approval.
+              <Btn size="sm" className="mt-2" disabled={!!refusal || runner.running || ctl.current!.busy || planLive.current !== planReviewed.current}
+                onClick={() => { const p = planContinuation; setPlanContinuation(null); void prepare(p, { plan: planRequest.current! }); }}>
+                Rebuild native rebalance review
+              </Btn>
+            </Notice>
+          )}
           {unresolved && (
             <div className="mt-3">
               <CheckStatus p={unresolved} onResolved={() => runner.reset()} />
@@ -1595,6 +1623,7 @@ export function Agents({ handoffSearch }: { handoffSearch?: z.infer<typeof Hando
                       1 -
                       Math.floor((Math.min(staged.width, MAX_UI_BINS) - 1) / 2),
                     cluster: staged.cluster,
+                    ...(staged.planId ? { plan: staged.planId, record: staged.withdrawalRecordId } : {}),
                   }}
                   className="underline"
                 >
@@ -1602,29 +1631,6 @@ export function Agents({ handoffSearch }: { handoffSearch?: z.infer<typeof Hando
                 </Link>
               </div>
             </Notice>
-          )}
-
-          {sel && (
-            <Capital
-              row={sel}
-              cluster={settings.cluster}
-              practice={mode === "practice"}
-              onStage={(pool) => {
-                const p: Proposal = {
-                  id: `${sel.key}:move:${pool}`,
-                  position: sel.key,
-                  pool: sel.pair,
-                  kind: "reduce",
-                  trigger: "edge",
-                  reason: `Staged move to ${shortAddr(pool)} chosen from the same-pair comparison.`,
-                  withdrawPct: 100,
-                  ruleRevision: rules[sel.key]?.revision ?? -1,
-                  createdAt: Date.now(),
-                };
-                void prepare(p, { stagedTo: { pool } });
-              }}
-              disabled={reviewing || (mode !== "practice" && !!refusal)}
-            />
           )}
 
           {sel && (
@@ -1651,9 +1657,35 @@ export function Agents({ handoffSearch }: { handoffSearch?: z.infer<typeof Hando
                   : (refusal ?? (reviewing ? "A review is already open." : null))
               }
               onIdentityChange={onPlannerKey}
+              reviewBusy={reviewing || runner.running}
               onReview={reviewPlan}
             />
           )}
+
+          {sel && (
+            <Capital
+              row={sel}
+              cluster={settings.cluster}
+              practice={mode === "practice"}
+              onStage={(pool) => {
+                const p: Proposal = {
+                  id: `${sel.key}:move:${pool}`,
+                  position: sel.key,
+                  pool: sel.pair,
+                  kind: "reduce",
+                  trigger: "edge",
+                  reason: `Staged move to ${shortAddr(pool)} chosen from the same-pair comparison.`,
+                  withdrawPct: 100,
+                  ruleRevision: rules[sel.key]?.revision ?? -1,
+                  createdAt: Date.now(),
+                };
+                void prepare(p, { stagedTo: { pool } });
+              }}
+              disabled={reviewing || (mode !== "practice" && !!refusal)}
+            />
+          )}
+
+
 
           <section className="mt-8" aria-labelledby="hist-h">
             <h2 id="hist-h" className="display mb-3 text-2xl">

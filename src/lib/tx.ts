@@ -70,6 +70,8 @@ export interface TxContext {
   identityGuard?: () => string | null;
   /** Optional caller-specific check (quote age, config generation…). Same call sites as identityGuard. */
   semanticGuard?: () => string | null;
+  /** Bounded fresh private-rule verification before signing and after wallet approval. */
+  asyncSemanticGuard?: () => Promise<string | null>;
   /** When set, the fresh message's getFeeForMessage must be known and <= this many lamports, or nothing is signed. */
   maxFeeLamports?: number;
 }
@@ -234,6 +236,10 @@ export async function runTransaction(opts: {
 
   let signed: Transaction;
   try {
+    if (ctx.asyncSemanticGuard) {
+      const reason = await withTimeout(ctx.asyncSemanticGuard(), 10_000, "Private rule verification");
+      if (reason) throw new TxError(reason, "sending");
+    }
     guard();
     signed = await signFn(tx);
   } catch (e) {
@@ -243,6 +249,11 @@ export async function runTransaction(opts: {
   // Wallet/network may have changed while the approval dialog was open: stop before anything is
   // persisted or broadcast. The signed bytes are discarded.
   guard();
+  if (ctx.asyncSemanticGuard) {
+    const reason = await withTimeout(ctx.asyncSemanticGuard(), 10_000, "Private rule verification");
+    if (reason) throw new TxError(reason, "sending");
+    guard();
+  }
   if (!sameBytes(new Uint8Array(signed.serializeMessage()), messageBytes)) {
     throw new TxError("Your wallet changed the transaction after simulation, so it was not sent. Review again.", "sending");
   }

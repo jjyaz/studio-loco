@@ -7,7 +7,7 @@ import { JobControl, JobTimeout } from "@/lib/job-control";
 import { buildNativeRebalance, buildWithdraw, newAccountRentLamports, reviewCosts, verifyStagedDestination } from "@/lib/agents-chain";
 
 const mocked = vi.hoisted(() => ({ create: vi.fn(), parameters: vi.fn(() => ({ x0: new BN(1), y0: new BN(1), deltaX: new BN(0), deltaY: new BN(0) })) }));
-vi.mock("@/lib/dlmm", () => ({ loadSdk: async () => ({ default: { create: mocked.create }, buildLiquidityStrategyParameters: mocked.parameters, getLiquidityStrategyParameterBuilder: vi.fn() }) }));
+vi.mock("@/lib/dlmm", () => ({ loadSdk: async () => ({ default: { create: mocked.create }, POSITION_MAX_LENGTH: new BN(1400), MAX_BIN_ID_PER_BIN_STEP: 351639, buildLiquidityStrategyParameters: mocked.parameters, getLiquidityStrategyParameterBuilder: vi.fn() }) }));
 const owner = Keypair.generate().publicKey, poolAddress = Keypair.generate().publicKey.toBase58();
 const position = Keypair.generate().publicKey.toBase58();
 const mintX = "So11111111111111111111111111111111111111112", mintY = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
@@ -34,6 +34,22 @@ const pool = () => ({
 afterEach(() => { vi.useRealTimers(); mocked.create.mockReset(); mocked.parameters.mockClear(); });
 
 describe("chain review and SDK boundaries", () => {
+  it("widens to exactly the requested range and preserves the no-top-up check", async () => {
+    const p = pool(), response = await p.simulateRebalancePosition();
+    response.simulationResult.depositParams = [{ minDeltaId: -15, maxDeltaId: 15 }];
+    p.simulateRebalancePosition.mockResolvedValue(response); mocked.create.mockResolvedValue(p);
+    const c = new JobControl(), job = c.begin()!;
+    const result = await buildNativeRebalance({ connection: connection() as never, owner, poolAddress, position, strategy: "Spot", slippageBps: 50, cluster: "mainnet-beta", target: { lower: 85, upper: 115 }, job });
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.built.target).toEqual({ lower: 85, upper: 115 });
+    c.end(job);
+  });
+  it("refuses malformed targets before SDK amount simulation", async () => {
+    const p = pool(); mocked.create.mockResolvedValue(p);
+    const c = new JobControl(), job = c.begin()!;
+    await expect(buildNativeRebalance({ connection: connection() as never, owner, poolAddress, position, strategy: "Spot", slippageBps: 50, cluster: "mainnet-beta", target: { lower: 1.5, upper: 10 }, job })).rejects.toThrow(/bounds/);
+    expect(p.simulateRebalancePosition).not.toHaveBeenCalled(); c.end(job);
+  });
   it("builds numeric SDK offsets, shows gross redeposit separately and preserves WSOL", async () => {
     const p = pool(); mocked.create.mockResolvedValue(p);
     const c = new JobControl(), job = c.begin()!;

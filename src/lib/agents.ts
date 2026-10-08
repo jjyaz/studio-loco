@@ -234,7 +234,7 @@ export interface Proposal {
   position: string;
   pool: string;
   kind: "rebalance" | "reduce";
-  trigger: TriggerKind;
+  trigger: TriggerKind | "planner";
   reason: string;
   withdrawPct?: number;
   target?: { lower: number; upper: number };

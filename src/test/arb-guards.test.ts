@@ -31,6 +31,19 @@ const signer = (during?: () => void) => ({
 const ctx = (extra: object = {}) => ({ cluster: "devnet", rpc: "relay" as const, store: memoryPendingStore(), ...extra });
 
 describe("runner semantic guard + fee cap", () => {
+  it("a hosted rule revision changed during wallet approval discards signed bytes", async () => {
+    let revision = 1; const c = conn(), store = memoryPendingStore();
+    const fresh = vi.fn(async () => revision === 1 ? null : "Private watch changed");
+    const w = signer(() => { revision = 2; });
+    await expect(runTransaction({ connection: asAny(c), wallet: asAny(w), tx: tx(), ctx: { ...ctx(), store, asyncSemanticGuard: fresh } })).rejects.toThrow(/Private watch changed/);
+    expect(fresh).toHaveBeenCalledTimes(2);
+    expect(c.sendRawTransaction).not.toHaveBeenCalled(); expect(store.list()).toEqual([]);
+  });
+  it("unavailable private-rule verification prevents wallet signing", async () => {
+    const c = conn(), w = signer();
+    await expect(runTransaction({ connection: asAny(c), wallet: asAny(w), tx: tx(), ctx: ctx({ asyncSemanticGuard: async () => { throw new Error("Watch verification unavailable"); } }) })).rejects.toThrow(/verification unavailable/);
+    expect(w.signTransaction).not.toHaveBeenCalled(); expect(c.sendRawTransaction).not.toHaveBeenCalled();
+  });
   it("quote expiring during wallet approval discards the signed tx (no broadcast, nothing persisted)", async () => {
     let now = 0; const quotedAt = 0;
     const c = conn(); const store = memoryPendingStore();

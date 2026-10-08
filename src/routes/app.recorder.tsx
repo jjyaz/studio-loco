@@ -266,6 +266,7 @@ function Recorder() {
             {cur ? (
               <Detail
                 r={cur}
+                related={(records ?? []).filter((r) => r.id !== cur.id && (r.links.recordId === cur.id || (cur.context['recordType'] === 'rebalance-comparison' && r.links.proposalId === cur.id)))}
                 onDelete={async () => {
                   try {
                     await deleteRecord(cur.id);
@@ -287,7 +288,7 @@ function Recorder() {
   );
 }
 
-function Detail({ r, onDelete }: { r: FlightRecord; onDelete: () => void }) {
+function Detail({ r, related, onDelete }: { r: FlightRecord; related: FlightRecord[]; onDelete: () => void }) {
   return (
     <Panel tone="cobalt">
       <div className="flex flex-wrap justify-between gap-2">
@@ -318,6 +319,14 @@ function Detail({ r, onDelete }: { r: FlightRecord; onDelete: () => void }) {
                 )}
               </li>
             ))}
+          </ul>
+        </div>
+      )}
+      {related.length > 0 && (
+        <div className="mt-4 border-t border-line pt-3">
+          <p className="station-code text-amber">Connected evidence</p>
+          <ul className="mt-2 space-y-1 text-sm">
+            {related.map((child) => <li key={child.id}><Link to="/app/recorder" search={{ id: child.id }} className="underline">{child.title}</Link> · {child.status}</li>)}
           </ul>
         </div>
       )}
