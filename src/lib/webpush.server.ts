@@ -67,7 +67,7 @@ export async function sendPush(sub: { endpoint: string; p256dh: string; auth: st
   const r = await fetch(sub.endpoint, {
     method: "POST",
     headers: { TTL: "86400", Urgency: "high", "Content-Encoding": "aes128gcm", "Content-Type": "application/octet-stream", Authorization: `vapid t=${vapidJwt(sub.endpoint, priv)}, k=${b64u(pub)}` },
-    body, signal: AbortSignal.timeout(10_000),
+    body: ab(body), signal: AbortSignal.timeout(10_000),
   });
   if (r.ok) return { ok: true, status: r.status };
   return { ok: false, status: r.status, gone: r.status === 404 || r.status === 410, error: (await r.text().catch(() => "")).slice(0, 200) };
