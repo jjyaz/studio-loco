@@ -22,6 +22,7 @@ import { Route as AppDispatchRouteImport } from './routes/app.dispatch'
 import { Route as AppLaunchRouteImport } from './routes/app.launch'
 import { Route as AppPortfolioRouteImport } from './routes/app.portfolio'
 import { Route as AppReplayRouteImport } from './routes/app.replay'
+import { Route as AppSignalBoxRouteImport } from './routes/app.signal-box'
 import { Route as AppSignalsRouteImport } from './routes/app.signals'
 import { Route as AppStudioRouteImport } from './routes/app.studio'
 import { Route as JournalIndexRouteImport } from './routes/journal.index'
@@ -97,6 +98,11 @@ const AppReplayRoute = AppReplayRouteImport.update({
   path: '/replay',
   getParentRoute: () => AppRoute,
 } as any)
+const AppSignalBoxRoute = AppSignalBoxRouteImport.update({
+  id: '/signal-box',
+  path: '/signal-box',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppSignalsRoute = AppSignalsRouteImport.update({
   id: '/signals',
   path: '/signals',
@@ -157,6 +163,7 @@ export interface FileRoutesByFullPath {
   '/app/launch': typeof AppLaunchRoute
   '/app/portfolio': typeof AppPortfolioRoute
   '/app/replay': typeof AppReplayRoute
+  '/app/signal-box': typeof AppSignalBoxRoute
   '/app/signals': typeof AppSignalsRoute
   '/app/studio': typeof AppStudioRoute
   '/journal/$slug': typeof JournalSlugRoute
@@ -180,6 +187,7 @@ export interface FileRoutesByTo {
   '/app/launch': typeof AppLaunchRoute
   '/app/portfolio': typeof AppPortfolioRoute
   '/app/replay': typeof AppReplayRoute
+  '/app/signal-box': typeof AppSignalBoxRoute
   '/app/signals': typeof AppSignalsRoute
   '/app/studio': typeof AppStudioRoute
   '/journal/$slug': typeof JournalSlugRoute
@@ -205,6 +213,7 @@ export interface FileRoutesById {
   '/app/launch': typeof AppLaunchRoute
   '/app/portfolio': typeof AppPortfolioRoute
   '/app/replay': typeof AppReplayRoute
+  '/app/signal-box': typeof AppSignalBoxRoute
   '/app/signals': typeof AppSignalsRoute
   '/app/studio': typeof AppStudioRoute
   '/journal/$slug': typeof JournalSlugRoute
@@ -231,6 +240,7 @@ export interface FileRouteTypes {
     | '/app/launch'
     | '/app/portfolio'
     | '/app/replay'
+    | '/app/signal-box'
     | '/app/signals'
     | '/app/studio'
     | '/journal/$slug'
@@ -254,6 +264,7 @@ export interface FileRouteTypes {
     | '/app/launch'
     | '/app/portfolio'
     | '/app/replay'
+    | '/app/signal-box'
     | '/app/signals'
     | '/app/studio'
     | '/journal/$slug'
@@ -278,6 +289,7 @@ export interface FileRouteTypes {
     | '/app/launch'
     | '/app/portfolio'
     | '/app/replay'
+    | '/app/signal-box'
     | '/app/signals'
     | '/app/studio'
     | '/journal/$slug'
@@ -398,6 +410,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppReplayRouteImport
       parentRoute: typeof AppRoute
     }
+    '/app/signal-box': {
+      id: '/app/signal-box'
+      path: '/signal-box'
+      fullPath: '/app/signal-box'
+      preLoaderRoute: typeof AppSignalBoxRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/app/signals': {
       id: '/app/signals'
       path: '/signals'
@@ -471,6 +490,7 @@ interface AppRouteChildren {
   AppLaunchRoute: typeof AppLaunchRoute
   AppPortfolioRoute: typeof AppPortfolioRoute
   AppReplayRoute: typeof AppReplayRoute
+  AppSignalBoxRoute: typeof AppSignalBoxRoute
   AppSignalsRoute: typeof AppSignalsRoute
   AppStudioRoute: typeof AppStudioRoute
   AppIndexRoute: typeof AppIndexRoute
@@ -484,6 +504,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppLaunchRoute: AppLaunchRoute,
   AppPortfolioRoute: AppPortfolioRoute,
   AppReplayRoute: AppReplayRoute,
+  AppSignalBoxRoute: AppSignalBoxRoute,
   AppSignalsRoute: AppSignalsRoute,
   AppStudioRoute: AppStudioRoute,
   AppIndexRoute: AppIndexRoute,

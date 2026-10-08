@@ -18,6 +18,8 @@ const TABS = [
   { to: "/app/launch", label: "Launch" },
   { to: "/app/dispatch", label: "Dispatch" },
   { to: "/app/agents", label: "Agents" },
+  { to: "/app/signal-box", label: "Signal Box" },
+  { to: "/app/recorder", label: "Recorder" },
   { to: "/app/replay", label: "Replay" },
   { to: "/app/checks", label: "Wallet Checks" },
 ] as const;
