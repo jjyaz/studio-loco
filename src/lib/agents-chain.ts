@@ -173,7 +173,7 @@ async function freshTx(connection: Connection, owner: PK, ixs: TransactionInstru
 }
 
 /** Native rebalance: withdraw 100% + redeposit around the active bin with the SAME width and zero wallet top-up. */
-export async function buildNativeRebalance(o: { connection: Connection; owner: PK; poolAddress: string; position: string; strategy: StrategyName; slippageBps: number; cluster: "mainnet-beta" | "devnet"; job: Job }): Promise<RebalanceResult> {
+export async function buildNativeRebalance(o: { connection: Connection; owner: PK; poolAddress: string; position: string; strategy: StrategyName; slippageBps: number; cluster: "mainnet-beta" | "devnet"; job: Job; target?: { lower: number; upper: number } }): Promise<RebalanceResult> {
   if (!Number.isInteger(o.slippageBps) || o.slippageBps < 0 || o.slippageBps > 10_000) throw new Error("Invalid slippage.");
   const { PublicKey } = await import("@solana/web3.js");
   const sdk = await o.job.step(loadSdk(), T, "SDK load");
@@ -182,9 +182,10 @@ export async function buildNativeRebalance(o: { connection: Connection; owner: P
   const pos = await o.job.step(pool.getPosition(posKey), T, "Position read");
   if (!pos.positionData.owner.equals(o.owner)) throw new Error("Position owner does not match the connected wallet.");
   const pd = pos.positionData;
-  const width = pd.upperBinId - pd.lowerBinId + 1;
   const activeId = pool.lbPair.activeId;
-  const expected = balancedTarget(activeId, width);
+  // Planner "widen" passes an explicit absolute range; default = recenter at the SAME width.
+  const expected = o.target ?? balancedTarget(activeId, pd.upperBinId - pd.lowerBinId + 1);
+  const width = expected.upper - expected.lower + 1;
   const availX = new BN(pd.totalXAmount.split(".")[0] ?? "0").add(pd.feeX);
   const availY = new BN(pd.totalYAmount.split(".")[0] ?? "0").add(pd.feeY);
   // The SDK's convenience balanced builder adds one bin to even widths. Use its
