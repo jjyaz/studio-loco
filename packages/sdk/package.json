@@ -1,7 +1,7 @@
 {
   "name": "@studio-loco/sdk",
-  "version": "0.1.1",
-  "description": "Read-only Studio Loco client, DLMM range helpers, Flight Recorder analysis and MCP server",
+  "version": "0.2.0",
+  "description": "Read-only Loco client, versioned liquidity blueprints, protocol adapters, Flight Recorder analysis and MCP server",
   "type": "module",
   "sideEffects": false,
   "license": "MIT",

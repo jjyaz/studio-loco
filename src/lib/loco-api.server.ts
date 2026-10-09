@@ -30,6 +30,8 @@ export const LOCO_CAPABILITIES = CapabilitiesSchema.parse({
     "indexed-pool-detail",
     "confirmed-position-snapshot",
     "local-range-geometry",
+    "local-blueprint-inspection",
+    "read-only-protocol-adapters",
     "local-recorder-export-analysis",
     "hosted-mcp",
     "stdio-mcp",

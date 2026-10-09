@@ -1295,6 +1295,9 @@ export function Agents({ handoffSearch }: { handoffSearch?: z.infer<typeof Hando
         onApply={() => void applyHandoff()}
       />
       <div className="-mt-2 mb-6 flex flex-wrap gap-x-5 gap-y-3 text-sm text-cream/75">
+        <Link to="/app/foundry" className="underline hover:text-amber">
+          Build a versioned strategy in the Foundry
+        </Link>
         <Link to="/app/replay" className="underline hover:text-amber">
           Test rules in the Replay Room
         </Link>

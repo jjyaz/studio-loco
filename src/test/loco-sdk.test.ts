@@ -227,7 +227,20 @@ describe("Public API boundaries and genuine MCP", () => {
     await vi.advanceTimersByTimeAsync(101);
     await check;
   });
-  it("negotiates MCP and lists exactly five read-only tools without cloud/export/signing tools", async () => {
+  it("inspects caller blueprints locally and exposes an honest gated Pro adapter", async () => {
+    const { webcrypto } = await import("node:crypto");
+    vi.stubGlobal("crypto", webcrypto);
+    const { draftBlueprint } = await import("@/lib/foundry");
+    const blueprint = draftBlueprint({ address: "5rCf1DM8LjKTw4YqhnoLcngyZYeNnQqztScTogYHAS6", mintX: "So11111111111111111111111111111111111111112", mintY: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", binStep: 4 });
+    const inspected = await rpcJson(await handleLocoRequest(rpc("tools/call", { name: "loco_inspect_blueprint", arguments: { blueprint, state: { activeBinId: 100, decimalsX: 9, decimalsY: 6 } } })));
+    expect(inspected.result.structuredContent).toMatchObject({ readOnly: true, executable: false, independentlyVerified: false });
+    expect(inspected.result.structuredContent.digest).toMatch(/^[a-f0-9]{64}$/);
+    const adapters = await rpcJson(await handleLocoRequest(rpc("tools/call", { name: "loco_protocol_adapters", arguments: {} })));
+    expect(adapters.result.structuredContent.adapters[1]).toMatchObject({ status: "unverified", program: null, operations: [] });
+    const forbidden = await rpcJson(await handleLocoRequest(rpc("tools/call", { name: "loco_inspect_blueprint", arguments: { blueprint: { ...blueprint, instructions: ["sign"] } } })));
+    expect(forbidden.result.isError).toBe(true);
+  });
+  it("negotiates MCP and lists exactly seven read-only tools without cloud/export/signing tools", async () => {
     const init = await rpcJson(
       await handleLocoRequest(
         rpc("initialize", {
@@ -239,7 +252,7 @@ describe("Public API boundaries and genuine MCP", () => {
     );
     expect(init.result.serverInfo.name).toBe("studio-loco");
     const list = await rpcJson(await handleLocoRequest(rpc("tools/list", {})));
-    expect(list.result.tools).toHaveLength(5);
+    expect(list.result.tools).toHaveLength(7);
     expect(
       list.result.tools.every(
         (t: { annotations: { readOnlyHint: boolean } }) => t.annotations.readOnlyHint,

@@ -20,6 +20,7 @@ import { Route as AppIndexRouteImport } from './routes/app.index'
 import { Route as AppAgentsRouteImport } from './routes/app.agents'
 import { Route as AppChecksRouteImport } from './routes/app.checks'
 import { Route as AppDispatchRouteImport } from './routes/app.dispatch'
+import { Route as AppFoundryRouteImport } from './routes/app.foundry'
 import { Route as AppLaunchRouteImport } from './routes/app.launch'
 import { Route as AppPortfolioRouteImport } from './routes/app.portfolio'
 import { Route as AppRecorderRouteImport } from './routes/app.recorder'
@@ -89,6 +90,11 @@ const AppChecksRoute = AppChecksRouteImport.update({
 const AppDispatchRoute = AppDispatchRouteImport.update({
   id: '/dispatch',
   path: '/dispatch',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppFoundryRoute = AppFoundryRouteImport.update({
+  id: '/foundry',
+  path: '/foundry',
   getParentRoute: () => AppRoute,
 } as any)
 const AppLaunchRoute = AppLaunchRouteImport.update({
@@ -179,6 +185,7 @@ export interface FileRoutesByFullPath {
   '/app/agents': typeof AppAgentsRoute
   '/app/checks': typeof AppChecksRoute
   '/app/dispatch': typeof AppDispatchRoute
+  '/app/foundry': typeof AppFoundryRoute
   '/app/launch': typeof AppLaunchRoute
   '/app/portfolio': typeof AppPortfolioRoute
   '/app/recorder': typeof AppRecorderRoute
@@ -206,6 +213,7 @@ export interface FileRoutesByTo {
   '/app/agents': typeof AppAgentsRoute
   '/app/checks': typeof AppChecksRoute
   '/app/dispatch': typeof AppDispatchRoute
+  '/app/foundry': typeof AppFoundryRoute
   '/app/launch': typeof AppLaunchRoute
   '/app/portfolio': typeof AppPortfolioRoute
   '/app/recorder': typeof AppRecorderRoute
@@ -235,6 +243,7 @@ export interface FileRoutesById {
   '/app/agents': typeof AppAgentsRoute
   '/app/checks': typeof AppChecksRoute
   '/app/dispatch': typeof AppDispatchRoute
+  '/app/foundry': typeof AppFoundryRoute
   '/app/launch': typeof AppLaunchRoute
   '/app/portfolio': typeof AppPortfolioRoute
   '/app/recorder': typeof AppRecorderRoute
@@ -265,6 +274,7 @@ export interface FileRouteTypes {
     | '/app/agents'
     | '/app/checks'
     | '/app/dispatch'
+    | '/app/foundry'
     | '/app/launch'
     | '/app/portfolio'
     | '/app/recorder'
@@ -292,6 +302,7 @@ export interface FileRouteTypes {
     | '/app/agents'
     | '/app/checks'
     | '/app/dispatch'
+    | '/app/foundry'
     | '/app/launch'
     | '/app/portfolio'
     | '/app/recorder'
@@ -320,6 +331,7 @@ export interface FileRouteTypes {
     | '/app/agents'
     | '/app/checks'
     | '/app/dispatch'
+    | '/app/foundry'
     | '/app/launch'
     | '/app/portfolio'
     | '/app/recorder'
@@ -434,6 +446,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppDispatchRouteImport
       parentRoute: typeof AppRoute
     }
+    '/app/foundry': {
+      id: '/app/foundry'
+      path: '/foundry'
+      fullPath: '/app/foundry'
+      preLoaderRoute: typeof AppFoundryRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/app/launch': {
       id: '/app/launch'
       path: '/launch'
@@ -546,6 +565,7 @@ interface AppRouteChildren {
   AppAgentsRoute: typeof AppAgentsRoute
   AppChecksRoute: typeof AppChecksRoute
   AppDispatchRoute: typeof AppDispatchRoute
+  AppFoundryRoute: typeof AppFoundryRoute
   AppLaunchRoute: typeof AppLaunchRoute
   AppPortfolioRoute: typeof AppPortfolioRoute
   AppRecorderRoute: typeof AppRecorderRoute
@@ -561,6 +581,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppAgentsRoute: AppAgentsRoute,
   AppChecksRoute: AppChecksRoute,
   AppDispatchRoute: AppDispatchRoute,
+  AppFoundryRoute: AppFoundryRoute,
   AppLaunchRoute: AppLaunchRoute,
   AppPortfolioRoute: AppPortfolioRoute,
   AppRecorderRoute: AppRecorderRoute,

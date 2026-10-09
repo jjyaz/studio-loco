@@ -123,7 +123,8 @@ export function verifyRebalanceTarget(o: {
   return null;
 }
 
-export async function reviewCosts(connection: Connection, owner: PK, txs: Transaction[], job: Job): Promise<CostReview> {
+export interface SimulatedAccount { owner: string; data: string[]; lamports: number }
+export async function reviewCosts(connection: Connection, owner: PK, txs: Transaction[], job: Job, verifySimulated?: (keys: PK[], accounts: (SimulatedAccount | null)[] | null | undefined) => void): Promise<CostReview> {
   const { VersionedTransaction } = await import("@solana/web3.js");
   job.check();
   const tx = txs[0];
@@ -147,6 +148,7 @@ export async function reviewCosts(connection: Connection, owner: PK, txs: Transa
   out.logs[0] = sim.value.logs ?? [];
   out.simErrors[0] = sim.value.err ? JSON.stringify(sim.value.err) : null;
   const post = sim.value.accounts;
+  if (!sim.value.err) verifySimulated?.(keys, post);
   const after = post?.[ownerIndex]?.lamports;
   if (!sim.value.err && post?.length === keys.length && pre.length === keys.length && knownLamports(after) && knownLamports(balance) && knownLamports(fee)) {
     // RPC simulation debits the fee. Do not add it to the wallet delta a second time.

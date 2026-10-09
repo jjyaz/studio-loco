@@ -1,11 +1,11 @@
-# Studio Loco SDK · v0.1.1
+# Studio Loco SDK · v0.2.0
 
 A read-only TypeScript/ESM client for [Studio Loco](https://studioloco.cfd/developers), with range geometry, local Flight Recorder analysis and a genuine MCP server. Browser `fetch` or Node 20+; typed runtime validation, 15-second end-to-end timeout, bounded responses and cancellation. No private keys, signing, transaction submission or private cloud access.
 
 ## Install
 
 ```sh
-npm install https://studioloco.cfd/api/public/loco/v1/sdk/0.1.1.tgz
+npm install https://studioloco.cfd/api/public/loco/v1/sdk/0.2.0.tgz
 ```
 
 This is a versioned downloadable npm package, **not a release on the npm registry**. Check the SHA-256 download header or Developer Station. Only the original code in this package is MIT licensed; dependencies retain their licenses.
@@ -50,7 +50,7 @@ Hosted Streamable HTTP endpoint (public, no authentication):
 https://studioloco.cfd/api/public/loco/v1/mcp
 ```
 
-Add that URL as a remote MCP server in a host supporting Streamable HTTP. Official MCP TypeScript server v2.3.1 supports 2026-07-28 with stateless legacy 2025 compatibility. No persistent server-initiated subscriptions. Five tools: `loco_capabilities`, `loco_list_pools`, `loco_get_pool`, `loco_get_position`, `loco_plan_range`. Read-only annotations describe actual read-only handlers; they are not relied on as permission enforcement.
+Add that URL as a remote MCP server in a host supporting Streamable HTTP. Official MCP TypeScript server v2.3.1 supports 2026-07-28 with stateless legacy 2025 compatibility. No persistent server-initiated subscriptions. Seven tools: `loco_capabilities`, `loco_list_pools`, `loco_get_pool`, `loco_get_position`, `loco_plan_range`, `loco_inspect_blueprint`, `loco_protocol_adapters`. Read-only annotations describe actual read-only handlers; they are not relied on as permission enforcement.
 
 For stdio hosts:
 
@@ -59,13 +59,13 @@ For stdio hosts:
   "mcpServers": {
     "studio-loco": {
       "command": "npx",
-      "args": ["--yes", "--package", "https://studioloco.cfd/api/public/loco/v1/sdk/0.1.1.tgz", "loco-mcp"]
+      "args": ["--yes", "--package", "https://studioloco.cfd/api/public/loco/v1/sdk/0.2.0.tgz", "loco-mcp"]
     }
   }
 }
 ```
 
-Add `--local-evidence` to explicitly enable a sixth **local-only** `loco_analyze_recorder_export` tool. It accepts an exported bundle as input, uses memory only, and never uploads it or reads arbitrary files. The hosted server does not register it. Stdout is reserved for JSON-RPC. `loco-mcp --help` explains configuration; `--base-url` accepts HTTPS or localhost for development.
+Add `--local-evidence` to explicitly enable an eighth **local-only** `loco_analyze_recorder_export` tool. It accepts an exported bundle as input, uses memory only, and never uploads it or reads arbitrary files. The hosted server does not register it. Stdout is reserved for JSON-RPC. `loco-mcp --help` explains configuration; `--base-url` accepts HTTPS or localhost for development.
 
 ## API
 
@@ -74,3 +74,23 @@ Base: `https://studioloco.cfd/api/public/loco/v1`. GET `/capabilities`, `/pools`
 ## Development
 
 From the repository root: `npm run sdk:build`, `npm run sdk:release` (reproducible package + manifest), `npm test`, `npm run build`. Package source lives in `packages/sdk`; app and SDK share the Recorder schema. Source examples include a browser/client read and local export analysis.
+
+## Versioned blueprints · v0.2.0
+
+Export one saved revision from [Strategy Foundry](https://studioloco.cfd/app/foundry). It includes a format/version, immutable identity and revision, exact mainnet pool/mints/bin step, decimal X/Y budgets, relative per-token weights, optional buy/sell ladders and action guards. It excludes wallet identity, RPC credentials, signers, transactions and private history.
+
+```ts
+import { inspectBlueprint, compileBlueprint, protocolAdapters } from '@studio-loco/sdk';
+
+const inspection = await inspectBlueprint(exportedBlueprint);
+console.log(inspection.digest, inspection.executable); // false
+const geometry = compileBlueprint(exportedBlueprint, {
+  activeBinId: observedActiveBin, decimalsX: verifiedXDecimals, decimalsY: verifiedYDecimals,
+});
+console.log(geometry.bins); // exact integer nominal budgets, not actual deposited balances
+console.log(protocolAdapters()); // ordinary DLMM; Pro unverified and disabled
+```
+
+Inspection and compilation are local calculations on caller-supplied input. The SDK cannot authorize an action. Actual native weights use 16-bit quote-value precision and program rounding. The app re-verifies the chain and mint identities, composes one native transaction, simulates and checks its output, accounts for funding/fees/rent and obtains a fresh wallet approval. SHA-256 identifies configuration; it is not a signature, authenticity proof or verified receipt.
+
+Strict imports reject unknown keys, instructions, RPCs, invalid budget precision, duplicate/noncontiguous liquidity offsets, incomplete weights and crossing/duplicate order levels. Up to 69 liquidity bins, 12 levels per order side and 25 KB per JSON blueprint; hosted MCP has its separate 16 KiB request cap. Ladders use separate capital from LP budgets and separate reviews. No earnings forecast or background execution.

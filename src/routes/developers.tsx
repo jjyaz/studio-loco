@@ -32,7 +32,7 @@ export const Route = createFileRoute("/developers")({
   component: Developers,
 });
 const base = "https://studioloco.cfd/api/public/loco/v1";
-const install = `npm install ${base}/sdk/0.1.1.tgz`;
+const install = `npm install ${base}/sdk/0.2.0.tgz`;
 const example = `import { LocoClient } from '@studio-loco/sdk';\n\nconst loco = new LocoClient();\nconst { data, meta } = await loco.listPools({ perPage: 5 });\n\nconsole.log(meta.source, data.pools);\n// meteora-index · real mainnet pools`;
 function CopyCode({ text, label = "Copy" }: { text: string; label?: string }) {
   const [copied, setCopied] = useState(false),
@@ -123,7 +123,7 @@ function Developers() {
           <p className="station-code flex items-center gap-2 text-amber">
             <TrainFront size={17} /> DEV · Platform 01{" "}
             <span className="ml-3 rounded-full border border-amber/30 px-3 py-1 text-xs">
-              SDK v0.1.1
+              SDK v0.2.0
             </span>
           </p>
           <h1 className="display mt-5 max-w-3xl text-5xl leading-tight md:text-7xl">
@@ -166,7 +166,7 @@ function Developers() {
                 icon: Terminal,
                 label: "03 · MCP",
                 title: "Agents with a view.",
-                detail: "Five hosted tools. No signing or write paths.",
+                detail: "Seven hosted tools. No signing or write paths.",
               },
             ].map((c) => (
               <div key={c.label} className="rounded-lg border border-line bg-midnight/70 p-5">
@@ -191,11 +191,11 @@ function Developers() {
           </p>
           <CopyCode text={install} />
           <p className="mt-3 text-xs text-cream/60">
-            Downloadable npm package · ESM · v0.1.1 · not published to the npm registry.
+            Downloadable npm package · ESM · v0.2.0 · not published to the npm registry.
           </p>
           <a
             className="mt-4 inline-block text-sm text-amber underline"
-            href={`${base}/sdk/0.1.1.tgz`}
+            href={`${base}/sdk/0.2.0.tgz`}
           >
             Download package ↓
           </a>
@@ -277,13 +277,24 @@ function Developers() {
           )}
         </div>
       </section>
+      <section className="mt-12 border border-line bg-[#101b3d] p-6 md:p-8" id="blueprints">
+        <p className="station-code text-amber">Strategy Foundry · SDK v0.2.0</p>
+        <h2 className="display mt-3 text-3xl">A strategy other tools can understand.</h2>
+        <p className="mt-4 max-w-3xl leading-7 text-cream/75">Export a versioned blueprint from the Foundry. Inspect its strict schema, SHA-256 digest, nominal bin allocations and order ladders through the SDK or read-only MCP. The app performs fresh native simulation and wallet review; an imported blueprint grants no execution permission.</p>
+        <div className="mt-6"><CopyCode text={`import { inspectBlueprint, protocolAdapters } from '@studio-loco/sdk';
+
+const inspection = await inspectBlueprint(exportedBlueprint);
+console.log(inspection.digest, inspection.executable); // false
+console.log(protocolAdapters()); // DLMM supported; Pro unverified`} /></div>
+        <a href="/app/foundry" className="mt-5 inline-flex min-h-11 items-center gap-2 text-amber underline">Open the Strategy Foundry <ArrowUpRight size={15} /></a>
+      </section>
       <section className="mt-14 grid gap-8 lg:grid-cols-2" id="mcp">
         <div>
           <p className="station-code text-amber">03 · Connect an agent</p>
           <h2 className="display mt-3 text-3xl">Read-only, by construction.</h2>
           <p className="my-4 text-cream/70">
             Add this URL as a remote Streamable HTTP MCP connection. No authentication required. The
-            same five tools are also available over local stdio.
+            same seven tools are also available over local stdio.
           </p>
           <CopyCode text={`${base}/mcp`} />
           <div className="mt-5 flex flex-wrap gap-2">
@@ -293,6 +304,8 @@ function Developers() {
               "Pool metadata",
               "Position snapshot",
               "Range geometry",
+              "Blueprint inspection",
+              "Protocol adapters",
             ].map((t) => (
               <span key={t} className="rounded border border-line px-3 py-2 text-xs text-cream/70">
                 {t}
@@ -312,7 +325,7 @@ function Developers() {
                 mcpServers: {
                   "studio-loco": {
                     command: "npx",
-                    args: ["--yes", "--package", `${base}/sdk/0.1.1.tgz`, "loco-mcp"],
+                    args: ["--yes", "--package", `${base}/sdk/0.2.0.tgz`, "loco-mcp"],
                   },
                 },
               },

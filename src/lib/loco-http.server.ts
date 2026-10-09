@@ -7,6 +7,7 @@ import { publicReaders, readPool, readPools, readPosition } from "./loco-api.ser
 import { LOCO_OPENAPI } from "./loco-openapi";
 import release from "./loco-sdk-release.json";
 import initialRelease from "./loco-sdk-0.1.0.json";
+import previousRelease from "./loco-sdk-0.1.1.json";
 
 export const LOCO_PREFIX = "/api/public/loco/v1/";
 const cors = {
@@ -95,7 +96,7 @@ export async function handleLocoRequest(request: Request): Promise<Response> {
       queryObject(url, []);
       return json(LOCO_OPENAPI);
     }
-    const artifact = [release, initialRelease].find((r) => path === `sdk/${r.version}.tgz`);
+    const artifact = [release, previousRelease, initialRelease].find((r) => path === `sdk/${r.version}.tgz`);
     if (artifact) {
       queryObject(url, []);
       return new Response(Buffer.from(artifact.base64, "base64"), {

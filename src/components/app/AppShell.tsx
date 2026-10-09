@@ -18,6 +18,7 @@ const TABS = [
   { to: "/app/launch", label: "Launch" },
   { to: "/app/dispatch", label: "Dispatch" },
   { to: "/app/agents", label: "Agents" },
+  { to: "/app/foundry", label: "Foundry" },
   { to: "/app/signal-box", label: "Signal Box" },
   { to: "/app/recorder", label: "Recorder" },
   { to: "/app/replay", label: "Replay" },
