@@ -114,14 +114,20 @@ export async function withLocoBudget<T>(
 async function upstream(url: string, signal: AbortSignal, init?: RequestInit) {
   let response: Response;
   try {
-    response = await fetch(url, {
+    response = await globalThis.fetch(url, {
       ...init,
       signal,
-      redirect: "error",
+      redirect: "manual",
       headers: { Accept: "application/json", ...init?.headers },
     });
-  } catch {
-    throw new LocoError("upstream-network", "Live data source could not be reached", 502, true);
+  } catch (e) {
+    const reason =
+      e instanceof Error && /redirect/i.test(e.message)
+        ? "upstream-redirect"
+        : e instanceof Error && /not implemented|unsupported|Illegal invocation/i.test(e.message)
+          ? "upstream-runtime"
+          : "upstream-network";
+    throw new LocoError(reason, "Live data source could not be reached", 502, true);
   }
   if (!response.ok) {
     void response.body?.cancel();
