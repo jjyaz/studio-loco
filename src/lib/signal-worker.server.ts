@@ -19,6 +19,7 @@ import {
   type TickOutcome,
 } from "./signal-box";
 import type { OutRun } from "./agents";
+import type { OrderBaseline } from "./journey-signals";
 
 const PUBLICNODE = "https://solana-rpc.publicnode.com";
 
@@ -86,7 +87,7 @@ export interface TickDeps {
     w: WatchRow,
     lastProposed: Record<string, number>,
     budgetMs: number,
-  ) => Promise<TickOutcome>;
+  ) => Promise<TickOutcome<OutRun | OrderBaseline>>;
 }
 
 export async function runTick(
@@ -165,13 +166,16 @@ export async function runTick(
         w.last_proposed && typeof w.last_proposed === "object" ? w.last_proposed : {}
       ) as Record<string, number>;
       const budget = remaining - 5_000;
-      let out: TickOutcome;
+      let out: TickOutcome<OutRun | OrderBaseline>;
       try {
         const work = deps.observe
           ? deps.observe(w, lastProposed, budget)
           : w.kind === "position"
             ? positionWatch(connection!, w, lastProposed, budget)
-            : arbWatch(connection!, w, lastProposed, budget);
+            : w.kind === "order"
+              ? orderWatch(connection!, w, lastProposed, budget)
+              : w.kind === "arb" ? arbWatch(connection!, w, lastProposed, budget)
+              : Promise.resolve(failedTick("Unknown watch kind.", lastProposed));
         out = await withTimeout(work, budget, "Observation");
       } catch (e) {
         out = failedTick(redact(e instanceof Error ? e.message : String(e)), lastProposed);
@@ -264,6 +268,23 @@ export async function runTick(
       ).catch(() => undefined);
     }
   }
+}
+
+async function orderWatch(connection: import("@solana/web3.js").Connection, w: WatchRow,
+  lastProposed: Record<string, number>, budgetMs: number): Promise<TickOutcome<OutRun | OrderBaseline>> {
+  const { StoredOrderRule, OrderBaseline, orderTick } = await import("./journey-signals");
+  const stored = StoredOrderRule.parse(w.rule);
+  if (!w.position || !w.pool || !w.owner) return failedTick("Order watch identity is incomplete.", lastProposed);
+  const { JobControl } = await import("./job-control");
+  const { readJourneySnapshot } = await import("./journey-chain");
+  const ctl = new JobControl(), job = ctl.begin()!;
+  try {
+    const prev = OrderBaseline.safeParse(w.out_run);
+    const s = await readJourneySnapshot(connection, { kind: "order", account: w.position, pool: w.pool, owner: w.owner }, job, "server", undefined, prev.success ? prev.data.slot : 0, Math.max(1, budgetMs - 1000));
+    if (s.kind !== "order" || s.mintX !== stored.mintX || s.mintY !== stored.mintY || s.binStep !== stored.binStep) return failedTick("Order pool identity changed.", lastProposed);
+    return orderTick({ watchId: w.id, revision: w.revision, owner: w.owner, account: w.position,
+      pool: w.pool, snapshot: s, previous: w.out_run, lastProposed });
+  } finally { ctl.unmount(); ctl.end(job); }
 }
 
 async function positionWatch(

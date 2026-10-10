@@ -1548,9 +1548,10 @@ export function StrategyFoundry({ initialPool = "" }: { initialPool?: string }) 
             </p>
             <h2 className="display mt-3 text-3xl">A route with a record.</h2>
           </div>
-          <Link to="/app/recorder" className="text-sm text-amber underline">
-            Open Flight Recorder
-          </Link>
+          <div className="flex flex-wrap gap-4">
+            <Link to="/app/journey" search={{ blueprint: selected?.blueprint.id }} className="text-sm text-amber underline">Follow The Journey</Link>
+            <Link to="/app/recorder" className="text-sm text-amber underline">Open Flight Recorder</Link>
+          </div>
         </div>
         {linked.length ? (
           <div className="divide-y divide-line">

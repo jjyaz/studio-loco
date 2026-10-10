@@ -9,6 +9,7 @@
 import { z } from "zod";
 import { RuleSchema, observeOut, observedMs, propose, type OutRun, type Proposal, type Rule, type VolReading } from "./agents";
 import { validateConfig, type ArbConfig } from "./arb-math";
+import { OrderWatchInput, type OrderBaseline } from "./journey-signals";
 
 /** Scheduler cadence (pg_cron) — shown in the UI. */
 export const TICK_MINUTES = 5;
@@ -41,7 +42,7 @@ export const ArbWatchInput = z.object({
   config: z.unknown(),
 }).strict();
 
-export const WatchInput = z.discriminatedUnion("kind", [PositionWatchInput, ArbWatchInput]);
+export const WatchInput = z.discriminatedUnion("kind", [PositionWatchInput, ArbWatchInput, OrderWatchInput]);
 export type WatchInput = z.infer<typeof WatchInput>;
 
 /** The position-watch payload stored in `rule`: the Observatory rule plus verified mint identities. */
@@ -65,11 +66,11 @@ export interface PositionObservation {
   vol: VolReading | null;
 }
 
-export interface TickOutcome {
+export interface TickOutcome<T extends OutRun | OrderBaseline = OutRun> {
   ok: boolean;
   summary: Record<string, unknown>;
   error: string | null;
-  outRun: OutRun | null;
+  outRun: T | null;
   lastProposed: Record<string, number>;
   alert: { trigger: string; reason: string; dedupe_key: string; payload: Record<string, unknown> } | null;
 }
@@ -149,7 +150,8 @@ export function watchHealth(w: { status: string; expires_at: string; last_ok_at:
 }
 
 /** Fresh-context handoff URL for an alert. Carries identifiers only — never a transaction. */
-export function handoffFor(a: { id: string; watch_kind: string; payload: Record<string, unknown> }): { to: "/app/agents" | "/app/dispatch"; search: Record<string, string> } {
+export function handoffFor(a: { id: string; watch_kind: string; payload: Record<string, unknown> }): { to: "/app/agents" | "/app/dispatch" | "/app/journey"; search: Record<string, string> } {
+  if (a.watch_kind === "order") return { to: "/app/journey", search: { alert: a.id } };
   if (a.watch_kind === "arb") return { to: "/app/dispatch", search: { alert: a.id } };
   const p = a.payload;
   const s: Record<string, string> = { alert: a.id };

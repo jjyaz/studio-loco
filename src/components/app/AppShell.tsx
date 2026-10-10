@@ -1,8 +1,8 @@
 import { ActiveTxNotice, PendingTxList } from "./useTx";
-import { useWallet } from "@solana/wallet-adapter-react";
+import { useWallet, useConnection } from "@solana/wallet-adapter-react";
 import { UNSUPPORTED_WALLET } from "@/lib/tx";
 import { Link } from "@tanstack/react-router";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Wordmark } from "@/components/site/Wordmark";
 import { CaButton } from "@/components/site/CaButton";
@@ -19,6 +19,7 @@ const TABS = [
   { to: "/app/dispatch", label: "Dispatch" },
   { to: "/app/agents", label: "Agents" },
   { to: "/app/foundry", label: "Foundry" },
+  { to: "/app/journey", label: "Journey" },
   { to: "/app/signal-box", label: "Signal Box" },
   { to: "/app/recorder", label: "Recorder" },
   { to: "/app/replay", label: "Replay" },
@@ -80,7 +81,16 @@ export function SettingsDialog({ open, onOpenChange }: { open: boolean; onOpenCh
 }
 
 export function AppShell({ children }: { children: ReactNode }) {
-  const { settings, update } = useSettings();
+  const { settings, update, hydrated } = useSettings();
+  const { connection } = useConnection();
+  useEffect(() => {
+    if (!hydrated || settings.practice || settings.cluster !== "mainnet-beta") return;
+    let cancelled = false, stop: (() => void) | undefined;
+    void import("@/lib/journey-capture").then(({ startJourneyCapture }) => {
+      if (!cancelled) stop = startJourneyCapture(connection, settings.rpc["mainnet-beta"] ? "custom" : "relay");
+    });
+    return () => { cancelled = true; stop?.(); };
+  }, [hydrated, connection, settings.practice, settings.cluster, settings.rpc]);
   const [open, setOpen] = useState(false);
   return (
     <div className="flex min-h-screen flex-col bg-midnight">

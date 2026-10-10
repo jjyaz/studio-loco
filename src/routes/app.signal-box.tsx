@@ -327,7 +327,7 @@ function WatchCard({ w, now, onChange }: { w: WatchRow; now: number; onChange: (
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <p className="station-code text-cream/60">
-            {w.kind === "position" ? "Position watch" : "SOL/USDC route watch"} · rev {w.revision}
+            {w.kind === "position" ? "Position watch" : w.kind === "order" ? "Journey · native order watch" : "SOL/USDC route watch"} · rev {w.revision}
           </p>
           <h3 className="display text-xl">
             {w.label || (w.position ? `Position ${shortAddr(w.position)}` : "Two-pool route")}
@@ -446,6 +446,7 @@ function WatchCard({ w, now, onChange }: { w: WatchRow; now: number; onChange: (
 }
 
 function summaryText(s: Record<string, unknown>): string {
+  if (s["kind"] === "order") return `${s["state"]} · ${s["resting"]} resting / ${s["partial"]} partial / ${s["filled"]} filled · slots ${s["slot"]}–${s["checkedSlot"]}${s["baseline"] ? " · fresh baseline; no earlier fills inferred" : " · observed changes only"}`;
   if ("routes" in s)
     return `${s["routes"]} routes · ${s["profitable"]} met floor · ${s["evidence"]}${s["best"] ? ` · best ${s["best"]} ${s["bestExpectedProfitLamports"] ?? "—"} lamports` : ""}`;
   const vol = s["vol"] as { state: string; pct?: number; reason?: string } | null;
@@ -512,7 +513,7 @@ function NewWatch({
   onCreated: () => void;
 }) {
   const create = useServerFn(createWatch);
-  const [kind, setKind] = useState<"position" | "arb">("position");
+  const [kind, setKind] = useState<"position" | "arb" | "order">("position");
   const [owner, setOwner] = useState(""),
     [position, setPosition] = useState(""),
     [pool, setPool] = useState(""),
@@ -547,7 +548,7 @@ function NewWatch({
       const r =
         kind === "arb"
           ? await create({ data: { kind: "arb", label, config: arbCfg.ok ? arbCfg.cfg : null } })
-          : await create({
+          : kind === "order" ? await create({ data: { kind: "order", label, owner: owner.trim(), account: position.trim(), pool: pool.trim() } }) : await create({
               data: {
                 kind: "position",
                 label,
@@ -564,7 +565,7 @@ function NewWatch({
           text:
             "baseline" in r && r.baseline !== undefined
               ? `Verified on chain and armed at bin ${r.baseline} (range ${r.range?.[0]}–${r.range?.[1]}).`
-              : "Route watch created.",
+              : kind === "order" ? "Native order verified. Hosted changes are checked every 5 minutes; missing reads reset the baseline." : "Route watch created.",
         });
         onCreated();
       }
@@ -584,6 +585,7 @@ function NewWatch({
           onChange={setKind}
           options={[
             { value: "position", label: "DLMM position" },
+            { value: "order", label: "Native order" },
             { value: "arb", label: "SOL/USDC route" },
           ]}
         />
@@ -595,16 +597,16 @@ function NewWatch({
           maxLength={80}
           onChange={(e) => setLabel(e.target.value)}
         />
-        {kind === "position" ? (
+        {kind !== "arb" ? (
           <>
             <Field
-              label="Position owner (public address)"
+              label="Account owner (public address)"
               value={owner}
               onChange={(e) => setOwner(e.target.value)}
               error={owner && !isBase58Address(owner) ? "Not a Solana address" : null}
             />
             <Field
-              label="Position account"
+              label={kind === "order" ? "Native order account" : "Position account"}
               value={position}
               onChange={(e) => setPosition(e.target.value)}
               error={position && !isBase58Address(position) ? "Not a Solana address" : null}
@@ -614,8 +616,9 @@ function NewWatch({
               value={pool}
               onChange={(e) => setPool(e.target.value)}
               error={pool && !isBase58Address(pool) ? "Not a Solana address" : null}
-              hint="Verified on chain: DLMM program, PositionV2 type, pool and owner binding, exact mints."
+              hint="Verified on chain: DLMM program, account type, pool and owner binding, exact mints."
             />
+            {kind === "position" ? <>
             <div className="flex items-end gap-2">
               <div className="flex-1">
                 <Field
@@ -655,6 +658,7 @@ function NewWatch({
               </li>
               <li>Cooldown: {rule.cooldownMin} min</li>
             </ul>
+            </> : <p className="text-xs leading-relaxed text-cream/70">A successful server read starts the baseline. Subsequent partial fills, fulfilled levels and removed/reset levels raise private alerts. Checks every 5 minutes; exact execution time and missed transitions are not inferred. Read failures reset continuity.</p>}
           </>
         ) : (
           <>
@@ -675,7 +679,7 @@ function NewWatch({
         )}
         <Btn
           type="submit"
-          disabled={busy || full || (kind === "position" ? !addrOk : !arbCfg.ok || hasArb)}
+          disabled={busy || full || (kind !== "arb" ? !addrOk : !arbCfg.ok || hasArb)}
         >
           {busy
             ? "Verifying…"
@@ -806,7 +810,7 @@ function Inbox({ userId, focus }: { userId: string; focus?: string }) {
                       });
                     }}
                   >
-                    Open fresh review in {a.watch_kind === "arb" ? "Dispatch" : "Observatory"} →
+                    Open fresh review in {a.watch_kind === "arb" ? "Dispatch" : a.watch_kind === "order" ? "The Journey" : "Observatory"} →
                   </Link>
                   {!a.read_at && (
                     <Btn size="sm" variant="ghost" onClick={() => mark(a.id)}>

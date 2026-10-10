@@ -27,6 +27,24 @@ export const createWatch = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => WatchInput.parse(d))
   .handler(async ({ data, context }) => {
     const a = await admin();
+    if (data.kind === "order") {
+      const { JobControl } = await import("./job-control");
+      const ctl = new JobControl(), job = ctl.begin()!;
+      try {
+        const { readJourneySnapshot } = await import("./journey-chain");
+        const { orderBaseline } = await import("./journey-signals");
+        const s = await readJourneySnapshot(await conn(), data, job, "server");
+        if (s.kind !== "order") throw new Error("Native order verification failed.");
+        const { error } = await a.from("signal_watches").insert({
+          user_id: context.userId, kind: "order", label: data.label || "Journey · native order",
+          position: data.account, pool: data.pool, owner: data.owner,
+          rule: { mintX: s.mintX, mintY: s.mintY, binStep: s.binStep } as never,
+          out_run: orderBaseline(s) as never, expires_at: ttl(),
+        });
+        return error ? { ok: false as const, error: error.message } : { ok: true as const };
+      } catch (e) { return { ok: false as const, error: redact(e instanceof Error ? e.message : String(e)) }; }
+      finally { ctl.end(job); }
+    }
     if (data.kind === "arb") {
       const v = parseArbConfig(data.config);
       if (!v.ok) return { ok: false as const, error: v.error };
