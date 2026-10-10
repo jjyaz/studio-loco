@@ -655,7 +655,7 @@ export function JourneyBoard({ initial = {} }: { initial?: z.infer<typeof Search
                       {cur.kind === "position" && latest?.kind === "position"
                         ? rangeHealth(latest)
                         : latest?.kind === "order"
-                          ? `${latest.levels.length} active levels`
+                          ? `${latest.levels.length} populated level${latest.levels.length === 1 ? "" : "s"}`
                           : "waiting for account"}
                     </p>
                     <h2 className="display mt-2 text-3xl">{cur.label}</h2>
@@ -879,8 +879,12 @@ function SnapshotDetails({ snapshot: s }: { snapshot: JourneySnapshot }) {
             <Stat label="Lifetime claimed · Y" value={`${amount(s.claimedY, s.decY)} ${y}`} />
           </div>
           <p className="mt-3 text-xs text-cream/50">
-            Fee authority {shortAddr(s.feeOwner)} · counters predate this Journey. Holdings exclude
-            unclaimed fees. Pro-rata amounts are floored to whole base units.
+            Fee owner field{" "}
+            {s.feeOwner === "11111111111111111111111111111111"
+              ? "unset (default)"
+              : shortAddr(s.feeOwner)}{" "}
+            · counters predate this Journey. Holdings exclude unclaimed fees. Pro-rata amounts are
+            floored to whole base units.
           </p>
           <details className="mt-5">
             <summary className="cursor-pointer text-sm text-amber">

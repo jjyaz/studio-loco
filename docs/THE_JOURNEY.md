@@ -36,5 +36,7 @@ Order alert links carry only the private alert UUID. The handoff reauthenticates
 - Read-only mainnet acceptance: repeated real LP snapshots and a populated native order account through the public relay; no signing/broadcast paths. Public-provider history may be pruned; unavailable placement metadata is explicitly unverified.
 - Funded end-to-end Foundry-origin capture needs a user-approved Foundry transaction. This release does not claim the assistant performed one.
 - Hosted inbox/worker behavior is verified separately; actual browser push delivery depends on the user's opt-in device and provider.
+- Deployed browser acceptance saved real public LP/native-order accounts, refreshed them, exported exact bounded evidence without credentials and restored both after reload.
+- Deployed hosted order acceptance produced four successful observations and one deduplicated private alert, with no failed reads. The transition test deliberately used a simulated previous baseline against a real filled native order; it is not evidence of a new market fill. The isolated disposable fixture and inbox rows were removed afterward.
 
 Primary reference: https://docs.meteora.ag/developer-guides/dlmm/typescript-sdk/reference and installed `@meteora-ag/dlmm` IDL/wrappers.
