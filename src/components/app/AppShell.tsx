@@ -85,11 +85,15 @@ export function AppShell({ children }: { children: ReactNode }) {
   const { connection } = useConnection();
   useEffect(() => {
     if (!hydrated || settings.practice || settings.cluster !== "mainnet-beta") return;
-    let cancelled = false, stop: (() => void) | undefined;
-    void import("@/lib/journey-capture").then(({ startJourneyCapture }) => {
-      if (!cancelled) stop = startJourneyCapture(connection, settings.rpc["mainnet-beta"] ? "custom" : "relay");
+    let cancelled = false, stop: (() => void) | undefined, stopContinuity: (() => void) | undefined;
+    void Promise.all([import("@/lib/journey-capture"), import("@/lib/continuity-capture")]).then(([{ startJourneyCapture }, { startContinuityCapture }]) => {
+      if (!cancelled) {
+        const source = settings.rpc["mainnet-beta"] ? "custom" : "relay";
+        stop = startJourneyCapture(connection, source);
+        stopContinuity = startContinuityCapture(connection, source);
+      }
     });
-    return () => { cancelled = true; stop?.(); };
+    return () => { cancelled = true; stop?.(); stopContinuity?.(); };
   }, [hydrated, connection, settings.practice, settings.cluster, settings.rpc]);
   const [open, setOpen] = useState(false);
   return (

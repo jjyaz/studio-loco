@@ -1,10 +1,10 @@
-# Developer SDK release · v0.2.0
+# Developer SDK release · v0.3.0
 
 The Developer Station at `/developers` exposes a small typed client, versioned read-only API and official MCP server. Source package: `packages/sdk`. SDK usage, contract limits and stdio configuration are in its README.
 
 ## Distribution
 
-Install: `npm install https://studioloco.cfd/api/public/loco/v1/sdk/0.2.0.tgz`.
+Install: `npm install https://studioloco.cfd/api/public/loco/v1/sdk/0.3.0.tgz`.
 
 This package is distributed directly by Loco, not through the npm registry. Its exact archive is built from package source/declarations/README/license/examples by `npm run sdk:release`, then carried in a UTF-8 release manifest for the GitHub/Lovable deployment. No environment, wallet files, Recorder exports or QA output are included.
 
@@ -37,3 +37,15 @@ v0.1.1 fixed binding for both native and supplied fetch functions to the global 
 ## v0.2.0 · Strategy Foundry
 
 Shared blueprint v1 schema, exact u64 decimal amounts, deterministic SHA-256 digests, integer nominal allocations, relative order ladders and a read-only adapter registry. `inspectBlueprint` does not fetch chain state, access a device library, build an executable transaction or authorize signing. `loco_inspect_blueprint` and `loco_protocol_adapters` are available over hosted and stdio MCP. See `docs/STRATEGY_FOUNDRY.md` for the app adapter and release acceptance.
+
+## v0.3.0 · Journey Continuity
+
+`analyzeContinuityExport(bundle)` validates the app's generated strict continuity contracts and reports recorded strategy/account/chapter/move counts and deduplicated reported network fees. It returns `chainVerified: false` and `executable: false`; supplied confirmations and ancestry have not been rechecked. The 10 MB decoder rejects invalid relations, duplicate strategy IDs, unsafe raw amounts and unknown fields.
+
+```ts
+import { analyzeContinuityExport } from '@studio-loco/sdk';
+const summary = analyzeContinuityExport(exportedContinuity);
+console.log(summary.chaptersRecorded, summary.moveStatesRecorded);
+```
+
+Local stdio with `--local-evidence` also registers `loco_analyze_continuity_export`. It receives a caller-supplied bundle in memory; it does not read files, upload data, open a wallet or sign. Neither evidence-analysis tool is registered on the public HTTP MCP. SDK releases 0.1.0, 0.1.1 and 0.2.0 remain immutable at their existing download URLs; 0.3.0 is downloadable from Loco and is not published to the npm registry.

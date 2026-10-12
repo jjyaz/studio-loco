@@ -8,3 +8,6 @@
 - [x] Docs updated (RESEARCH.md, RELEASE_CHECKLIST.md, AGENTS.md)
 - [x] Typecheck, 64/64 tests, build all exit 0 — SHA 1b0ba323b6e804c68af37fd2778c97966d6663d0
 - [ ] User: publish, then verify deployed relay + pool bins/quotes
+
+### Journey Continuity
+Implemented local strategy lifecycle, prepared-intent/confirmed-receipt verification, named native account-role binding, non-atomic move recovery, strict supplied-evidence transfer and SDK/local MCP analysis. Funded origin/rebalance/move acceptance remains a user-wallet gate; no assistant signing, no Pro execution, no PnL or private-history public endpoint.

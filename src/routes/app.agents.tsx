@@ -84,6 +84,7 @@ import {
 import { PRACTICE_OWNER, practiceRow } from "@/lib/agents-practice";
 import { RebalancePlanner } from "@/components/app/RebalancePlanner";
 import { selectionRefusal, type PlanOption, type PlanSnapshot } from "@/lib/planner";
+import { listStrategies } from "@/lib/continuity-store";
 import nightAsset from "@/assets/studio-loco-night-station.png.asset.json";
 
 export const Route = createFileRoute("/app/agents")({
@@ -273,6 +274,7 @@ export function Agents({ handoffSearch }: { handoffSearch?: z.infer<typeof Hando
     cluster: "mainnet-beta" | "devnet";
     planId?: string;
     withdrawalRecordId?: string;
+    moveId?: string;
   } | null>(null);
   const outRuns = useRef<Record<string, OutRun | undefined>>({});
   const lastProposed = useRef<Record<string, number>>({});
@@ -1103,6 +1105,8 @@ export function Agents({ handoffSearch }: { handoffSearch?: z.infer<typeof Hando
             position: rv.frozen.position,
             action: rv.frozen.action,
             feeCapLamports: rv.frozen.feeLamports ?? null,
+            ...(rv.built.kind === "withdraw" && rv.built.staged && rv.built.b.costs.remaining === 0
+              ? { ctMoveId: rv.proposal.id, ctMovePool: rv.built.staged.targetPool } : {}),
           },
         },
       });
@@ -1131,14 +1135,18 @@ export function Agents({ handoffSearch }: { handoffSearch?: z.infer<typeof Hando
         rulesRef.current[rv.proposal.position]?.revision === rv.frozen.ruleRevision
       )
         pendingRebase.current.add(rv.proposal.position);
-      if (rv.built.kind === "withdraw" && rv.built.staged && remaining === 0)
+      if (rv.built.kind === "withdraw" && rv.built.staged && remaining === 0) {
+        const tracked = (await listStrategies().catch(() => [])).some((strategy) => strategy.provenance === "verified" && strategy.accounts.some((a) => a.account === rv.frozen.position && a.pool === rv.frozen.pool && a.owner === rv.frozen.wallet && a.verification === "transaction"));
+        if (live.current.wallet !== rv.frozen.wallet || live.current.cluster !== rv.frozen.cluster || live.current.rpcId !== rv.frozen.rpcId) return;
         setStaged({
           pool: rv.built.staged.targetPool,
           width: rv.built.staged.width,
           strategy: rv.built.staged.strategy,
           cluster: settings.cluster,
+          ...(tracked ? { moveId: rv.proposal.id } : {}),
           ...(rv.proposal.trigger === "planner" ? { planId: rv.proposal.id, withdrawalRecordId: reviewRecord.current[rv.proposal.id] } : {}),
         });
+      }
       setProposals((q) => (remaining === 0 ? q.filter((x) => x.id !== rv.proposal.id) : q));
       if (remaining > 0)
         addHistory(
@@ -1627,6 +1635,7 @@ export function Agents({ handoffSearch }: { handoffSearch?: z.infer<typeof Hando
                       Math.floor((Math.min(staged.width, MAX_UI_BINS) - 1) / 2),
                     cluster: staged.cluster,
                     ...(staged.planId ? { plan: staged.planId, record: staged.withdrawalRecordId } : {}),
+                    ...(staged.moveId ? { move: staged.moveId } : {}),
                   }}
                   className="underline"
                 >

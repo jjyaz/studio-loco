@@ -16,7 +16,7 @@ import {
 } from "./continuity";
 
 const T = 15_000;
-let discs: Record<string, Uint8Array> | null = null;
+let discs: Record<string, import("./continuity-proof").InstructionSpec> | null = null;
 export async function dlmmDiscriminators(job: Job) {
   if (discs) return discs;
   const sdk = await job.step(loadSdk(), T, "Meteora SDK");
@@ -24,7 +24,7 @@ export async function dlmmDiscriminators(job: Job) {
   discs = Object.fromEntries(
     sdk.IDL.instructions
       .filter((i) => wanted.has(i.name))
-      .map((i) => [i.name, new Uint8Array(i.discriminator)]),
+      .map((i) => [i.name, { discriminator: i.discriminator, accounts: i.accounts }]),
   );
   return discs;
 }
@@ -36,14 +36,22 @@ export async function verifyChapter(
   before: JourneySnapshot | undefined,
   job: Job,
   source: "relay" | "custom",
+  history: JourneySnapshot[] = [],
 ): Promise<{ chapter: Chapter; snapshot: JourneySnapshot | null }> {
   await job.step(assertCluster(connection, "mainnet-beta"), T, "Mainnet genesis");
   const tx = await job.step(
-    connection.getTransaction(c.signature, { commitment: "confirmed", maxSupportedTransactionVersion: 0 }),
+    connection.getTransaction(c.signature, {
+      commitment: "confirmed",
+      maxSupportedTransactionVersion: 0,
+    }),
     T,
     "Confirmed action metadata",
   );
-  const proof = chapterProof(tx, { ...c }, await dlmmDiscriminators(job));
+  const proof = chapterProof(
+    tx,
+    { ...c, priorIdentityVerified: !!before },
+    await dlmmDiscriminators(job),
+  );
   let snapshot: JourneySnapshot | null = null,
     read: "present" | "absent" | "failed" = "failed";
   const { PublicKey } = await import("@solana/web3.js");
@@ -65,15 +73,23 @@ export async function verifyChapter(
       { kind, account: c.account, pool: c.pool, owner: c.owner },
       job,
       source,
-      undefined,
+      before,
       proof.slot,
+      45_000,
     );
   }
   const after = accountAfter(proof.closing, read);
   if (c.action === "close" && after !== "closed")
-    throw new Error("Closing instruction confirmed, but no independent read shows the account closed yet.");
-  if (c.action !== "close" && after === "unavailable")
-    throw new Error("Resulting account is unavailable at a confirmed read. Nothing is presumed closed.");
+    throw new Error(
+      "Closing instruction confirmed, but no independent read shows the account closed yet.",
+    );
+  if (c.action !== "close" && after === "unavailable" && !before)
+    throw new Error(
+      "Resulting account is unavailable at a confirmed read. Nothing is presumed closed.",
+    );
+  const historicalBefore =
+    history.filter((s) => s.checkedSlot <= proof.slot).at(-1) ??
+    (before && before.checkedSlot <= proof.slot ? before : null);
   const chapter = Chapter.parse({
     id: chapterId(c.signature, c.step, c.account),
     action: c.action,
@@ -89,7 +105,7 @@ export async function verifyChapter(
     planId: c.planId,
     reviewId: c.reviewId,
     alertId: c.alertId,
-    before: before && before.slot <= proof.slot ? summarize(before) : null,
+    before: historicalBefore ? summarize(historicalBefore) : null,
     after: snapshot ? summarize(snapshot) : null,
     accountAfter: after,
   });

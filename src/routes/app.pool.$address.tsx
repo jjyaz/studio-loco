@@ -31,6 +31,7 @@ import { executionReadiness, REVIEW_TTL_MS } from "@/lib/agents";
 import { reviewCosts, type CostReview } from "@/lib/agents-chain";
 import { JobControl } from "@/lib/job-control";
 import nightAsset from "@/assets/studio-loco-night-station.png.asset.json";
+import { resolveContinuityMove } from "@/lib/continuity-capture";
 
 const search = z.object({
   tab: z.enum(["overview", "add", "swap", "orders"]).optional().catch(undefined),
@@ -44,6 +45,7 @@ const search = z.object({
   /** Evidence links only. They never import transaction data or bypass a fresh add review. */
   plan: z.string().regex(/^plan-[a-z0-9-]{8,70}$/).optional().catch(undefined),
   record: z.string().regex(/^[a-z0-9-]{8,80}$/).optional().catch(undefined),
+  move: z.string().regex(/^[a-zA-Z0-9:._-]{1,160}$/).optional().catch(undefined),
 });
 
 export const Route = createFileRoute("/app/pool/$address")({
@@ -261,7 +263,7 @@ function AddLiquidity({ address, snap, symX, symY, prefill }: { address: string;
 
   type CostQuote = { positionCost: number; positionReallocCost: number; bitmapExtensionCost: number; binArraysCount: number; binArrayCost: number } | null;
   type Review = { tx: Transaction; signer: Keypair; feeLamports: number | null; rentLamports: number; cost: CostQuote; position: string; sim: string | null; strategy: StrategyName; minBin: number; maxBin: number; x: BN; y: BN; slippageBps: number; activeId: number; builtAt: number; identityKey: string; identityEpoch: number; recordId?: string; costs?: CostReview };
-  const liveKey = planKey({ ...ctxKey, strategy, minBin, maxBin, x: xRaw?.toString(), y: yRaw?.toString(), plan: prefill.plan, record: prefill.record });
+  const liveKey = planKey({ ...ctxKey, strategy, minBin, maxBin, x: xRaw?.toString(), y: yRaw?.toString(), plan: prefill.plan, record: prefill.record, move: prefill.move });
   const keyRef = useRef(liveKey);
   const identityEpoch = useRef(0);
   if (keyRef.current !== liveKey) identityEpoch.current++;
@@ -278,11 +280,12 @@ function AddLiquidity({ address, snap, symX, symY, prefill }: { address: string;
   async function prepare() {
     if (!sdk.data || !publicKey || !xRaw || !yRaw || preparing || planning.current.busy || clusterBlock) return;
     const job = begin();
-    const chainJob = prefill.plan ? planning.current.begin() : null;
+    const chainJob = prefill.plan || prefill.move ? planning.current.begin() : null;
     const bounded = <T,>(p: Promise<T>, label: string) => chainJob ? chainJob.step(p, 45_000, label) : p;
     setPreparing(true);
     setPrepErr(null);
     try {
+      if (prefill.move) await bounded(resolveContinuityMove(prefill.move, publicKey.toBase58(), address), "Verified source move");
       const { Keypair } = await import("@solana/web3.js");
       const sdkMod = await bounded(loadSdk(), "SDK load");
       const positionKp = Keypair.generate(); // ephemeral: lives only inside this in-memory plan; never persisted or logged
@@ -310,9 +313,9 @@ function AddLiquidity({ address, snap, symX, symY, prefill }: { address: string;
       ]), "Destination simulation and rent");
       const costs = chainJob ? await reviewCosts(connection, publicKey, [tx], chainJob) : undefined;
       chainJob?.check();
-      const recordId = prefill.plan ? await recordFact({
+      const recordId = prefill.plan || prefill.move ? await recordFact({
         kind: "review", status: "info", title: "Planner stage 2: fresh destination deposit review", route: "/app/pool/$address", cluster: settings.cluster, wallet: publicKey.toBase58(),
-        links: { proposalId: prefill.plan, recordId: prefill.record ?? prefill.plan },
+        links: { proposalId: prefill.plan ?? prefill.move, ...(prefill.record ? { recordId: prefill.record } : {}) },
         detail: "New unsigned destination deposit, built from user-entered amounts and current wallet balances. Separate approval required.",
         context: { stage: 2, pool: address, position: positionKp.publicKey.toBase58(), mintX: snap.mintX, mintY: snap.mintY, strategy, lower: minBin, upper: maxBin, amountX: xRaw.toString(), amountY: yRaw.toString(), feeLamports: costs?.feeLamports ?? null, requiredLamports: costs?.requiredLamports ?? null, simulationError: costs?.simErrors[0] ?? null },
       }) : undefined;
@@ -333,7 +336,12 @@ function AddLiquidity({ address, snap, symX, symY, prefill }: { address: string;
     if (guard()) { setPrepErr(guard()); return; }
     const res = await runner.run([{ label: "Create position and add liquidity", tx: r.tx, signers: [r.signer] }], {
       semanticGuard: guard, maxFeeLamports: r.feeLamports ?? undefined,
+      ...(prefill.move ? { asyncSemanticGuard: async () => {
+        try { await resolveContinuityMove(prefill.move!, publicKey!.toBase58(), address); return guard(); }
+        catch (e) { return redactUrls(e instanceof Error ? e.message : String(e)); }
+      } } : {}),
       ...(prefill.plan ? { evidence: { title: "Planner stage 2: destination liquidity deposit", links: { proposalId: prefill.plan, ...(r.recordId ? { reviewId: r.recordId, recordId: r.recordId } : {}) }, context: { stage: 2, pool: address, position: r.position, amountX: r.x.toString(), amountY: r.y.toString(), lower: r.minBin, upper: r.maxBin } } } : {}),
+      ...(prefill.move ? { evidence: { title: "Journey move: fresh destination deposit", links: { proposalId: prefill.move, ...(r.recordId ? { reviewId: r.recordId, recordId: r.recordId } : {}) }, context: { ctMoveId: prefill.move, stage: 2, pool: address, position: r.position } } } : {}),
     });
     clear(); // drop the plan (and the ephemeral key with it) whatever the outcome
     if (res.length && res.every((x) => x.phase === "confirmed")) {
@@ -350,6 +358,7 @@ function AddLiquidity({ address, snap, symX, symY, prefill }: { address: string;
     <div className="grid gap-6 lg:grid-cols-[1fr_1.2fr]">
       <Panel>
         <h2 className="display text-2xl">Add liquidity</h2>
+        {prefill.move && <p className="mt-3 border-l-2 border-amber pl-3 text-sm text-cream/75">Continue a saved Journey move. Verify its source withdrawal first, then enter amounts from your current wallet and approve a fresh deposit. <Link to="/app/journey" className="text-amber underline">Open Journey</Link>.</p>}
         {prefill.plan && <p className="mt-2 text-sm text-cream/75">Planner stage 2 · enter deposit amounts from your current balances. <Link to="/app/recorder" search={{ id: prefill.plan }} className="underline">View the original comparison</Link>.</p>}
         <div className="mt-5 flex flex-col gap-5">
           <div>

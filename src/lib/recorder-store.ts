@@ -341,6 +341,14 @@ export function startWalletRecord(o: {
       await chain;
     },
     flush: () => chain,
+    async noteContinuityError(detail: string) {
+      rec = { ...rec, updatedAt: Math.max(Date.now(), rec.updatedAt + 1),
+        context: { ...Object.fromEntries(Object.entries(rec.context).slice(0, 37)), continuityError: redact(detail) },
+        timeline: [...rec.timeline, { at: Date.now(), event: "Journey evidence unavailable", detail: redact(detail) }].slice(-MAX_TIMELINE_EVENTS) };
+      const snap = rec;
+      chain = chain.then(() => putRecord(snap));
+      await chain;
+    },
   };
 }
 

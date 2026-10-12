@@ -22,11 +22,12 @@ const sig = z.string().regex(/^[1-9A-HJ-NP-Za-km-z]{64,88}$/);
 const raw = z.string().regex(/^(0|[1-9]\d{0,59})$/);
 const time = z.number().int().positive().safe();
 const bin = z.number().int().min(-443636).max(443636);
-const text = (n: number) =>
+export const evidenceText = (n: number) =>
   z
     .string()
     .max(n)
     .refine((s) => !/https?:\/\/|[A-Za-z0-9+/_-]{120,}/i.test(s), "URLs/bytes are not evidence");
+const text = evidenceText;
 
 export const CHAPTER_ACTIONS = [
   "origin",
@@ -42,6 +43,7 @@ export type ChapterAction = (typeof CHAPTER_ACTIONS)[number];
 export const ACTION_INSTRUCTIONS: Record<ChapterAction, readonly string[]> = {
   origin: ["add_liquidity_by_weight2", "place_limit_order"],
   deposit: [
+    "place_limit_order",
     "add_liquidity",
     "add_liquidity2",
     "add_liquidity_by_strategy",
@@ -62,14 +64,23 @@ export const ACTION_INSTRUCTIONS: Record<ChapterAction, readonly string[]> = {
     "remove_liquidity_by_range2",
     "remove_all_liquidity",
   ],
-  close: ["close_position", "close_position2", "close_position_if_empty", "close_limit_order_if_empty"],
+  close: [
+    "close_position",
+    "close_position2",
+    "close_position_if_empty",
+    "close_limit_order_if_empty",
+  ],
   cancel: ["cancel_limit_order"],
 };
 export const CLOSING_INSTRUCTIONS = ACTION_INSTRUCTIONS.close;
 /** A close chapter may arrive inside withdraw-and-close; withdraw instructions are allowed beside it. */
 const ACCEPTS: Record<ChapterAction, readonly string[]> = {
   ...ACTION_INSTRUCTIONS,
-  close: [...ACTION_INSTRUCTIONS.close, ...ACTION_INSTRUCTIONS.withdraw, ...ACTION_INSTRUCTIONS.claim],
+  close: [
+    ...ACTION_INSTRUCTIONS.close,
+    ...ACTION_INSTRUCTIONS.withdraw,
+    ...ACTION_INSTRUCTIONS.claim,
+  ],
 };
 
 export const AccountRole = z.enum(["origin", "destination", "member", "watch"]);
@@ -85,10 +96,8 @@ export const StrategyAccount = z
     joinedBy: sig.nullable(),
     fromAccount: key.nullable(),
     joinedAt: time,
-    closed: z
-      .object({ signature: sig, slot: time, verifiedAt: time })
-      .strict()
-      .nullable(),
+    joinedSlot: time.nullable().default(null),
+    closed: z.object({ signature: sig, slot: time, verifiedAt: time }).strict().nullable(),
   })
   .strict();
 export type StrategyAccount = z.infer<typeof StrategyAccount>;
@@ -108,13 +117,31 @@ export const SnapshotSummary = z
     bins: z.array(z.object({ binId: bin, x: raw, y: raw }).strict()).max(70),
     binCount: z.number().int().nonnegative(),
     accountLamports: raw,
+    binStep: z.number().int().min(1).max(65535).nullable().default(null),
+    rentMinimumLamports: raw.nullable().default(null),
   })
-  .strict();
+  .strict()
+  .superRefine((s, ctx) => {
+    if (
+      s.checkedSlot < s.slot ||
+      (s.lower !== null && s.upper !== null && s.lower > s.upper) ||
+      s.binCount < s.bins.length
+    )
+      ctx.addIssue({ code: "custom", message: "Snapshot sequence or range is invalid" });
+    if (
+      new Set(s.holdings.map((a) => a.mint)).size !== 2 ||
+      new Set(s.bins.map((b) => b.binId)).size !== s.bins.length
+    )
+      ctx.addIssue({ code: "custom", message: "Snapshot duplicates a mint or bin" });
+    for (const a of [...s.fees, ...s.claimed])
+      if (!s.holdings.some((h) => h.mint === a.mint && h.decimals === a.decimals))
+        ctx.addIssue({ code: "custom", message: "Snapshot mint precision is inconsistent" });
+  });
 export type SnapshotSummary = z.infer<typeof SnapshotSummary>;
 
 export const Chapter = z
   .object({
-    id: z.string().max(100),
+    id: z.string().max(180),
     action: z.enum(CHAPTER_ACTIONS),
     account: key,
     pool: key,
@@ -143,8 +170,8 @@ export const Stage = z
     sourcePool: key,
     destinationAccount: key.nullable(),
     destinationPool: key.nullable(),
-    withdrawal: z.string().max(100).nullable(),
-    deposit: z.string().max(100).nullable(),
+    withdrawal: z.string().max(180).nullable(),
+    deposit: z.string().max(180).nullable(),
     lastAttempt: z.enum(["none", "pending", "failed"]),
   })
   .strict();
@@ -177,6 +204,7 @@ export const StrategySchema = z
     omittedChapters: z.number().int().nonnegative(),
     stages: z.array(Stage).max(MAX_STAGES),
     lastError: text(350).nullable(),
+    suppliedId: text(129).nullable().default(null),
   })
   .strict()
   .superRefine((s, ctx) => {
@@ -187,14 +215,20 @@ export const StrategySchema = z
       if (a.fromAccount && !s.accounts.some((b) => b.account === a.fromAccount))
         ctx.addIssue({ code: "custom", message: "Ancestor account is not in this strategy" });
       if (a.verification === "transaction" && s.provenance !== "verified")
-        ctx.addIssue({ code: "custom", message: "Only verified strategies hold verified accounts" });
+        ctx.addIssue({
+          code: "custom",
+          message: "Only verified strategies hold verified accounts",
+        });
     }
     const ids = new Set<string>();
     for (const c of s.chapters) {
       if (ids.has(c.id) || c.id !== chapterId(c.signature, c.step, c.account))
         ctx.addIssue({ code: "custom", message: "Chapter identity failed validation" });
       ids.add(c.id);
-      if (!accts.has(c.account))
+      if (
+        !accts.has(c.account) ||
+        !s.accounts.some((a) => a.account === c.account && a.pool === c.pool)
+      )
         ctx.addIssue({ code: "custom", message: "Chapter references an unknown account" });
     }
     for (const st of s.stages) {
@@ -203,18 +237,113 @@ export const StrategySchema = z
       for (const ref of [st.withdrawal, st.deposit])
         if (ref && !ids.has(ref))
           ctx.addIssue({ code: "custom", message: "Stage references a missing chapter" });
+      const withdrawal = s.chapters.find((c) => c.id === st.withdrawal);
+      const deposit = s.chapters.find((c) => c.id === st.deposit);
+      if (
+        withdrawal &&
+        (withdrawal.action !== "withdraw" ||
+          withdrawal.account !== st.sourceAccount ||
+          withdrawal.pool !== st.sourcePool ||
+          withdrawal.planId !== st.planId)
+      )
+        ctx.addIssue({ code: "custom", message: "Stage withdrawal binding is invalid" });
+      if (
+        deposit &&
+        (!withdrawal ||
+          deposit.action !== "deposit" ||
+          deposit.account !== st.destinationAccount ||
+          deposit.pool !== st.destinationPool ||
+          deposit.planId !== st.planId ||
+          deposit.slot < withdrawal.slot)
+      )
+        ctx.addIssue({ code: "custom", message: "Stage deposit binding is invalid" });
+      if (st.destinationAccount && !accts.has(st.destinationAccount))
+        ctx.addIssue({ code: "custom", message: "Stage destination is not in this strategy" });
+    }
+    for (const a of s.accounts) {
+      if (
+        a.closed &&
+        !s.chapters.some(
+          (c) =>
+            c.account === a.account &&
+            c.signature === a.closed!.signature &&
+            c.slot === a.closed!.slot &&
+            c.accountAfter === "closed",
+        )
+      )
+        ctx.addIssue({ code: "custom", message: "Closure has no bound chapter" });
+      if (a.fromAccount === a.account)
+        ctx.addIssue({ code: "custom", message: "Account cannot be its own ancestor" });
+      const seen = new Set<string>([a.account]);
+      let parent = a.fromAccount;
+      while (parent) {
+        if (seen.has(parent)) {
+          ctx.addIssue({ code: "custom", message: "Cyclic account ancestry" });
+          break;
+        }
+        seen.add(parent);
+        parent = s.accounts.find((b) => b.account === parent)?.fromAccount ?? null;
+      }
     }
   });
 export type Strategy = z.infer<typeof StrategySchema>;
 
+/** Checked against the durable row inside CAS, not against an untrusted caller's copy. */
+export function assertStrategyUpdate(previous: Strategy, next: Strategy) {
+  const equal = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+  if (
+    previous.id !== next.id ||
+    previous.provenance !== next.provenance ||
+    previous.createdAt !== next.createdAt ||
+    !equal(previous.origin, next.origin)
+  )
+    throw new Error("Strategy identity and original blueprint are immutable.");
+  let removed = 0;
+  for (const c of previous.chapters) {
+    const retained = next.chapters.find((x) => x.id === c.id);
+    if (retained && !equal(c, retained))
+      throw new Error("Lifecycle chapter contents are immutable.");
+    if (!retained) removed++;
+  }
+  if (next.omittedChapters !== previous.omittedChapters + removed)
+    throw new Error("Chapter retention count does not match the retired evidence.");
+  for (const a of previous.accounts) {
+    const retained = next.accounts.find((x) => x.account === a.account);
+    if (
+      !retained ||
+      !equal({ ...a, closed: null }, { ...retained, closed: null }) ||
+      (a.closed && !equal(a.closed, retained.closed))
+    )
+      throw new Error("Account identity, ancestry and confirmed closures are immutable.");
+  }
+  for (const st of previous.stages) {
+    const retained = next.stages.find((x) => x.planId === st.planId);
+    if (
+      !retained ||
+      retained.sourceAccount !== st.sourceAccount ||
+      retained.sourcePool !== st.sourcePool ||
+      retained.destinationPool !== st.destinationPool ||
+      (st.withdrawal && retained.withdrawal !== st.withdrawal) ||
+      (st.deposit &&
+        (st.deposit !== retained.deposit || st.destinationAccount !== retained.destinationAccount))
+    )
+      throw new Error("Reviewed move identity and confirmed stages are immutable.");
+  }
+  for (const conflict of previous.conflicts)
+    if (!next.conflicts.some((x) => equal(x, conflict)))
+      throw new Error("Origin conflicts cannot be discarded.");
+}
+
 export const chapterId = (signature: string, step: number, account: string) =>
-  `${signature.slice(0, 64)}:${step}:${account.slice(0, 8)}`;
+  `${signature}:${step}:${account}`;
 export const strategyIdForOrigin = (o: Pick<Origin, "blueprintId" | "signature">) =>
-  `strategy:${o.blueprintId.replace(/[^a-z0-9_-]/gi, "").slice(0, 60)}:${o.signature.slice(0, 24)}`;
+  `strategy:${o.blueprintId.replace(/[^a-z0-9_-]/gi, "").slice(0, 24)}:${o.signature}`;
 
 export function newStrategy(o: {
   origin: Origin | null;
-  account: Omit<StrategyAccount, "joinedAt" | "closed">;
+  account: Omit<StrategyAccount, "joinedAt" | "closed" | "joinedSlot"> & {
+    joinedSlot?: number | null;
+  };
   label: string;
   provenance: Strategy["provenance"];
   id?: string;
@@ -269,14 +398,50 @@ export function migrateJourney(j: Journey, now = Date.now()): Strategy | null {
       role: "origin",
       verification: "transaction",
       joinedBy: first.signature,
+      joinedSlot: first.slot,
       fromAccount: null,
     },
   });
   const conflicts = j.links
-    .filter((l) => l.blueprintId !== origin.blueprintId || l.digest !== origin.digest || l.revision !== origin.revision)
+    .filter(
+      (l) =>
+        l.blueprintId !== origin.blueprintId ||
+        l.digest !== origin.digest ||
+        l.revision !== origin.revision,
+    )
     .slice(0, 10)
-    .map((l) => ({ blueprintId: l.blueprintId, revision: l.revision, digest: l.digest, name: l.name, signature: l.signature }));
-  return StrategySchema.parse({ ...s, conflicts });
+    .map((l) => ({
+      blueprintId: l.blueprintId,
+      revision: l.revision,
+      digest: l.digest,
+      name: l.name,
+      signature: l.signature,
+    }));
+  const chapters = j.links.slice(-MAX_CHAPTERS).map((l) =>
+    Chapter.parse({
+      id: chapterId(l.signature, 0, j.account),
+      action: "origin",
+      account: j.account,
+      pool: j.pool,
+      signature: l.signature,
+      step: 0,
+      slot: l.slot,
+      verifiedAt: j.updatedAt,
+      instructions: [l.action === "liquidity" ? "add_liquidity_by_weight2" : "place_limit_order"],
+      feeLamports: l.feeLamports,
+      recordId: l.recordId,
+      planId: null,
+      reviewId: null,
+      alertId: null,
+      before: null,
+      after: (() => {
+        const snap = j.snapshots.find((x) => x.slot >= l.slot);
+        return snap ? summarize(snap) : null;
+      })(),
+      accountAfter: "present",
+    }),
+  );
+  return StrategySchema.parse({ ...s, conflicts, chapters });
 }
 
 /** Recorder context for any wallet action that may become a lifecycle chapter. Within field limits. */
@@ -344,54 +509,13 @@ export function chapterCandidates(r: FlightRecord): ChapterCandidate[] {
   return out;
 }
 
-type TxLike = import("@solana/web3.js").VersionedTransactionResponse;
-/** Independent proof: success, expected signer, exact DLMM instruction binding account + pool + owner. */
-export function chapterProof(
-  t: TxLike | null,
-  expect: { owner: string; account: string; pool: string; action: ChapterAction },
-  discriminators: Record<string, Uint8Array>,
-) {
-  if (!t?.meta || t.meta.err !== null) throw new Error("Successful transaction metadata is unavailable.");
-  const m = t.transaction.message;
-  const keys = m.getAccountKeys({ accountKeysFromLookups: t.meta.loadedAddresses });
-  const idx = (k: string) => {
-    for (let i = 0; i < keys.length; i++) if (keys.get(i)?.toBase58() === k) return i;
-    return -1;
-  };
-  const owner = idx(expect.owner),
-    account = idx(expect.account),
-    pool = idx(expect.pool);
-  if (owner < 0 || !m.isAccountSigner(owner)) throw new Error("Expected wallet did not sign this transaction.");
-  if (account < 0 || !m.isAccountWritable(account)) throw new Error("Transaction does not write the expected account.");
-  if (pool < 0) throw new Error("Transaction does not reference the expected pool.");
-  const names: string[] = [];
-  let bound = false;
-  for (const ix of m.compiledInstructions) {
-    if (keys.get(ix.programIdIndex)?.toBase58() !== DLMM_PROGRAM) continue;
-    const name = Object.entries(discriminators).find(
-      ([, d]) => d.length === 8 && d.every((v, i) => ix.data[i] === v),
-    )?.[0];
-    if (!name) continue;
-    names.push(name);
-    if (
-      ACCEPTS[expect.action].includes(name) &&
-      ix.accountKeyIndexes.includes(account) &&
-      ix.accountKeyIndexes.includes(pool) &&
-      ix.accountKeyIndexes.includes(owner)
-    )
-      bound = true;
-  }
-  if (!bound) throw new Error(`No native ${expect.action} instruction binds this owner, account and pool.`);
-  const closing = names.some((n) => CLOSING_INSTRUCTIONS.includes(n));
-  if (expect.action === "close" && !closing) throw new Error("No successful closing instruction was found.");
-  if (!Number.isSafeInteger(t.slot) || t.slot < 1) throw new Error("Transaction slot is invalid.");
-  const fee =
-    Number.isSafeInteger(t.meta.fee) && t.meta.fee >= 0 ? (owner === 0 ? String(t.meta.fee) : "0") : null;
-  return { slot: t.slot, feeLamports: fee, instructions: names.slice(0, 12), closing };
-}
+export { chapterProof } from "./continuity-proof";
 
 /** Closure needs both a closing instruction and an independent read that finds no account. */
-export function accountAfter(closing: boolean, read: "present" | "absent" | "failed"): Chapter["accountAfter"] {
+export function accountAfter(
+  closing: boolean,
+  read: "present" | "absent" | "failed",
+): Chapter["accountAfter"] {
   if (read === "present") return "present";
   if (read === "absent" && closing) return "closed";
   return "unavailable";
@@ -408,17 +532,31 @@ export function summarize(s: JourneySnapshot): SnapshotSummary {
     upper: s.kind === "position" ? s.upper : null,
     holdings: [amt(s.mintX, s.decX, s.holdingsX), amt(s.mintY, s.decY, s.holdingsY)],
     fees: [amt(s.mintX, s.decX, s.feeX), amt(s.mintY, s.decY, s.feeY)],
-    claimed: s.kind === "position" ? [amt(s.mintX, s.decX, s.claimedX), amt(s.mintY, s.decY, s.claimedY)] : [],
+    claimed:
+      s.kind === "position"
+        ? [amt(s.mintX, s.decX, s.claimedX), amt(s.mintY, s.decY, s.claimedY)]
+        : [],
     bins:
       s.kind === "position"
-        ? s.bins.filter((b) => b.x !== "0" || b.y !== "0").slice(0, 70).map(({ binId, x, y }) => ({ binId, x, y }))
+        ? s.bins
+            .filter((b) => b.x !== "0" || b.y !== "0")
+            .slice(0, 70)
+            .map(({ binId, x, y }) => ({ binId, x, y }))
         : s.levels.slice(0, 70).map((l) => ({ binId: l.binId, x: l.unfilledX, y: l.unfilledY })),
     binCount: s.kind === "position" ? s.bins.length : s.levels.length,
     accountLamports: s.accountLamports,
+    binStep: s.binStep,
+    rentMinimumLamports: s.rentMinimumLamports,
   });
 }
 
-export interface MintRow { mint: string; decimals: number; before: string | null; after: string | null; delta: string | null }
+export interface MintRow {
+  mint: string;
+  decimals: number;
+  before: string | null;
+  after: string | null;
+  delta: string | null;
+}
 /** Joins by mint address, so a destination pool with reversed X/Y orientation compares correctly.
  * Snapshots are observations at different slots — not atomic state, PnL or output attribution. */
 export function compareByMint(
@@ -431,28 +569,36 @@ export function compareByMint(
   return [...mints].map(([mint, decimals]) => {
     const b = before?.[field].find((a) => a.mint === mint)?.raw ?? null,
       a = after?.[field].find((x) => x.mint === mint)?.raw ?? null;
-    return { mint, decimals, before: b, after: a, delta: b !== null && a !== null ? (BigInt(a) - BigInt(b)).toString() : null };
+    return {
+      mint,
+      decimals,
+      before: b,
+      after: a,
+      delta: b !== null && a !== null ? (BigInt(a) - BigInt(b)).toString() : null,
+    };
   });
 }
 
 /** Owner-paid network fees, deduplicated by signature. Unknown fees stay unknown; no rent/transfer inference. */
 export function strategyCosts(s: Strategy) {
-  const bySig = new Map<string, string | null>();
+  const bySig = new Map<string, Set<string>>();
   for (const c of s.chapters) {
-    const prev = bySig.get(c.signature);
-    if (prev === undefined || prev === null) bySig.set(c.signature, c.feeLamports);
+    const fees = bySig.get(c.signature) ?? new Set<string>();
+    if (c.feeLamports !== null) fees.add(c.feeLamports);
+    bySig.set(c.signature, fees);
   }
   let total = 0n,
     unknown = 0;
-  for (const v of bySig.values()) v === null ? unknown++ : (total += BigInt(v));
+  for (const fees of bySig.values()) fees.size !== 1 ? unknown++ : (total += BigInt([...fees][0]!));
   return { lamports: total.toString(), transactions: bySig.size, unknown };
 }
 
-export type StageStatus = "pending" | "withdrawal-confirmed" | "deposit-pending" | "complete" | "interrupted";
+export type StageStatus =
+  "pending" | "withdrawal-confirmed" | "deposit-pending" | "complete" | "interrupted";
 export function stageStatus(st: Stage): StageStatus {
   if (st.withdrawal && st.deposit) return "complete";
-  if (!st.withdrawal) return "pending";
   if (st.lastAttempt === "failed") return "interrupted";
+  if (!st.withdrawal) return "pending";
   if (st.lastAttempt === "pending") return "deposit-pending";
   return "withdrawal-confirmed";
 }
@@ -461,9 +607,14 @@ export function stageStatus(st: Stage): StageStatus {
 export function applyChapter(
   s: Strategy,
   ch: Chapter,
-  ctx: { kind: "position" | "order"; owner: string },
+  ctx: {
+    kind: "position" | "order";
+    owner: string;
+    move?: { id: string; destinationPool: string };
+  },
 ): Strategy {
-  if (s.provenance !== "verified") throw new Error("Only verified strategies accept chain chapters.");
+  if (s.provenance !== "verified")
+    throw new Error("Only verified strategies accept chain chapters.");
   const parsed = Chapter.parse(ch);
   if (s.chapters.some((c) => c.id === parsed.id)) return s;
   let accounts = [...s.accounts];
@@ -471,17 +622,34 @@ export function applyChapter(
   const member = accounts.find((a) => a.account === parsed.account);
   if (member && member.verification !== "transaction")
     throw new Error("Watch-only grouping cannot receive verified chapters.");
-  if (member && member.owner !== ctx.owner) throw new Error("Chapter signer differs from the account owner.");
+  if (member && member.owner !== ctx.owner)
+    throw new Error("Chapter signer differs from the account owner.");
+  if (member?.joinedSlot && parsed.slot < member.joinedSlot)
+    throw new Error("Action precedes this account's strategy origin.");
   if (!member) {
     // Only a verified stage-2 deposit for a known plan may add a destination account.
     const st = parsed.planId ? stages.find((x) => x.planId === parsed.planId) : undefined;
     const src = st && accounts.find((a) => a.account === st.sourceAccount);
-    if (parsed.action !== "deposit" || !st?.withdrawal || st.deposit || !src || src.verification !== "transaction")
+    if (
+      parsed.action !== "deposit" ||
+      !st?.withdrawal ||
+      st.deposit ||
+      !src ||
+      src.verification !== "transaction"
+    )
       throw new Error("Destination is not bound to a verified source withdrawal in this strategy.");
-    if (src.owner !== ctx.owner) throw new Error("Destination signer differs from the source owner.");
+    if (src.owner !== ctx.owner)
+      throw new Error("Destination signer differs from the source owner.");
+    if (!st.destinationPool || st.destinationPool !== parsed.pool)
+      throw new Error("Destination differs from the locally reviewed pool move.");
+    const withdrawal = s.chapters.find((c) => c.id === st.withdrawal)!;
+    const basis = withdrawal.after ?? withdrawal.before;
+    if (!basis || !parsed.after || !sameSnapshotPair(basis, parsed.after))
+      throw new Error("Source and destination mint identities differ or are unavailable.");
     if (parsed.slot < s.chapters.find((c) => c.id === st.withdrawal)!.slot)
       throw new Error("Destination deposit precedes its source withdrawal.");
-    if (accounts.length >= MAX_ACCOUNTS) throw new Error("Strategy account limit reached. Export before adding.");
+    if (accounts.length >= MAX_ACCOUNTS)
+      throw new Error("Strategy account limit reached. Export before adding.");
     accounts.push({
       kind: ctx.kind,
       account: parsed.account,
@@ -492,26 +660,63 @@ export function applyChapter(
       joinedBy: parsed.signature,
       fromAccount: src.account,
       joinedAt: parsed.verifiedAt,
+      joinedSlot: parsed.slot,
       closed: null,
     });
     stages = stages.map((x) =>
-      x === st ? { ...x, destinationAccount: parsed.account, destinationPool: parsed.pool, deposit: parsed.id, lastAttempt: "none" as const } : x,
+      x === st
+        ? {
+            ...x,
+            destinationAccount: parsed.account,
+            destinationPool: parsed.pool,
+            deposit: parsed.id,
+            lastAttempt: "none" as const,
+          }
+        : x,
     );
   } else {
-    if (member.pool !== parsed.pool) throw new Error("Chapter pool differs from the verified account pool.");
+    if (member.pool !== parsed.pool)
+      throw new Error("Chapter pool differs from the verified account pool.");
     if (parsed.accountAfter === "closed")
       accounts = accounts.map((a) =>
-        a.account === parsed.account ? { ...a, closed: { signature: parsed.signature, slot: parsed.slot, verifiedAt: parsed.verifiedAt } } : a,
+        a.account === parsed.account
+          ? {
+              ...a,
+              closed: {
+                signature: parsed.signature,
+                slot: parsed.slot,
+                verifiedAt: parsed.verifiedAt,
+              },
+            }
+          : a,
       );
     if (parsed.action === "withdraw" || parsed.action === "close") {
-      if (parsed.planId && !stages.some((x) => x.planId === parsed.planId)) {
+      if (parsed.action === "withdraw" && ctx.move) {
+        const existing = stages.find((x) => x.planId === ctx.move!.id);
+        if (
+          existing &&
+          (existing.sourceAccount !== parsed.account ||
+            existing.sourcePool !== parsed.pool ||
+            existing.destinationPool !== ctx.move.destinationPool)
+        )
+          throw new Error("Move intent differs from this verified source withdrawal.");
+        if (existing && !existing.withdrawal)
+          stages = stages.map((x) =>
+            x === existing ? { ...x, withdrawal: parsed.id, lastAttempt: "none" as const } : x,
+          );
+      }
+      if (
+        parsed.action === "withdraw" &&
+        ctx.move &&
+        !stages.some((x) => x.planId === ctx.move!.id)
+      ) {
         if (stages.length >= MAX_STAGES) throw new Error("Staged move limit reached.");
         stages.push({
-          planId: parsed.planId,
+          planId: ctx.move.id,
           sourceAccount: parsed.account,
           sourcePool: parsed.pool,
           destinationAccount: null,
-          destinationPool: null,
+          destinationPool: ctx.move.destinationPool,
           withdrawal: parsed.id,
           deposit: null,
           lastAttempt: "none",
@@ -520,42 +725,96 @@ export function applyChapter(
     }
   }
   const chapters = [...s.chapters, parsed].sort((a, b) => a.slot - b.slot || a.step - b.step);
+  const protectedIds = new Set([
+    ...chapters
+      .filter((c) => c.signature === s.origin?.signature && c.action === "origin")
+      .map((c) => c.id),
+    ...stages.flatMap((x) => [x.withdrawal, x.deposit].filter((id): id is string => id !== null)),
+    ...accounts
+      .filter((a) => a.closed)
+      .map(
+        (a) =>
+          chapters.find(
+            (c) =>
+              c.signature === a.closed!.signature &&
+              c.account === a.account &&
+              c.accountAfter === "closed",
+          )!.id,
+      ),
+  ]);
+  const protectedChapters = chapters.filter((c) => protectedIds.has(c.id));
+  const retained = new Set(
+    [
+      ...protectedChapters,
+      ...chapters
+        .filter((c) => !protectedIds.has(c.id))
+        .slice(-(MAX_CHAPTERS - protectedChapters.length)),
+    ].map((c) => c.id),
+  );
   return StrategySchema.parse({
     ...s,
     accounts,
     stages,
-    chapters: chapters.slice(-MAX_CHAPTERS),
+    chapters: chapters.filter((c) => retained.has(c.id)),
     omittedChapters: s.omittedChapters + Math.max(0, chapters.length - MAX_CHAPTERS),
     lastError: null,
   });
 }
 
+export function sameSnapshotPair(a: SnapshotSummary, b: SnapshotSummary) {
+  return (
+    a.holdings.length === b.holdings.length &&
+    a.holdings.every((x) => b.holdings.some((y) => x.mint === y.mint && x.decimals === y.decimals))
+  );
+}
+
 /** Records a failed/pending stage-2 attempt, without adding any account. */
-export function markStageAttempt(s: Strategy, planId: string, state: "pending" | "failed"): Strategy {
+export function markStageAttempt(
+  s: Strategy,
+  planId: string,
+  state: "pending" | "failed",
+): Strategy {
   const st = s.stages.find((x) => x.planId === planId);
   if (!st || st.deposit || st.lastAttempt === state) return s;
-  return StrategySchema.parse({ ...s, stages: s.stages.map((x) => (x === st ? { ...x, lastAttempt: state } : x)) });
+  return StrategySchema.parse({
+    ...s,
+    stages: s.stages.map((x) => (x === st ? { ...x, lastAttempt: state } : x)),
+  });
 }
 
 export function strategyForAccount(rows: Strategy[], account: string) {
-  return rows.filter((s) => s.provenance === "verified" && s.accounts.some((a) => a.account === account && a.verification === "transaction"));
+  return rows.filter(
+    (s) =>
+      s.provenance === "verified" &&
+      s.accounts.some((a) => a.account === account && a.verification === "transaction"),
+  );
 }
 
 /** User-supplied grouping: watch-only accounts are labelled and never become verified ancestry. */
-export function manualStrategy(label: string, a: { kind: "position" | "order"; account: string; pool: string; owner: string }, now = Date.now()) {
+export function manualStrategy(
+  label: string,
+  a: { kind: "position" | "order"; account: string; pool: string; owner: string },
+  now = Date.now(),
+) {
   return newStrategy({
     origin: null,
     provenance: "user-supplied",
     label,
     now,
-    account: { ...a, role: "watch", verification: "user-supplied", joinedBy: null, fromAccount: null },
+    account: {
+      ...a,
+      role: "watch",
+      verification: "user-supplied",
+      joinedBy: null,
+      fromAccount: null,
+    },
   });
 }
 
 export const ContinuityBundle = z
   .object({
     format: z.literal(CONTINUITY_FORMAT),
-    exportedAt: z.string().max(40),
+    exportedAt: z.string().datetime().max(40),
     notice: z.string().max(400),
     strategies: z.array(StrategySchema).max(MAX_STRATEGIES),
   })
@@ -563,36 +822,52 @@ export const ContinuityBundle = z
 export type ContinuityBundle = z.infer<typeof ContinuityBundle>;
 
 export function exportContinuity(rows: Strategy[], now = Date.now()): ContinuityBundle {
-  return ContinuityBundle.parse({
+  const bundle = ContinuityBundle.parse({
     format: CONTINUITY_FORMAT,
     exportedAt: new Date(now).toISOString(),
     notice:
       "User-supplied device evidence. Public identifiers and observations only: no credentials, RPC URLs, keypairs, executable inputs or signed bytes. Not authenticated chain history.",
     strategies: rows.map((s) => StrategySchema.parse(s)),
   });
+  if (new TextEncoder().encode(JSON.stringify(bundle)).byteLength > 10_000_000)
+    throw new Error("Continuity bundle exceeds 10 MB. Export individual strategies.");
+  return bundle;
 }
 
 /** Imports are labelled supplied evidence. They never enter capture or become verified lineage. */
-export function parseContinuityImport(input: unknown, now = Date.now()): { strategies: Strategy[]; rejected: number } {
+export function parseContinuityImport(
+  input: unknown,
+  now = Date.now(),
+): { strategies: Strategy[]; rejected: number } {
   const text = typeof input === "string" ? input : JSON.stringify(input ?? null);
-  if (text.length > 2_000_000) throw new Error("Continuity bundle exceeds 2 MB.");
+  if (new TextEncoder().encode(text).byteLength > 10_000_000)
+    throw new Error("Continuity bundle exceeds 10 MB.");
   const raw = typeof input === "string" ? JSON.parse(input) : input;
-  if (!raw || typeof raw !== "object" || (raw as { format?: unknown }).format !== CONTINUITY_FORMAT)
-    throw new Error("Not a continuity evidence bundle.");
-  const list = (raw as { strategies?: unknown }).strategies;
-  if (!Array.isArray(list)) throw new Error("Bundle has no strategies.");
+  const envelope = z
+    .object({
+      format: z.literal(CONTINUITY_FORMAT),
+      exportedAt: z.string().datetime(),
+      notice: z.string().max(400),
+      strategies: z.array(z.unknown()).max(MAX_STRATEGIES),
+    })
+    .strict()
+    .parse(raw);
+  const list = envelope.strategies;
   const strategies: Strategy[] = [];
-  let rejected = Math.max(0, list.length - MAX_STRATEGIES);
+  let rejected = 0;
+  const seen = new Set<string>();
   for (const item of list.slice(0, MAX_STRATEGIES)) {
     const p = StrategySchema.safeParse(item);
-    if (!p.success) {
+    if (!p.success || seen.has(p.data.id)) {
       rejected++;
       continue;
     }
+    seen.add(p.data.id);
     strategies.push(
       StrategySchema.parse({
         ...p.data,
-        id: `strategy:import:${p.data.id.replace(/^strategy:/, "").replace(/^import:/, "")}`.slice(0, 129),
+        id: "strategy:import:" + randomId(),
+        suppliedId: p.data.suppliedId ?? p.data.id,
         provenance: "import",
         revision: 1,
         createdAt: now,

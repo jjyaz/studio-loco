@@ -5,6 +5,7 @@ import { loadSdk } from "./dlmm";
 import { assertCluster } from "./tx";
 import { verifyDlmmAccount } from "./account-verify";
 import { DLMM_PROGRAM, type Blueprint } from "./foundry";
+import { chapterProof } from "./continuity-proof";
 import type { Job } from "./job-control";
 import type { FlightRecord } from "./recorder";
 import {
@@ -318,7 +319,10 @@ export async function verifyFoundryLink(
     (i) => i.name === (c.action === "liquidity" ? "add_liquidity_by_weight2" : "place_limit_order"),
   );
   if (!ix) throw new Error("Foundry instruction is absent from the verified SDK IDL.");
-  const proof = transactionProof(tx, c, new Uint8Array(ix.discriminator));
+  const proof = chapterProof(tx, { ...c, action: "origin" }, {
+    [ix.name]: { discriminator: ix.discriminator, accounts: ix.accounts },
+  });
+  if (proof.feeLamports === null) throw new Error("Origin transaction fee metadata is unavailable.");
   const snapshot = await readJourneySnapshot(connection, c, job, source, undefined, proof.slot);
   if (
     snapshot.mintX !== blueprint.mintX ||

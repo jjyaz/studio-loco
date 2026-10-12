@@ -5,6 +5,7 @@ import { SDK_VERSION } from "./contracts.js";
 import { planRange } from "./range.js";
 import { analyzeRecorderExport } from "./evidence.js";
 import { inspectBlueprint, protocolAdapters } from "./blueprint.js";
+import { analyzeContinuityExport } from "./continuity.js";
 
 export type LocoReaders = Pick<
   LocoClient,
@@ -196,7 +197,7 @@ export function createLocoMcpServer(
     },
     () => safe(protocolAdapters),
   );
-  if (options.localEvidence)
+  if (options.localEvidence) {
     server.registerTool(
       "loco_analyze_recorder_export",
       {
@@ -209,5 +210,11 @@ export function createLocoMcpServer(
       },
       (args) => safe(() => analyzeRecorderExport(args.bundle)),
     );
+    server.registerTool("loco_analyze_continuity_export", {
+      description: "Opt-in local stdio only. Validate a caller-supplied continuity bundle in memory and summarize its reported chapters, moves and fees. No file-system reads, upload, independent chain recheck, wallet access or execution permission.",
+      inputSchema: schema<{ bundle: Record<string, unknown> }>({ bundle: { type: "object" } }, ["bundle"]),
+      annotations: { ...annotations, openWorldHint: false },
+    }, (args) => safe(() => analyzeContinuityExport(args.bundle)));
+  }
   return server;
 }

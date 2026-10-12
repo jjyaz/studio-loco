@@ -1,11 +1,11 @@
-# Studio Loco SDK · v0.2.0
+# Studio Loco SDK · v0.3.0
 
 A read-only TypeScript/ESM client for [Studio Loco](https://studioloco.cfd/developers), with range geometry, local Flight Recorder analysis and a genuine MCP server. Browser `fetch` or Node 20+; typed runtime validation, 15-second end-to-end timeout, bounded responses and cancellation. No private keys, signing, transaction submission or private cloud access.
 
 ## Install
 
 ```sh
-npm install https://studioloco.cfd/api/public/loco/v1/sdk/0.2.0.tgz
+npm install https://studioloco.cfd/api/public/loco/v1/sdk/0.3.0.tgz
 ```
 
 This is a versioned downloadable npm package, **not a release on the npm registry**. Check the SHA-256 download header or Developer Station. Only the original code in this package is MIT licensed; dependencies retain their licenses.
@@ -59,7 +59,7 @@ For stdio hosts:
   "mcpServers": {
     "studio-loco": {
       "command": "npx",
-      "args": ["--yes", "--package", "https://studioloco.cfd/api/public/loco/v1/sdk/0.2.0.tgz", "loco-mcp"]
+      "args": ["--yes", "--package", "https://studioloco.cfd/api/public/loco/v1/sdk/0.3.0.tgz", "loco-mcp"]
     }
   }
 }
@@ -94,3 +94,15 @@ console.log(protocolAdapters()); // ordinary DLMM; Pro unverified and disabled
 Inspection and compilation are local calculations on caller-supplied input. The SDK cannot authorize an action. Actual native weights use 16-bit quote-value precision and program rounding. The app re-verifies the chain and mint identities, composes one native transaction, simulates and checks its output, accounts for funding/fees/rent and obtains a fresh wallet approval. SHA-256 identifies configuration; it is not a signature, authenticity proof or verified receipt.
 
 Strict imports reject unknown keys, instructions, RPCs, invalid budget precision, duplicate/noncontiguous liquidity offsets, incomplete weights and crossing/duplicate order levels. Up to 69 liquidity bins, 12 levels per order side and 25 KB per JSON blueprint; hosted MCP has its separate 16 KiB request cap. Ladders use separate capital from LP budgets and separate reviews. No earnings forecast or background execution.
+
+## v0.3.0 · Journey Continuity
+
+`analyzeContinuityExport(bundle)` validates the app's generated strict continuity contracts and reports recorded strategy/account/chapter/move counts and deduplicated reported network fees. It returns `chainVerified: false` and `executable: false`; supplied confirmations and ancestry have not been rechecked. The 10 MB decoder rejects invalid relations, duplicate strategy IDs, unsafe raw amounts and unknown fields.
+
+```ts
+import { analyzeContinuityExport } from '@studio-loco/sdk';
+const summary = analyzeContinuityExport(exportedContinuity);
+console.log(summary.chaptersRecorded, summary.moveStatesRecorded);
+```
+
+Local stdio with `--local-evidence` also registers `loco_analyze_continuity_export`. It receives a caller-supplied bundle in memory; it does not read files, upload data, open a wallet or sign. Neither evidence-analysis tool is registered on the public HTTP MCP. SDK releases 0.1.0, 0.1.1 and 0.2.0 remain immutable at their existing download URLs; 0.3.0 is downloadable from Loco and is not published to the npm registry.

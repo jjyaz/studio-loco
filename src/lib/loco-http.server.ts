@@ -6,6 +6,7 @@ import { PoolQuerySchema } from "../../packages/sdk/src/contracts";
 import { publicReaders, readPool, readPools, readPosition } from "./loco-api.server";
 import { LOCO_OPENAPI } from "./loco-openapi";
 import release from "./loco-sdk-release.json";
+import foundryRelease from "./loco-sdk-0.2.0.json";
 import initialRelease from "./loco-sdk-0.1.0.json";
 import previousRelease from "./loco-sdk-0.1.1.json";
 
@@ -96,7 +97,7 @@ export async function handleLocoRequest(request: Request): Promise<Response> {
       queryObject(url, []);
       return json(LOCO_OPENAPI);
     }
-    const artifact = [release, previousRelease, initialRelease].find((r) => path === `sdk/${r.version}.tgz`);
+    const artifact = [release, foundryRelease, previousRelease, initialRelease].find((r) => path === `sdk/${r.version}.tgz`);
     if (artifact) {
       queryObject(url, []);
       return new Response(Buffer.from(artifact.base64, "base64"), {

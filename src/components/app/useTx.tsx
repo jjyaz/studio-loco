@@ -19,6 +19,7 @@ import { noServerTransaction, txCoordinator } from "@/lib/tx-coordinator";
 import { reconcileSignature, startWalletRecord, type Evidence } from "@/lib/recorder-store";
 import { deltasFromMeta, redact } from "@/lib/recorder";
 import type { Connection } from "@solana/web3.js";
+import { DLMM_PROGRAM } from "@/lib/foundry";
 
 /** Separate verified post-state read from confirmed transaction metadata. Bounded; failure is recorded as unavailable. */
 async function verifyPostState(connection: Connection, wallet: string, signature: string) {
@@ -171,6 +172,15 @@ export function useTxRunner() {
       evidence,
     });
     try {
+      try {
+        if (start.cluster === "mainnet-beta" && list.some((s) => s.tx.instructions.some((ix) => ix.programId.toBase58() === DLMM_PROGRAM))) {
+          const { prepareContinuityEvidence } = await import("@/lib/continuity-capture");
+          await prepareContinuityEvidence({ recordId: rec.id, owner: start.wallet, cluster: start.cluster,
+            route: typeof window !== "undefined" ? window.location.pathname : "", steps: list, evidence });
+        }
+      } catch (e) {
+        await rec.noteContinuityError(e instanceof Error ? e.message : String(e));
+      }
       const out = await runSequence({
         connection,
         wallet: { publicKey: wallet.publicKey, signTransaction: wallet.signTransaction },

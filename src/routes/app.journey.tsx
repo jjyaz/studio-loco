@@ -43,6 +43,7 @@ import { createWatch } from "@/lib/signal-box.functions";
 import { useCloudSession } from "@/components/signal/account";
 import type { FlightRecord } from "@/lib/recorder";
 import hero from "@/assets/studio-loco-panoramic-hero.png.asset.json";
+import { ContinuityBoard } from "@/components/app/ContinuityBoard";
 
 const Search = z.object({
   account: z.string().max(44).optional(),
@@ -457,6 +458,9 @@ export function JourneyBoard({ initial = {} }: { initial?: z.infer<typeof Search
           <Stat label="Saved snapshots" value={rows.reduce((n, j) => n + j.snapshots.length, 0)} />
         </div>
       </section>
+      <ContinuityBoard journeys={rows} records={records} live={live} source={source} blueprint={initial.blueprint}
+        onAccount={(id) => { setSelected(id); document.getElementById("account-observations")?.scrollIntoView({ block: "start" }); }} />
+      <div id="account-observations" className="scroll-mt-28" />
       {!live && (
         <Notice tone="warn" title="Mainnet live mode required">
           Switch to mainnet and turn off Practice in Settings to verify accounts. Existing
