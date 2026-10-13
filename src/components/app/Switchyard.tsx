@@ -102,7 +102,14 @@ export function Switchyard({
   useEffect(() => {
     ctl.current.invalidate();
     setRemoving(false);
-  }, [currentId, connection, live, source]);
+  }, [connection, live, source]);
+  useEffect(() => {
+    // The first store notification can expose a newly saved row while its
+    // creation job is still preserving the source Journey. That row belongs
+    // to this job; selecting it must not cancel its own setup.
+    if (!creating) ctl.current.invalidate();
+    setRemoving(false);
+  }, [currentId]);
   useEffect(() => {
     if (
       !currentId ||

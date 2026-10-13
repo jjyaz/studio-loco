@@ -16,6 +16,8 @@ const mocks = vi.hoisted(() => ({
   observe: vi.fn(),
   read: vi.fn(),
   save: vi.fn(),
+  saveJourney: vi.fn(),
+  listeners: new Set<() => void>(),
 }));
 vi.mock("@solana/wallet-adapter-react", () => ({
   useConnection: () => ({ connection: mocks.connection }),
@@ -31,7 +33,10 @@ vi.mock("@/lib/settings", () => ({
 }));
 vi.mock("@/lib/switchyard-store", () => ({
   listShadowExperiments: () => mocks.list(),
-  subscribeSwitchyard: () => () => {},
+  subscribeSwitchyard: (listener: () => void) => {
+    mocks.listeners.add(listener);
+    return () => mocks.listeners.delete(listener);
+  },
   saveShadowExperiment: (...a: unknown[]) => mocks.save(...a),
   setShadowStatus: vi.fn(),
   removeShadowExperiment: vi.fn(),
@@ -39,7 +44,7 @@ vi.mock("@/lib/switchyard-store", () => ({
 vi.mock("@/lib/journey-store", () => ({
   listJourneys: async () => mocks.source,
   subscribeJourney: () => () => {},
-  saveJourney: vi.fn(),
+  saveJourney: (...a: unknown[]) => mocks.saveJourney(...a),
 }));
 vi.mock("@/lib/recorder-store", () => ({
   listRecords: async () => [],
@@ -78,6 +83,8 @@ beforeEach(() => {
   mocks.observe.mockReset().mockResolvedValue(null);
   mocks.read.mockReset();
   mocks.save.mockReset();
+  mocks.saveJourney.mockReset().mockResolvedValue(undefined);
+  mocks.listeners.clear();
 });
 describe("Switchyard product states", () => {
   it("shows an honest empty state without fabricated performance", async () => {
@@ -107,6 +114,43 @@ describe("Switchyard product states", () => {
     });
     expect(screen.getByRole("button", { name: "Start live comparison" })).toBeDisabled();
     expect(mocks.read).not.toHaveBeenCalled();
+  });
+  it("completes first-account setup when its store notification arrives before source preservation", async () => {
+    let finishSource!: () => void;
+    mocks.saveJourney.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          finishSource = resolve;
+        }),
+    );
+    mocks.read.mockImplementation(async () => ({
+      ...position,
+      observedAt: Date.now(),
+      slot: 102,
+      checkedSlot: 103,
+    }));
+    mocks.save.mockImplementation(async (e: ShadowExperiment) => {
+      mocks.rows = [e];
+      for (const listener of mocks.listeners) listener();
+      return e;
+    });
+    render(<Switchyard />);
+    await screen.findByText("The next decision deserves context.");
+    fireEvent.click(screen.getByRole("button", { name: "New comparison" }));
+    fireEvent.change(screen.getByLabelText("Tracked LP position"), {
+      target: { value: journey().id },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Start live comparison" }));
+    await screen.findByRole("heading", { name: "My live range comparison" });
+    await waitFor(() => expect(mocks.saveJourney).toHaveBeenCalledOnce());
+    finishSource();
+    await waitFor(() => expect(screen.queryByText("Lay a new track.")).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole("button", { name: "Observe now" })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: "Observe now" }));
+    await waitFor(() => expect(mocks.observe).toHaveBeenCalled());
+    expect(
+      screen.queryByText("Checking source account and saving the sealed policy…"),
+    ).not.toBeInTheDocument();
   });
   it("requires storage and reports failure without silently substituting a simulated study", async () => {
     mocks.list.mockRejectedValue(new Error("Persistent storage is blocked"));
