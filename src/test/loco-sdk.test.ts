@@ -231,13 +231,42 @@ describe("Public API boundaries and genuine MCP", () => {
     const { webcrypto } = await import("node:crypto");
     vi.stubGlobal("crypto", webcrypto);
     const { draftBlueprint } = await import("@/lib/foundry");
-    const blueprint = draftBlueprint({ address: "5rCf1DM8LjKTw4YqhnoLcngyZYeNnQqztScTogYHAS6", mintX: "So11111111111111111111111111111111111111112", mintY: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", binStep: 4 });
-    const inspected = await rpcJson(await handleLocoRequest(rpc("tools/call", { name: "loco_inspect_blueprint", arguments: { blueprint, state: { activeBinId: 100, decimalsX: 9, decimalsY: 6 } } })));
-    expect(inspected.result.structuredContent).toMatchObject({ readOnly: true, executable: false, independentlyVerified: false });
+    const blueprint = draftBlueprint({
+      address: "5rCf1DM8LjKTw4YqhnoLcngyZYeNnQqztScTogYHAS6",
+      mintX: "So11111111111111111111111111111111111111112",
+      mintY: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+      binStep: 4,
+    });
+    const inspected = await rpcJson(
+      await handleLocoRequest(
+        rpc("tools/call", {
+          name: "loco_inspect_blueprint",
+          arguments: { blueprint, state: { activeBinId: 100, decimalsX: 9, decimalsY: 6 } },
+        }),
+      ),
+    );
+    expect(inspected.result.structuredContent).toMatchObject({
+      readOnly: true,
+      executable: false,
+      independentlyVerified: false,
+    });
     expect(inspected.result.structuredContent.digest).toMatch(/^[a-f0-9]{64}$/);
-    const adapters = await rpcJson(await handleLocoRequest(rpc("tools/call", { name: "loco_protocol_adapters", arguments: {} })));
-    expect(adapters.result.structuredContent.adapters[1]).toMatchObject({ status: "unverified", program: null, operations: [] });
-    const forbidden = await rpcJson(await handleLocoRequest(rpc("tools/call", { name: "loco_inspect_blueprint", arguments: { blueprint: { ...blueprint, instructions: ["sign"] } } })));
+    const adapters = await rpcJson(
+      await handleLocoRequest(rpc("tools/call", { name: "loco_protocol_adapters", arguments: {} })),
+    );
+    expect(adapters.result.structuredContent.adapters[1]).toMatchObject({
+      status: "unverified",
+      program: null,
+      operations: [],
+    });
+    const forbidden = await rpcJson(
+      await handleLocoRequest(
+        rpc("tools/call", {
+          name: "loco_inspect_blueprint",
+          arguments: { blueprint: { ...blueprint, instructions: ["sign"] } },
+        }),
+      ),
+    );
     expect(forbidden.result.isError).toBe(true);
   });
   it("negotiates MCP and lists exactly seven read-only tools without cloud/export/signing tools", async () => {
@@ -261,7 +290,12 @@ describe("Public API boundaries and genuine MCP", () => {
     expect(list.result.tools.map((t: { name: string }) => t.name)).not.toContain(
       "loco_analyze_recorder_export",
     );
-    expect(list.result.tools.map((t: { name: string }) => t.name)).not.toContain("loco_analyze_continuity_export");
+    expect(list.result.tools.map((t: { name: string }) => t.name)).not.toContain(
+      "loco_analyze_continuity_export",
+    );
+    expect(list.result.tools.map((t: { name: string }) => t.name)).not.toContain(
+      "loco_analyze_switchyard_export",
+    );
     const call = await rpcJson(
       await handleLocoRequest(
         rpc("tools/call", {

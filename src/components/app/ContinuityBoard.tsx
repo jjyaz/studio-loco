@@ -66,6 +66,7 @@ export function ContinuityBoard({
   live,
   source,
   blueprint,
+  strategyId,
   onAccount,
 }: {
   journeys: Journey[];
@@ -73,11 +74,12 @@ export function ContinuityBoard({
   live: boolean;
   source: "relay" | "custom";
   blueprint?: string;
+  strategyId?: string;
   onAccount: (id: string) => void;
 }) {
   const { connection } = useConnection();
   const [strategies, setStrategies] = useState<Strategy[]>([]),
-    [selected, setSelected] = useState("");
+    [selected, setSelected] = useState(strategyId ?? "");
   const [ready, setReady] = useState(false),
     [error, setError] = useState(""),
     [message, setMessage] = useState("");
@@ -94,6 +96,9 @@ export function ContinuityBoard({
     (blueprint ? strategies.find((s) => s.origin?.blueprintId === blueprint) : undefined) ??
     strategies[0];
   const id = current?.id;
+  useEffect(() => {
+    if (strategyId) setSelected(strategyId);
+  }, [strategyId]);
   useEffect(() => {
     ctl.current.invalidate();
     setPage(1);

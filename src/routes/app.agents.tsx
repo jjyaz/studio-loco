@@ -86,6 +86,7 @@ import { RebalancePlanner } from "@/components/app/RebalancePlanner";
 import { selectionRefusal, type PlanOption, type PlanSnapshot } from "@/lib/planner";
 import { listStrategies } from "@/lib/continuity-store";
 import nightAsset from "@/assets/studio-loco-night-station.png.asset.json";
+import type { ShadowSuggestion } from "@/lib/switchyard-chain";
 
 export const Route = createFileRoute("/app/agents")({
   head: () => ({
@@ -115,6 +116,16 @@ function AgentsRoute() {
 
 /** Hand-off identifiers read after hydration (works outside a router too). Validated; never a transaction. */
 const HandoffSchema = z.object({
+  shadow: z
+    .string()
+    .max(50)
+    .regex(/^[a-z0-9][a-z0-9:._-]*$/)
+    .optional(),
+  decision: z
+    .string()
+    .max(110)
+    .regex(/^[a-z0-9:._-]+$/)
+    .optional(),
   alert: z.string().uuid().optional(),
   inspect: z
     .string()
@@ -222,6 +233,33 @@ export function Agents({ handoffSearch }: { handoffSearch?: z.infer<typeof Hando
   const runner = useTxRunner();
   const fallbackHandoff = useHandoffSearch();
   const handoff = handoffSearch ?? fallbackHandoff;
+  const [shadowSuggestion, setShadowSuggestion] = useState<ShadowSuggestion | null>(null);
+  const [shadowError, setShadowError] = useState("");
+  useEffect(() => {
+    let cancelled = false;
+    setShadowSuggestion(null);
+    setShadowError("");
+    if (!handoff.shadow || !handoff.decision) return;
+    void import("@/lib/switchyard-chain")
+      .then(({ loadShadowSuggestion }) => loadShadowSuggestion(handoff.shadow!, handoff.decision!))
+      .then(
+        (s) => {
+          if (cancelled) return;
+          if (s.owner !== handoff.inspect || s.position !== handoff.focus) {
+            setShadowError(
+              "Shadow decision belongs to a different account. Open a fresh account comparison.",
+            );
+          } else setShadowSuggestion(s);
+        },
+        (e) => {
+          if (!cancelled)
+            setShadowError(e instanceof Error ? e.message : "Shadow intent unavailable.");
+        },
+      );
+    return () => {
+      cancelled = true;
+    };
+  }, [handoff.shadow, handoff.decision, handoff.inspect, handoff.focus]);
   const privateSignal = useSignalHandoff(handoff.alert, "position");
   const [pendingHandoff, setPendingHandoff] = useState<PositionHandoff | null>(null);
   const [appliedHandoff, setAppliedHandoff] = useState<{
@@ -779,9 +817,16 @@ export function Agents({ handoffSearch }: { handoffSearch?: z.infer<typeof Hando
   /* ---------- reviews ---------- */
   async function prepare(
     p: Proposal,
-    opts: { stagedTo?: { pool: string }; plan?: { selectionRecordId: string; target?: { lower: number; upper: number } } } = {},
+    opts: {
+      stagedTo?: { pool: string };
+      plan?: { selectionRecordId: string; target?: { lower: number; upper: number } };
+    } = {},
   ) {
-    if (opts.plan && (planLive.current !== planReviewed.current || planRequest.current?.proposalId !== p.id)) return;
+    if (
+      opts.plan &&
+      (planLive.current !== planReviewed.current || planRequest.current?.proposalId !== p.id)
+    )
+      return;
     if (mode === "practice") {
       setReview({ state: "practice", proposal: p });
       addHistory("review", `Practice review opened for ${p.kind}. Nothing can be signed.`);
@@ -798,7 +843,11 @@ export function Agents({ handoffSearch }: { handoffSearch?: z.infer<typeof Hando
         route: "/app/agents",
         cluster: settings.cluster,
         wallet: owner ?? "",
-        links: { proposalId: p.id, ...(opts.plan ? { recordId: opts.plan.selectionRecordId } : {}), ...cloudLinks(p.position) },
+        links: {
+          proposalId: p.id,
+          ...(opts.plan ? { recordId: opts.plan.selectionRecordId } : {}),
+          ...cloudLinks(p.position),
+        },
         detail,
         context: {
           trigger: p.trigger,
@@ -940,7 +989,11 @@ export function Agents({ handoffSearch }: { handoffSearch?: z.infer<typeof Hando
           route: "/app/agents",
           cluster: settings.cluster,
           wallet: ownerPk.toBase58(),
-          links: { proposalId: p.id, ...(opts.plan ? { recordId: opts.plan.selectionRecordId } : {}), ...cloudLinks(p.position) },
+          links: {
+            proposalId: p.id,
+            ...(opts.plan ? { recordId: opts.plan.selectionRecordId } : {}),
+            ...cloudLinks(p.position),
+          },
           detail: `Target ${b.target.lower}–${b.target.upper}; ${b.costs.simErrors[0] ? `simulation failed: ${b.costs.simErrors[0]}` : "simulated OK"}`,
           context: {
             trigger: p.trigger,
@@ -1025,7 +1078,11 @@ export function Agents({ handoffSearch }: { handoffSearch?: z.infer<typeof Hando
           route: "/app/agents",
           cluster: settings.cluster,
           wallet: ownerPk.toBase58(),
-          links: { proposalId: p.id, ...(opts.plan ? { recordId: opts.plan.selectionRecordId } : {}), ...cloudLinks(p.position) },
+          links: {
+            proposalId: p.id,
+            ...(opts.plan ? { recordId: opts.plan.selectionRecordId } : {}),
+            ...cloudLinks(p.position),
+          },
           detail: `${b.costs.simErrors[0] ? `simulation failed: ${b.costs.simErrors[0]}` : "simulated OK"}; outputs are estimates, no enforced X/Y floor`,
           context: {
             trigger: p.trigger,
@@ -1075,16 +1132,42 @@ export function Agents({ handoffSearch }: { handoffSearch?: z.infer<typeof Hando
     if (!first) return;
     addHistory("tx", `Wallet approval requested: ${first.label}.`);
     let steps;
+    const shadowIntent =
+      rv.proposal.trigger === "planner" && planRequest.current?.proposalId === rv.proposal.id
+        ? planRequest.current.shadow
+        : undefined;
     try {
       steps = await runner.run([first], {
         semanticGuard: guard,
-        ...(appliedHandoff?.h.position === rv.proposal.position ? {
-          asyncSemanticGuard: async () => {
-            const current = await loadSignalHandoff(appliedHandoff.h.alertId, "position");
-            return current.watchRevision !== appliedHandoff.h.watchRevision || current.accountId !== appliedHandoff.h.accountId
-              ? "The private watch changed during approval. Rebuild using its current rules." : null;
-          },
-        } : {}),
+        ...(appliedHandoff?.h.position === rv.proposal.position || shadowIntent
+          ? {
+              asyncSemanticGuard: async () => {
+                if (appliedHandoff?.h.position === rv.proposal.position) {
+                  const current = await loadSignalHandoff(appliedHandoff.h.alertId, "position");
+                  if (
+                    current.watchRevision !== appliedHandoff.h.watchRevision ||
+                    current.accountId !== appliedHandoff.h.accountId
+                  )
+                    return "The private watch changed during approval. Rebuild using its current rules.";
+                }
+                if (shadowIntent) {
+                  const { loadShadowSuggestion } = await import("@/lib/switchyard-chain");
+                  const current = await loadShadowSuggestion(
+                    shadowIntent.experimentId,
+                    shadowIntent.decisionId,
+                  );
+                  if (
+                    current.owner !== rv.frozen.wallet ||
+                    current.position !== rv.frozen.position ||
+                    current.pool !== rv.frozen.pool ||
+                    current.recordId !== shadowIntent.recordId
+                  )
+                    return "The shadow decision scope changed. Rebuild a fresh comparison.";
+                }
+                return null;
+              },
+            }
+          : {}),
         maxFeeLamports: rv.frozen.feeLamports ?? undefined,
         evidence: {
           title: `Observatory ${rv.frozen.action} ${shortAddr(rv.proposal.position)}`,
@@ -1106,7 +1189,8 @@ export function Agents({ handoffSearch }: { handoffSearch?: z.infer<typeof Hando
             action: rv.frozen.action,
             feeCapLamports: rv.frozen.feeLamports ?? null,
             ...(rv.built.kind === "withdraw" && rv.built.staged && rv.built.b.costs.remaining === 0
-              ? { ctMoveId: rv.proposal.id, ctMovePool: rv.built.staged.targetPool } : {}),
+              ? { ctMoveId: rv.proposal.id, ctMovePool: rv.built.staged.targetPool }
+              : {}),
           },
         },
       });
@@ -1136,15 +1220,32 @@ export function Agents({ handoffSearch }: { handoffSearch?: z.infer<typeof Hando
       )
         pendingRebase.current.add(rv.proposal.position);
       if (rv.built.kind === "withdraw" && rv.built.staged && remaining === 0) {
-        const tracked = (await listStrategies().catch(() => [])).some((strategy) => strategy.provenance === "verified" && strategy.accounts.some((a) => a.account === rv.frozen.position && a.pool === rv.frozen.pool && a.owner === rv.frozen.wallet && a.verification === "transaction"));
-        if (live.current.wallet !== rv.frozen.wallet || live.current.cluster !== rv.frozen.cluster || live.current.rpcId !== rv.frozen.rpcId) return;
+        const tracked = (await listStrategies().catch(() => [])).some(
+          (strategy) =>
+            strategy.provenance === "verified" &&
+            strategy.accounts.some(
+              (a) =>
+                a.account === rv.frozen.position &&
+                a.pool === rv.frozen.pool &&
+                a.owner === rv.frozen.wallet &&
+                a.verification === "transaction",
+            ),
+        );
+        if (
+          live.current.wallet !== rv.frozen.wallet ||
+          live.current.cluster !== rv.frozen.cluster ||
+          live.current.rpcId !== rv.frozen.rpcId
+        )
+          return;
         setStaged({
           pool: rv.built.staged.targetPool,
           width: rv.built.staged.width,
           strategy: rv.built.staged.strategy,
           cluster: settings.cluster,
           ...(tracked ? { moveId: rv.proposal.id } : {}),
-          ...(rv.proposal.trigger === "planner" ? { planId: rv.proposal.id, withdrawalRecordId: reviewRecord.current[rv.proposal.id] } : {}),
+          ...(rv.proposal.trigger === "planner"
+            ? { planId: rv.proposal.id, withdrawalRecordId: reviewRecord.current[rv.proposal.id] }
+            : {}),
         });
       }
       setProposals((q) => (remaining === 0 ? q.filter((x) => x.id !== rv.proposal.id) : q));
@@ -1161,7 +1262,13 @@ export function Agents({ handoffSearch }: { handoffSearch?: z.infer<typeof Hando
 
   const planLive = useRef<string | null>(null);
   const planReviewed = useRef<string | null>(null);
-  const planRequest = useRef<{ proposalId: string; selectionRecordId: string; target?: { lower: number; upper: number }; destPool?: string } | null>(null);
+  const planRequest = useRef<{
+    proposalId: string;
+    selectionRecordId: string;
+    target?: { lower: number; upper: number };
+    destPool?: string;
+    shadow?: { experimentId: string; decisionId: string; recordId: string };
+  } | null>(null);
   const onPlannerKey = useCallback((key: string) => {
     planLive.current = key;
     if (planReviewed.current !== null && planReviewed.current !== key) {
@@ -1173,11 +1280,34 @@ export function Agents({ handoffSearch }: { handoffSearch?: z.infer<typeof Hando
     }
   }, []);
   function reviewPlan(s: PlanSnapshot, option: PlanOption, selectionRecordId: string) {
-    if (!sel || s.identity.position !== sel.key || selectionRefusal(s, planLive.current ?? "", option, Date.now()) || refusal || ctl.current!.busy || runner.running || reviewing) return;
+    if (
+      !sel ||
+      s.identity.position !== sel.key ||
+      selectionRefusal(s, planLive.current ?? "", option, Date.now()) ||
+      refusal ||
+      ctl.current!.busy ||
+      runner.running ||
+      reviewing
+    )
+      return;
     const r = s.results.find((x) => x.option === option);
     if (!r) return;
     planReviewed.current = s.identityKey;
-    planRequest.current = { proposalId: s.id, selectionRecordId, ...(option === "widen" && r.target ? { target: { ...r.target } } : {}), ...(option === "move" && r.destPool ? { destPool: r.destPool } : {}) };
+    planRequest.current = {
+      proposalId: s.id,
+      selectionRecordId,
+      ...(option === "widen" && r.target ? { target: { ...r.target } } : {}),
+      ...(option === "move" && r.destPool ? { destPool: r.destPool } : {}),
+      ...(s.identity.shadowExperimentId && s.identity.shadowDecisionId && s.identity.shadowRecordId
+        ? {
+            shadow: {
+              experimentId: s.identity.shadowExperimentId,
+              decisionId: s.identity.shadowDecisionId,
+              recordId: s.identity.shadowRecordId,
+            },
+          }
+        : {}),
+    };
     const p: Proposal = {
       id: s.id,
       position: sel.key,
@@ -1189,12 +1319,18 @@ export function Agents({ handoffSearch }: { handoffSearch?: z.infer<typeof Hando
       ruleRevision: rules[sel.key]?.revision ?? -1,
       createdAt: Date.now(),
     };
-    addHistory("review", `Planner selection “${option}” → building a fresh review from current chain state.`);
+    addHistory(
+      "review",
+      `Planner selection “${option}” → building a fresh review from current chain state.`,
+    );
     if (option === "move" && r.destPool)
       void prepare(p, { stagedTo: { pool: r.destPool }, plan: { selectionRecordId } });
     else
       void prepare(p, {
-        plan: { selectionRecordId, ...(option === "widen" && r.target ? { target: r.target } : {}) },
+        plan: {
+          selectionRecordId,
+          ...(option === "widen" && r.target ? { target: r.target } : {}),
+        },
       });
   }
 
@@ -1206,6 +1342,13 @@ export function Agents({ handoffSearch }: { handoffSearch?: z.infer<typeof Hando
 
   const sel = rows?.find((r) => r.key === selected) ?? null;
   const selRule = sel ? (rules[sel.key] ?? DEFAULT_RULE) : null;
+  const shadowMatches =
+    !!shadowSuggestion &&
+    settings.cluster === "mainnet-beta" &&
+    mode !== "practice" &&
+    shadowSuggestion.position === sel?.key &&
+    shadowSuggestion.pool === sel?.pair &&
+    shadowSuggestion.owner === owner;
   const updateRule = (k: string, f: (r: Rule) => Rule, note: string) => {
     try {
       const n = f(rulesRef.current[k] ?? DEFAULT_RULE);
@@ -1302,6 +1445,29 @@ export function Agents({ handoffSearch }: { handoffSearch?: z.infer<typeof Hando
         }
         onApply={() => void applyHandoff()}
       />
+      {(shadowSuggestion || shadowError) && (
+        <Notice
+          tone={shadowError ? "warn" : "info"}
+          title={shadowError ? "Switchyard intent unavailable" : "Switchyard → Rebalance Planner"}
+          action={
+            <Btn
+              size="sm"
+              variant="line"
+              onClick={() => {
+                setShadowSuggestion(null);
+                setShadowError("");
+              }}
+            >
+              Dismiss shadow intent
+            </Btn>
+          }
+        >
+          {shadowError ||
+            (now > shadowSuggestion!.expiresAt
+              ? "This shadow decision is historical. Dismiss it to begin a new account comparison."
+              : "Load the account and run a fresh Planner comparison. Its read-only intent cannot approve or replay a transaction.")}
+        </Notice>
+      )}
       <div className="-mt-2 mb-6 flex flex-wrap gap-x-5 gap-y-3 text-sm text-cream/75">
         <Link to="/app/foundry" className="underline hover:text-amber">
           Build a versioned strategy in the Foundry
@@ -1583,14 +1749,19 @@ export function Agents({ handoffSearch }: { handoffSearch?: z.infer<typeof Hando
               onRebuild={() =>
                 prepare(
                   review.proposal,
-                  review.proposal.trigger === "planner" && planRequest.current?.proposalId === review.proposal.id
-                    ? { plan: planRequest.current, ...(planRequest.current.destPool ? { stagedTo: { pool: planRequest.current.destPool } } : {}) }
-                    :
-                  review.state === "ready" &&
-                    review.built.kind === "withdraw" &&
-                    review.built.staged
-                    ? { stagedTo: { pool: review.built.staged.targetPool } }
-                    : {},
+                  review.proposal.trigger === "planner" &&
+                    planRequest.current?.proposalId === review.proposal.id
+                    ? {
+                        plan: planRequest.current,
+                        ...(planRequest.current.destPool
+                          ? { stagedTo: { pool: planRequest.current.destPool } }
+                          : {}),
+                      }
+                    : review.state === "ready" &&
+                        review.built.kind === "withdraw" &&
+                        review.built.staged
+                      ? { stagedTo: { pool: review.built.staged.targetPool } }
+                      : {},
                 )
               }
               onStage={(pool) =>
@@ -1603,9 +1774,23 @@ export function Agents({ handoffSearch }: { handoffSearch?: z.infer<typeof Hando
           <TxSteps steps={runner.steps} />
           {planContinuation && planRequest.current?.proposalId === planContinuation.id && (
             <Notice tone="info" title="Price-level accounts confirmed — rebuild the rebalance">
-              The account-creation step finished. Liquidity has not been rebalanced. Continue with a new simulation and separate wallet approval.
-              <Btn size="sm" className="mt-2" disabled={!!refusal || runner.running || ctl.current!.busy || planLive.current !== planReviewed.current}
-                onClick={() => { const p = planContinuation; setPlanContinuation(null); void prepare(p, { plan: planRequest.current! }); }}>
+              The account-creation step finished. Liquidity has not been rebalanced. Continue with a
+              new simulation and separate wallet approval.
+              <Btn
+                size="sm"
+                className="mt-2"
+                disabled={
+                  !!refusal ||
+                  runner.running ||
+                  ctl.current!.busy ||
+                  planLive.current !== planReviewed.current
+                }
+                onClick={() => {
+                  const p = planContinuation;
+                  setPlanContinuation(null);
+                  void prepare(p, { plan: planRequest.current! });
+                }}
+              >
                 Rebuild native rebalance review
               </Btn>
             </Notice>
@@ -1634,7 +1819,9 @@ export function Agents({ handoffSearch }: { handoffSearch?: z.infer<typeof Hando
                       1 -
                       Math.floor((Math.min(staged.width, MAX_UI_BINS) - 1) / 2),
                     cluster: staged.cluster,
-                    ...(staged.planId ? { plan: staged.planId, record: staged.withdrawalRecordId } : {}),
+                    ...(staged.planId
+                      ? { plan: staged.planId, record: staged.withdrawalRecordId }
+                      : {}),
                     ...(staged.moveId ? { move: staged.moveId } : {}),
                   }}
                   className="underline"
@@ -1662,11 +1849,21 @@ export function Agents({ handoffSearch }: { handoffSearch?: z.infer<typeof Hando
                 ruleRevision: rules[sel.key]?.revision ?? -1,
                 watchRevision:
                   appliedHandoff?.h.position === sel.key ? appliedHandoff.h.watchRevision : null,
+                ...(shadowMatches
+                  ? {
+                      shadowExperimentId: shadowSuggestion!.experimentId,
+                      shadowDecisionId: shadowSuggestion!.decisionId,
+                      shadowRecordId: shadowSuggestion!.recordId,
+                    }
+                  : {}),
               }}
+              shadowSuggestion={shadowMatches ? shadowSuggestion! : undefined}
               actionBlock={
-                mode !== "wallet"
-                  ? "Watch-only: wallet actions are off."
-                  : (refusal ?? (reviewing ? "A review is already open." : null))
+                shadowMatches && now > shadowSuggestion!.expiresAt
+                  ? "Shadow decision expired. Dismiss it and start a fresh comparison."
+                  : mode !== "wallet"
+                    ? "Watch-only: wallet actions are off."
+                    : (refusal ?? (reviewing ? "A review is already open." : null))
               }
               onIdentityChange={onPlannerKey}
               reviewBusy={reviewing || runner.running}
@@ -1696,8 +1893,6 @@ export function Agents({ handoffSearch }: { handoffSearch?: z.infer<typeof Hando
               disabled={reviewing || (mode !== "practice" && !!refusal)}
             />
           )}
-
-
 
           <section className="mt-8" aria-labelledby="hist-h">
             <h2 id="hist-h" className="display mb-3 text-2xl">

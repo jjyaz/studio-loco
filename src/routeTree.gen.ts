@@ -29,6 +29,7 @@ import { Route as AppReplayRouteImport } from './routes/app.replay'
 import { Route as AppSignalBoxRouteImport } from './routes/app.signal-box'
 import { Route as AppSignalsRouteImport } from './routes/app.signals'
 import { Route as AppStudioRouteImport } from './routes/app.studio'
+import { Route as AppSwitchyardRouteImport } from './routes/app.switchyard'
 import { Route as JournalIndexRouteImport } from './routes/journal.index'
 import { Route as JournalSlugRouteImport } from './routes/journal.$slug'
 import { Route as LabIndexRouteImport } from './routes/lab.index'
@@ -138,6 +139,11 @@ const AppStudioRoute = AppStudioRouteImport.update({
   path: '/studio',
   getParentRoute: () => AppRoute,
 } as any)
+const AppSwitchyardRoute = AppSwitchyardRouteImport.update({
+  id: '/switchyard',
+  path: '/switchyard',
+  getParentRoute: () => AppRoute,
+} as any)
 const JournalIndexRoute = JournalIndexRouteImport.update({
   id: '/journal/',
   path: '/journal/',
@@ -200,6 +206,7 @@ export interface FileRoutesByFullPath {
   '/app/signal-box': typeof AppSignalBoxRoute
   '/app/signals': typeof AppSignalsRoute
   '/app/studio': typeof AppStudioRoute
+  '/app/switchyard': typeof AppSwitchyardRoute
   '/journal/$slug': typeof JournalSlugRoute
   '/lab/architecture': typeof LabArchitectureRoute
   '/app/': typeof AppIndexRoute
@@ -229,6 +236,7 @@ export interface FileRoutesByTo {
   '/app/signal-box': typeof AppSignalBoxRoute
   '/app/signals': typeof AppSignalsRoute
   '/app/studio': typeof AppStudioRoute
+  '/app/switchyard': typeof AppSwitchyardRoute
   '/journal/$slug': typeof JournalSlugRoute
   '/lab/architecture': typeof LabArchitectureRoute
   '/app': typeof AppIndexRoute
@@ -260,6 +268,7 @@ export interface FileRoutesById {
   '/app/signal-box': typeof AppSignalBoxRoute
   '/app/signals': typeof AppSignalsRoute
   '/app/studio': typeof AppStudioRoute
+  '/app/switchyard': typeof AppSwitchyardRoute
   '/journal/$slug': typeof JournalSlugRoute
   '/lab/architecture': typeof LabArchitectureRoute
   '/app/': typeof AppIndexRoute
@@ -292,6 +301,7 @@ export interface FileRouteTypes {
     | '/app/signal-box'
     | '/app/signals'
     | '/app/studio'
+    | '/app/switchyard'
     | '/journal/$slug'
     | '/lab/architecture'
     | '/app/'
@@ -321,6 +331,7 @@ export interface FileRouteTypes {
     | '/app/signal-box'
     | '/app/signals'
     | '/app/studio'
+    | '/app/switchyard'
     | '/journal/$slug'
     | '/lab/architecture'
     | '/app'
@@ -351,6 +362,7 @@ export interface FileRouteTypes {
     | '/app/signal-box'
     | '/app/signals'
     | '/app/studio'
+    | '/app/switchyard'
     | '/journal/$slug'
     | '/lab/architecture'
     | '/app/'
@@ -521,6 +533,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppStudioRouteImport
       parentRoute: typeof AppRoute
     }
+    '/app/switchyard': {
+      id: '/app/switchyard'
+      path: '/switchyard'
+      fullPath: '/app/switchyard'
+      preLoaderRoute: typeof AppSwitchyardRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/journal/': {
       id: '/journal/'
       path: '/journal'
@@ -593,6 +612,7 @@ interface AppRouteChildren {
   AppSignalBoxRoute: typeof AppSignalBoxRoute
   AppSignalsRoute: typeof AppSignalsRoute
   AppStudioRoute: typeof AppStudioRoute
+  AppSwitchyardRoute: typeof AppSwitchyardRoute
   AppIndexRoute: typeof AppIndexRoute
   AppPoolAddressRoute: typeof AppPoolAddressRoute
 }
@@ -610,6 +630,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppSignalBoxRoute: AppSignalBoxRoute,
   AppSignalsRoute: AppSignalsRoute,
   AppStudioRoute: AppStudioRoute,
+  AppSwitchyardRoute: AppSwitchyardRoute,
   AppIndexRoute: AppIndexRoute,
   AppPoolAddressRoute: AppPoolAddressRoute,
 }

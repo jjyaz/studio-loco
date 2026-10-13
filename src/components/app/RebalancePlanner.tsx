@@ -11,6 +11,7 @@ import { recordFact } from "@/lib/recorder-store";
 import { distribute } from "@/lib/strategy";
 import { discoverSamePair, type PairScan } from "@/lib/agents-chain";
 import { readPlan } from "@/lib/planner-chain";
+import type { ShadowSuggestion } from "@/lib/switchyard-chain";
 import {
   OPTION_LABEL,
   PLAN_SNAPSHOT_TTL_MS,
@@ -59,6 +60,7 @@ export function RebalancePlanner({
   reviewBusy = false,
   onReview,
   onIdentityChange,
+  shadowSuggestion,
 }: {
   row: PlannerRow;
   base: BaseIdentity;
@@ -68,6 +70,7 @@ export function RebalancePlanner({
   reviewBusy?: boolean;
   onReview: (s: PlanSnapshot, option: PlanOption, selectionRecordId: string) => void;
   onIdentityChange?: (key: string) => void;
+  shadowSuggestion?: ShadowSuggestion;
 }) {
   const [lo, setLo] = useState(String(row.lower - 5));
   const [hi, setHi] = useState(String(row.upper + 5));
@@ -77,6 +80,12 @@ export function RebalancePlanner({
   const [err, setErr] = useState<string | null>(null);
   const [lastSel, setLastSel] = useState<{ option: PlanOption; recordId: string } | null>(null);
   const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (shadowSuggestion?.option === "widen" && shadowSuggestion.position === row.key) {
+      setLo(String(shadowSuggestion.target.lower));
+      setHi(String(shadowSuggestion.target.upper));
+    }
+  }, [shadowSuggestion?.decisionId, row.key]);
   const selecting = useRef(false);
   const ctl = useRef<JobControl | null>(null);
   if (!ctl.current) ctl.current = new JobControl();
@@ -228,6 +237,21 @@ export function RebalancePlanner({
         Compare four routes. Planning only reads the chain — nothing is signed, and every chosen
         plan is rebuilt from fresh state before any review.
       </p>
+      {shadowSuggestion && (
+        <Notice title="Switchyard intent · fresh comparison required">
+          {shadowSuggestion.label} proposed {shadowSuggestion.option}. Its hypothetical target is{" "}
+          {shadowSuggestion.target.lower}…{shadowSuggestion.target.upper}. Recenter is recalculated
+          from the current active bin; a widening target must still include the current position.
+          This evidence does not authorize a transaction.
+          <Link
+            to="/app/recorder"
+            search={{ id: shadowSuggestion.recordId }}
+            className="ml-2 text-amber underline"
+          >
+            Decision evidence
+          </Link>
+        </Notice>
+      )}
       <Panel>
         <div className="grid gap-3 sm:grid-cols-3">
           <Field

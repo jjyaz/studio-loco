@@ -6,6 +6,7 @@ import { planRange } from "./range.js";
 import { analyzeRecorderExport } from "./evidence.js";
 import { inspectBlueprint, protocolAdapters } from "./blueprint.js";
 import { analyzeContinuityExport } from "./continuity.js";
+import { analyzeSwitchyardExport } from "./switchyard.js";
 
 export type LocoReaders = Pick<
   LocoClient,
@@ -210,11 +211,30 @@ export function createLocoMcpServer(
       },
       (args) => safe(() => analyzeRecorderExport(args.bundle)),
     );
-    server.registerTool("loco_analyze_continuity_export", {
-      description: "Opt-in local stdio only. Validate a caller-supplied continuity bundle in memory and summarize its reported chapters, moves and fees. No file-system reads, upload, independent chain recheck, wallet access or execution permission.",
-      inputSchema: schema<{ bundle: Record<string, unknown> }>({ bundle: { type: "object" } }, ["bundle"]),
-      annotations: { ...annotations, openWorldHint: false },
-    }, (args) => safe(() => analyzeContinuityExport(args.bundle)));
+    server.registerTool(
+      "loco_analyze_continuity_export",
+      {
+        description:
+          "Opt-in local stdio only. Validate a caller-supplied continuity bundle in memory and summarize its reported chapters, moves and fees. No file-system reads, upload, independent chain recheck, wallet access or execution permission.",
+        inputSchema: schema<{ bundle: Record<string, unknown> }>({ bundle: { type: "object" } }, [
+          "bundle",
+        ]),
+        annotations: { ...annotations, openWorldHint: false },
+      },
+      (args) => safe(() => analyzeContinuityExport(args.bundle)),
+    );
+    server.registerTool(
+      "loco_analyze_switchyard_export",
+      {
+        description:
+          "Opt-in local stdio only. Validate caller-supplied prospective range-policy evidence and recompute retained sample coverage, gaps, hypothetical proposals and user-assumed proposal fees. No file access, independent chain recheck, balances, fee-income forecast, PnL or execution permission.",
+        inputSchema: schema<{ bundle: Record<string, unknown> }>({ bundle: { type: "object" } }, [
+          "bundle",
+        ]),
+        annotations: { ...annotations, openWorldHint: false },
+      },
+      (args) => safe(() => analyzeSwitchyardExport(args.bundle)),
+    );
   }
   return server;
 }

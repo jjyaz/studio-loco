@@ -8,7 +8,13 @@ import { Wordmark } from "@/components/site/Wordmark";
 import { CaButton } from "@/components/site/CaButton";
 import { WalletButton } from "@/components/wallet/WalletButton";
 import { Btn, Field, Segmented } from "@/components/kit";
-import { DEFAULT_RPC, SLIPPAGE_PRESETS, useSettings, validateRpc, type Cluster } from "@/lib/settings";
+import {
+  DEFAULT_RPC,
+  SLIPPAGE_PRESETS,
+  useSettings,
+  validateRpc,
+  type Cluster,
+} from "@/lib/settings";
 
 const TABS = [
   { to: "/app", label: "Terminal", exact: true },
@@ -20,50 +26,112 @@ const TABS = [
   { to: "/app/agents", label: "Agents" },
   { to: "/app/foundry", label: "Foundry" },
   { to: "/app/journey", label: "Journey" },
+  { to: "/app/switchyard", label: "Switchyard" },
   { to: "/app/signal-box", label: "Signal Box" },
   { to: "/app/recorder", label: "Recorder" },
   { to: "/app/replay", label: "Replay" },
   { to: "/app/checks", label: "Wallet Checks" },
 ] as const;
 
-export function SettingsDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (o: boolean) => void }) {
+export function SettingsDialog({
+  open,
+  onOpenChange,
+}: {
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+}) {
   const { settings, update } = useSettings();
   const [rpc, setRpc] = useState(settings.rpc);
   const [slip, setSlip] = useState(String(settings.slippageBps / 100));
-  const rpcErr = { "mainnet-beta": validateRpc(rpc["mainnet-beta"]), devnet: validateRpc(rpc.devnet) };
+  const rpcErr = {
+    "mainnet-beta": validateRpc(rpc["mainnet-beta"]),
+    devnet: validateRpc(rpc.devnet),
+  };
   const slipNum = Number(slip);
-  const slipErr = !Number.isFinite(slipNum) || slipNum <= 0 || slipNum > 50 ? "Slippage must be between 0.01% and 50%" : null;
+  const slipErr =
+    !Number.isFinite(slipNum) || slipNum <= 0 || slipNum > 50
+      ? "Slippage must be between 0.01% and 50%"
+      : null;
   return (
-    <Dialog open={open} onOpenChange={(o) => { if (o) { setRpc(settings.rpc); setSlip(String(settings.slippageBps / 100)); } onOpenChange(o); }}>
+    <Dialog
+      open={open}
+      onOpenChange={(o) => {
+        if (o) {
+          setRpc(settings.rpc);
+          setSlip(String(settings.slippageBps / 100));
+        }
+        onOpenChange(o);
+      }}
+    >
       <DialogContent className="max-h-[90vh] overflow-y-auto rounded-none border-line bg-midnight text-cream">
         <DialogTitle className="display text-2xl">Terminal settings</DialogTitle>
-        <DialogDescription className="text-cream/75">Stored only in this browser.</DialogDescription>
+        <DialogDescription className="text-cream/75">
+          Stored only in this browser.
+        </DialogDescription>
         <div className="flex flex-col gap-5">
           <div>
             <p className="station-code mb-2 text-cream/80">Cluster</p>
-            <Segmented<Cluster> label="Cluster" value={settings.cluster} onChange={(c) => update({ cluster: c })} options={[{ value: "mainnet-beta", label: "Mainnet" }, { value: "devnet", label: "Devnet" }]} />
-            <p className="mt-2 text-xs text-cream/65">The Meteora pool list API is mainnet-only. On devnet, open pools by address.</p>
+            <Segmented<Cluster>
+              label="Cluster"
+              value={settings.cluster}
+              onChange={(c) => update({ cluster: c })}
+              options={[
+                { value: "mainnet-beta", label: "Mainnet" },
+                { value: "devnet", label: "Devnet" },
+              ]}
+            />
+            <p className="mt-2 text-xs text-cream/65">
+              The Meteora pool list API is mainnet-only. On devnet, open pools by address.
+            </p>
           </div>
           {(["mainnet-beta", "devnet"] as const).map((c) => (
-            <Field key={c} label={`${c === "devnet" ? "Devnet" : "Mainnet"} RPC (HTTPS)`} placeholder={DEFAULT_RPC[c]} value={rpc[c]} onChange={(e) => setRpc({ ...rpc, [c]: e.target.value.trim() })} error={rpcErr[c]} hint="Leave empty for the public endpoint. Keys in URLs stay in this browser only." />
+            <Field
+              key={c}
+              label={`${c === "devnet" ? "Devnet" : "Mainnet"} RPC (HTTPS)`}
+              placeholder={DEFAULT_RPC[c]}
+              value={rpc[c]}
+              onChange={(e) => setRpc({ ...rpc, [c]: e.target.value.trim() })}
+              error={rpcErr[c]}
+              hint="Leave empty for the public endpoint. Keys in URLs stay in this browser only."
+            />
           ))}
           <div>
             <p className="station-code mb-2 text-cream/80">Slippage</p>
             <div className="flex flex-wrap gap-2">
               {SLIPPAGE_PRESETS.map((b) => (
-                <button key={b} type="button" onClick={() => setSlip(String(b / 100))} className={`station-code min-h-10 border px-3 ${Number(slip) * 100 === b ? "border-amber bg-amber text-midnight" : "border-line"}`}>
+                <button
+                  key={b}
+                  type="button"
+                  onClick={() => setSlip(String(b / 100))}
+                  className={`station-code min-h-10 border px-3 ${Number(slip) * 100 === b ? "border-amber bg-amber text-midnight" : "border-line"}`}
+                >
                   {b / 100}%
                 </button>
               ))}
             </div>
-            <Field className="mt-3" label="Custom slippage" suffix="%" value={slip} onChange={(e) => setSlip(e.target.value)} error={slipErr} inputMode="decimal" />
+            <Field
+              className="mt-3"
+              label="Custom slippage"
+              suffix="%"
+              value={slip}
+              onChange={(e) => setSlip(e.target.value)}
+              error={slipErr}
+              inputMode="decimal"
+            />
           </div>
           <label className="flex min-h-11 items-center justify-between gap-3 border border-line px-4">
             <span>
               <span className="block">Practice mode</span>
-              <span className="text-xs text-cream/65">Shows seeded fictional pools. Nothing can be transacted.</span>
+              <span className="text-xs text-cream/65">
+                Shows seeded fictional pools. Nothing can be transacted.
+              </span>
             </span>
-            <input type="checkbox" className="size-5 accent-[var(--amber)]" checked={settings.practice} onChange={(e) => update({ practice: e.target.checked })} />
+            <input
+              type="checkbox"
+              className="size-5 accent-[var(--amber)]"
+              checked={settings.practice}
+              onChange={(e) => update({ practice: e.target.checked })}
+            />
           </label>
           <Btn
             disabled={!!rpcErr["mainnet-beta"] || !!rpcErr.devnet || !!slipErr}
@@ -85,33 +153,55 @@ export function AppShell({ children }: { children: ReactNode }) {
   const { connection } = useConnection();
   useEffect(() => {
     if (!hydrated || settings.practice || settings.cluster !== "mainnet-beta") return;
-    let cancelled = false, stop: (() => void) | undefined, stopContinuity: (() => void) | undefined;
-    void Promise.all([import("@/lib/journey-capture"), import("@/lib/continuity-capture")]).then(([{ startJourneyCapture }, { startContinuityCapture }]) => {
-      if (!cancelled) {
-        const source = settings.rpc["mainnet-beta"] ? "custom" : "relay";
-        stop = startJourneyCapture(connection, source);
-        stopContinuity = startContinuityCapture(connection, source);
-      }
-    });
-    return () => { cancelled = true; stop?.(); stopContinuity?.(); };
+    let cancelled = false,
+      stop: (() => void) | undefined,
+      stopContinuity: (() => void) | undefined;
+    void Promise.all([import("@/lib/journey-capture"), import("@/lib/continuity-capture")]).then(
+      ([{ startJourneyCapture }, { startContinuityCapture }]) => {
+        if (!cancelled) {
+          const source = settings.rpc["mainnet-beta"] ? "custom" : "relay";
+          stop = startJourneyCapture(connection, source);
+          stopContinuity = startContinuityCapture(connection, source);
+        }
+      },
+    );
+    return () => {
+      cancelled = true;
+      stop?.();
+      stopContinuity?.();
+    };
   }, [hydrated, connection, settings.practice, settings.cluster, settings.rpc]);
   const [open, setOpen] = useState(false);
   return (
     <div className="flex min-h-screen flex-col bg-midnight">
-      <a href="#app-main" className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:bg-amber focus:p-2 focus:text-midnight">Skip to content</a>
+      <a
+        href="#app-main"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:bg-amber focus:p-2 focus:text-midnight"
+      >
+        Skip to content
+      </a>
       <header className="sticky top-0 z-30 border-b border-line bg-midnight">
         <div className="mx-auto flex max-w-[1500px] flex-wrap items-center justify-between gap-3 px-4 py-3 md:px-8">
           <div className="flex items-center gap-5">
-            <Link to="/" aria-label="Studio Loco home"><Wordmark size="sm" /></Link>
-            <span className="station-code hidden border border-line px-2 py-1 text-cream/75 sm:inline">{settings.cluster === "devnet" ? "Devnet" : "Mainnet"}</span>
+            <Link to="/" aria-label="Studio Loco home">
+              <Wordmark size="sm" />
+            </Link>
+            <span className="station-code hidden border border-line px-2 py-1 text-cream/75 sm:inline">
+              {settings.cluster === "devnet" ? "Devnet" : "Mainnet"}
+            </span>
           </div>
           <div className="flex items-center gap-2">
             <CaButton compact />
-            <Btn size="sm" variant="line" onClick={() => setOpen(true)} aria-label="Open settings">Settings</Btn>
+            <Btn size="sm" variant="line" onClick={() => setOpen(true)} aria-label="Open settings">
+              Settings
+            </Btn>
             <WalletButton compact />
           </div>
         </div>
-        <nav aria-label="Terminal sections" className="mx-auto flex max-w-[1500px] gap-1 overflow-x-auto px-4 md:px-8">
+        <nav
+          aria-label="Terminal sections"
+          className="mx-auto flex max-w-[1500px] gap-1 overflow-x-auto px-4 md:px-8"
+        >
           {TABS.map((t) => (
             <Link
               key={t.to}
@@ -128,12 +218,30 @@ export function AppShell({ children }: { children: ReactNode }) {
       {settings.practice && (
         <div className="bg-ochre px-4 py-2 text-center text-sm text-midnight" role="status">
           Practice mode is on — the terminal list shows fictional seeded pools.{" "}
-          <button type="button" className="underline" onClick={() => update({ practice: false })}>Return to live data</button>
+          <button type="button" className="underline" onClick={() => update({ practice: false })}>
+            Return to live data
+          </button>
         </div>
       )}
-      <main id="app-main" className="mx-auto w-full max-w-[1500px] flex-1 px-4 py-8 md:px-8"><UnsupportedWalletNotice /><ActiveTxNotice /><PendingTxList />{children}</main>
+      <main id="app-main" className="mx-auto w-full max-w-[1500px] flex-1 px-4 py-8 md:px-8">
+        <UnsupportedWalletNotice />
+        <ActiveTxNotice />
+        <PendingTxList />
+        {children}
+      </main>
       <footer className="border-t border-line px-4 py-5 text-center text-xs text-cream/55">
-        Independent interface for Meteora DLMM · <Link to="/docs" hash="risk" className="underline">Risk information</Link> · <Link to="/network" className="underline">Status</Link> · <Link to="/docs" className="underline">Docs</Link>
+        Independent interface for Meteora DLMM ·{" "}
+        <Link to="/docs" hash="risk" className="underline">
+          Risk information
+        </Link>{" "}
+        ·{" "}
+        <Link to="/network" className="underline">
+          Status
+        </Link>{" "}
+        ·{" "}
+        <Link to="/docs" className="underline">
+          Docs
+        </Link>
       </footer>
       <SettingsDialog open={open} onOpenChange={setOpen} />
     </div>
@@ -145,7 +253,9 @@ function UnsupportedWalletNotice() {
   if (!publicKey || signTransaction) return null;
   return (
     <div role="alert" className="mb-6 border border-destructive p-4 text-sm">
-      <p className="station-code text-destructive">{wallet?.adapter.name ?? "This wallet"} can't be used for transactions</p>
+      <p className="station-code text-destructive">
+        {wallet?.adapter.name ?? "This wallet"} can't be used for transactions
+      </p>
       <p className="mt-1 text-cream/85">{UNSUPPORTED_WALLET} You can still browse and read data.</p>
     </div>
   );

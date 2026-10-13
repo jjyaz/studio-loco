@@ -37,6 +37,10 @@ export interface PlanIdentity {
   sourceUpper: number;
   sourceActive: number;
   feeAssumption: string;
+  /** Local prospective evidence context, never executable imported inputs. */
+  shadowExperimentId?: string;
+  shadowDecisionId?: string;
+  shadowRecordId?: string;
 }
 
 export function planIdentityKey(i: PlanIdentity): string {
@@ -262,6 +266,13 @@ export function comparisonFact(s: PlanSnapshot, route = "/app/agents") {
     currentUpper: s.current.upper,
     feeAssumptionLamportsPerDay: s.assumptionLamportsPerDay,
     executable: false,
+    ...(s.identity.shadowExperimentId
+      ? {
+          shadowExperimentId: s.identity.shadowExperimentId,
+          shadowDecisionId: s.identity.shadowDecisionId ?? null,
+          shadowRecordId: s.identity.shadowRecordId ?? null,
+        }
+      : {}),
   };
   for (const r of s.results) {
     context[`${r.option}Sim`] = r.sim;
@@ -279,7 +290,10 @@ export function comparisonFact(s: PlanSnapshot, route = "/app/agents") {
     route,
     cluster: s.identity.cluster,
     wallet: s.identity.owner,
-    links: { proposalId: s.id },
+    links: {
+      proposalId: s.id,
+      ...(s.identity.shadowRecordId ? { recordId: s.identity.shadowRecordId } : {}),
+    },
     detail: `Planning snapshot only. ${s.results.length} options compared; nothing was signed.`,
     context,
   };

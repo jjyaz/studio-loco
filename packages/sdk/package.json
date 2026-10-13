@@ -1,7 +1,7 @@
 {
   "name": "@studio-loco/sdk",
-  "version": "0.3.0",
-  "description": "Read-only Loco client, versioned liquidity blueprints, protocol adapters, Flight Recorder analysis and MCP server",
+  "version": "0.4.0",
+  "description": "Read-only Loco client, liquidity blueprints, Journey and prospective Switchyard evidence analysis, protocol adapters and MCP server",
   "type": "module",
   "sideEffects": false,
   "license": "MIT",

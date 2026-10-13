@@ -1,20 +1,20 @@
-# Studio Loco SDK · v0.3.0
+# Studio Loco SDK · v0.4.0
 
 A read-only TypeScript/ESM client for [Studio Loco](https://studioloco.cfd/developers), with range geometry, local Flight Recorder analysis and a genuine MCP server. Browser `fetch` or Node 20+; typed runtime validation, 15-second end-to-end timeout, bounded responses and cancellation. No private keys, signing, transaction submission or private cloud access.
 
 ## Install
 
 ```sh
-npm install https://studioloco.cfd/api/public/loco/v1/sdk/0.3.0.tgz
+npm install https://studioloco.cfd/api/public/loco/v1/sdk/0.4.0.tgz
 ```
 
 This is a versioned downloadable npm package, **not a release on the npm registry**. Check the SHA-256 download header or Developer Station. Only the original code in this package is MIT licensed; dependencies retain their licenses.
 
 ```ts
-import { LocoClient, planRange, analyzeRecorderExport } from '@studio-loco/sdk';
+import { LocoClient, planRange, analyzeRecorderExport } from "@studio-loco/sdk";
 
 const loco = new LocoClient();
-const page = await loco.listPools({ perPage: 5, sort: 'tvl' });
+const page = await loco.listPools({ perPage: 5, sort: "tvl" });
 console.log(page.meta.source, page.data.pools);
 const pool = await loco.getPool(page.data.pools[0]!.address);
 // Supply actual PositionV2 and pool addresses:
@@ -31,14 +31,14 @@ const geometry = planRange({ lower: -10, upper: 9, active: 12 });
 
 Every live response is `{ ok: true, data, meta }`; `meta` includes `apiVersion: "1"`, cluster `mainnet-beta`, source and `observedAt` (Unix ms). A position also carries `slot` for the pool/position snapshot and `mintSlot` for a subsequent mint read at or above it. `LocoError` carries `code`, `status` and `retryable`. Reads do not retry automatically. `signal` can cancel every client method. Unknown fields are stripped from responses for additive v1 compatibility; wrong API version, cluster or invalid types fail.
 
-| Method | Source | Scope |
-| --- | --- | --- |
-| `capabilities()` | Studio Loco | Truthful features, limits, exclusions |
-| `listPools(query)` | Meteora index | Pages 1–20, up to 25 rows; invalid rows counted as `dropped` |
-| `getPool(address)` | Meteora index | Metadata and nullable metrics, no executable quote |
-| `getPosition(address, pool)` | Solana confirmed | Genesis, DLMM program/discriminator, pool binding, owner, mints/program/decimals, exact range |
-| `planRange(input)` | Local | Keep/recenter/optional wider geometry, up to 69 bins |
-| `analyzeRecorderExport(bundle)` | Local export | Shared strict v1 model, duplicate/invalid/link/confirmation consistency counts |
+| Method                          | Source           | Scope                                                                                         |
+| ------------------------------- | ---------------- | --------------------------------------------------------------------------------------------- |
+| `capabilities()`                | Studio Loco      | Truthful features, limits, exclusions                                                         |
+| `listPools(query)`              | Meteora index    | Pages 1–20, up to 25 rows; invalid rows counted as `dropped`                                  |
+| `getPool(address)`              | Meteora index    | Metadata and nullable metrics, no executable quote                                            |
+| `getPosition(address, pool)`    | Solana confirmed | Genesis, DLMM program/discriminator, pool binding, owner, mints/program/decimals, exact range |
+| `planRange(input)`              | Local            | Keep/recenter/optional wider geometry, up to 69 bins                                          |
+| `analyzeRecorderExport(bundle)` | Local export     | Shared strict v1 model, duplicate/invalid/link/confirmation consistency counts                |
 
 An indexed response is not a chain snapshot. Null is unavailable, never zero. `hasMore` describes the index; page 20 is the API cap. Position reads do not calculate balances, fees or PnL and cannot authorize execution. The full app's Rebalance Planner still performs native builds, simulations, cost checks and a fresh wallet review. Recorder contents remain user-supplied claims; analysis does not independently confirm receipts.
 
@@ -59,13 +59,18 @@ For stdio hosts:
   "mcpServers": {
     "studio-loco": {
       "command": "npx",
-      "args": ["--yes", "--package", "https://studioloco.cfd/api/public/loco/v1/sdk/0.3.0.tgz", "loco-mcp"]
+      "args": [
+        "--yes",
+        "--package",
+        "https://studioloco.cfd/api/public/loco/v1/sdk/0.4.0.tgz",
+        "loco-mcp"
+      ]
     }
   }
 }
 ```
 
-Add `--local-evidence` to explicitly enable an eighth **local-only** `loco_analyze_recorder_export` tool. It accepts an exported bundle as input, uses memory only, and never uploads it or reads arbitrary files. The hosted server does not register it. Stdout is reserved for JSON-RPC. `loco-mcp --help` explains configuration; `--base-url` accepts HTTPS or localhost for development.
+Add `--local-evidence` to explicitly enable three **local-only** tools: `loco_analyze_recorder_export`, `loco_analyze_continuity_export` and `loco_analyze_switchyard_export`. It accepts an exported bundle as input, uses memory only, and never uploads it or reads arbitrary files. The hosted server does not register it. Stdout is reserved for JSON-RPC. `loco-mcp --help` explains configuration; `--base-url` accepts HTTPS or localhost for development.
 
 ## API
 
@@ -80,12 +85,14 @@ From the repository root: `npm run sdk:build`, `npm run sdk:release` (reproducib
 Export one saved revision from [Strategy Foundry](https://studioloco.cfd/app/foundry). It includes a format/version, immutable identity and revision, exact mainnet pool/mints/bin step, decimal X/Y budgets, relative per-token weights, optional buy/sell ladders and action guards. It excludes wallet identity, RPC credentials, signers, transactions and private history.
 
 ```ts
-import { inspectBlueprint, compileBlueprint, protocolAdapters } from '@studio-loco/sdk';
+import { inspectBlueprint, compileBlueprint, protocolAdapters } from "@studio-loco/sdk";
 
 const inspection = await inspectBlueprint(exportedBlueprint);
 console.log(inspection.digest, inspection.executable); // false
 const geometry = compileBlueprint(exportedBlueprint, {
-  activeBinId: observedActiveBin, decimalsX: verifiedXDecimals, decimalsY: verifiedYDecimals,
+  activeBinId: observedActiveBin,
+  decimalsX: verifiedXDecimals,
+  decimalsY: verifiedYDecimals,
 });
 console.log(geometry.bins); // exact integer nominal budgets, not actual deposited balances
 console.log(protocolAdapters()); // ordinary DLMM; Pro unverified and disabled
@@ -100,9 +107,23 @@ Strict imports reject unknown keys, instructions, RPCs, invalid budget precision
 `analyzeContinuityExport(bundle)` validates the app's generated strict continuity contracts and reports recorded strategy/account/chapter/move counts and deduplicated reported network fees. It returns `chainVerified: false` and `executable: false`; supplied confirmations and ancestry have not been rechecked. The 10 MB decoder rejects invalid relations, duplicate strategy IDs, unsafe raw amounts and unknown fields.
 
 ```ts
-import { analyzeContinuityExport } from '@studio-loco/sdk';
+import { analyzeContinuityExport } from "@studio-loco/sdk";
 const summary = analyzeContinuityExport(exportedContinuity);
 console.log(summary.chaptersRecorded, summary.moveStatesRecorded);
 ```
 
-Local stdio with `--local-evidence` also registers `loco_analyze_continuity_export`. It receives a caller-supplied bundle in memory; it does not read files, upload data, open a wallet or sign. Neither evidence-analysis tool is registered on the public HTTP MCP. SDK releases 0.1.0, 0.1.1 and 0.2.0 remain immutable at their existing download URLs; 0.3.0 is downloadable from Loco and is not published to the npm registry.
+Local stdio with `--local-evidence` also registers `loco_analyze_continuity_export`. It receives a caller-supplied bundle in memory; it does not read files, upload data, open a wallet or sign. Evidence-analysis tools are not registered on the public HTTP MCP. SDK releases 0.1.0, 0.1.1 and 0.2.0 remain immutable at their existing download URLs; 0.3.0 is downloadable from Loco and is not published to the npm registry.
+
+## v0.4.0 · The Switchyard
+
+`analyzeSwitchyardExport(bundle)` validates strict prospective range-policy experiments and recomputes coverage from retained point observations, hypothetical decision counts, gap counts and network-fee budgets using the recorded user assumption. It returns `chainVerified: false`, `executable: false`, and `model: "range-policy-only"`.
+
+```js
+import { analyzeSwitchyardExport } from "@studio-loco/sdk";
+const report = analyzeSwitchyardExport(exportedSwitchyard);
+console.log(report.experiments[0]?.scorecards);
+```
+
+Coverage is a fraction of observed samples, not time in range. A sample is scored against the range that existed before its policy decision. Hypothetical actions assume immediate settlement after recording; token inventory, swaps, latency, slippage, earned fees and PnL are not modeled. Read failures and pauses reset the gap baseline. The app seals policy v1, retains 360 scored inputs per experiment and reports omitted history. Supplied files cannot authenticate source accounts, timestamps or chain history.
+
+Opt-in local stdio adds `loco_analyze_switchyard_export`; no arbitrary file reads, upload or wallet access. The public HTTP MCP stays at seven tools. Direct SDK downloads 0.1.0, 0.1.1, 0.2.0 and 0.3.0 remain immutable. SDK 0.4.0 is downloadable from Loco, not published to the npm registry.

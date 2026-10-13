@@ -51,6 +51,7 @@ const Search = z.object({
   owner: z.string().max(44).optional(),
   kind: z.enum(["position", "order"]).optional(),
   blueprint: z.string().max(80).optional(),
+  continuity: z.string().max(180).optional(),
   alert: z.string().uuid().optional(),
 });
 export const Route = createFileRoute("/app/journey")({
@@ -80,7 +81,9 @@ export function JourneyBoard({ initial = {} }: { initial?: z.infer<typeof Search
   const { connection } = useConnection(),
     { settings, hydrated } = useSettings();
   const [rows, setRows] = useState<Journey[]>([]),
-    [selected, setSelected] = useState("");
+    [selected, setSelected] = useState(
+      initial.account && initial.kind ? initial.kind + ":" + initial.account : "",
+    );
   const [records, setRecords] = useState<FlightRecord[]>([]),
     [blueprints, setBlueprints] = useState<SavedBlueprint[]>([]);
   const [ready, setReady] = useState(false),
@@ -458,8 +461,36 @@ export function JourneyBoard({ initial = {} }: { initial?: z.infer<typeof Search
           <Stat label="Saved snapshots" value={rows.reduce((n, j) => n + j.snapshots.length, 0)} />
         </div>
       </section>
-      <ContinuityBoard journeys={rows} records={records} live={live} source={source} blueprint={initial.blueprint}
-        onAccount={(id) => { setSelected(id); document.getElementById("account-observations")?.scrollIntoView({ block: "start" }); }} />
+      <ContinuityBoard
+        journeys={rows}
+        records={records}
+        live={live}
+        source={source}
+        blueprint={initial.blueprint}
+        strategyId={initial.continuity}
+        onAccount={(id) => {
+          setSelected(id);
+          document.getElementById("account-observations")?.scrollIntoView({ block: "start" });
+        }}
+      />
+      <Panel tone="cobalt">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <h2 className="display text-2xl">Give the next decision another track.</h2>
+            <p className="mt-2 text-sm text-cream/70">
+              The Switchyard compares this account with sealed prospective range policies, then
+              links their decisions to Flight Recorder.
+            </p>
+          </div>
+          <Link
+            to="/app/switchyard"
+            search={{ journey: rows.find((j) => j.id === selected && j.kind === "position")?.id }}
+            className="inline-flex min-h-11 items-center gap-2 border border-amber px-4 text-sm text-amber"
+          >
+            Open The Switchyard <ArrowRight size={16} />
+          </Link>
+        </div>
+      </Panel>
       <div id="account-observations" className="scroll-mt-28" />
       {!live && (
         <Notice tone="warn" title="Mainnet live mode required">
