@@ -19,6 +19,7 @@ import { Route as TokenRouteImport } from './routes/token'
 import { Route as AppIndexRouteImport } from './routes/app.index'
 import { Route as AppAgentsRouteImport } from './routes/app.agents'
 import { Route as AppChecksRouteImport } from './routes/app.checks'
+import { Route as AppConductorRouteImport } from './routes/app.conductor'
 import { Route as AppDispatchRouteImport } from './routes/app.dispatch'
 import { Route as AppFoundryRouteImport } from './routes/app.foundry'
 import { Route as AppJourneyRouteImport } from './routes/app.journey'
@@ -87,6 +88,11 @@ const AppAgentsRoute = AppAgentsRouteImport.update({
 const AppChecksRoute = AppChecksRouteImport.update({
   id: '/checks',
   path: '/checks',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppConductorRoute = AppConductorRouteImport.update({
+  id: '/conductor',
+  path: '/conductor',
   getParentRoute: () => AppRoute,
 } as any)
 const AppDispatchRoute = AppDispatchRouteImport.update({
@@ -196,6 +202,7 @@ export interface FileRoutesByFullPath {
   '/token': typeof TokenRoute
   '/app/agents': typeof AppAgentsRoute
   '/app/checks': typeof AppChecksRoute
+  '/app/conductor': typeof AppConductorRoute
   '/app/dispatch': typeof AppDispatchRoute
   '/app/foundry': typeof AppFoundryRoute
   '/app/journey': typeof AppJourneyRoute
@@ -226,6 +233,7 @@ export interface FileRoutesByTo {
   '/token': typeof TokenRoute
   '/app/agents': typeof AppAgentsRoute
   '/app/checks': typeof AppChecksRoute
+  '/app/conductor': typeof AppConductorRoute
   '/app/dispatch': typeof AppDispatchRoute
   '/app/foundry': typeof AppFoundryRoute
   '/app/journey': typeof AppJourneyRoute
@@ -258,6 +266,7 @@ export interface FileRoutesById {
   '/token': typeof TokenRoute
   '/app/agents': typeof AppAgentsRoute
   '/app/checks': typeof AppChecksRoute
+  '/app/conductor': typeof AppConductorRoute
   '/app/dispatch': typeof AppDispatchRoute
   '/app/foundry': typeof AppFoundryRoute
   '/app/journey': typeof AppJourneyRoute
@@ -291,6 +300,7 @@ export interface FileRouteTypes {
     | '/token'
     | '/app/agents'
     | '/app/checks'
+    | '/app/conductor'
     | '/app/dispatch'
     | '/app/foundry'
     | '/app/journey'
@@ -321,6 +331,7 @@ export interface FileRouteTypes {
     | '/token'
     | '/app/agents'
     | '/app/checks'
+    | '/app/conductor'
     | '/app/dispatch'
     | '/app/foundry'
     | '/app/journey'
@@ -352,6 +363,7 @@ export interface FileRouteTypes {
     | '/token'
     | '/app/agents'
     | '/app/checks'
+    | '/app/conductor'
     | '/app/dispatch'
     | '/app/foundry'
     | '/app/journey'
@@ -461,6 +473,13 @@ declare module '@tanstack/react-router' {
       path: '/checks'
       fullPath: '/app/checks'
       preLoaderRoute: typeof AppChecksRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/conductor': {
+      id: '/app/conductor'
+      path: '/conductor'
+      fullPath: '/app/conductor'
+      preLoaderRoute: typeof AppConductorRouteImport
       parentRoute: typeof AppRoute
     }
     '/app/dispatch': {
@@ -602,6 +621,7 @@ declare module '@tanstack/react-router' {
 interface AppRouteChildren {
   AppAgentsRoute: typeof AppAgentsRoute
   AppChecksRoute: typeof AppChecksRoute
+  AppConductorRoute: typeof AppConductorRoute
   AppDispatchRoute: typeof AppDispatchRoute
   AppFoundryRoute: typeof AppFoundryRoute
   AppJourneyRoute: typeof AppJourneyRoute
@@ -620,6 +640,7 @@ interface AppRouteChildren {
 const AppRouteChildren: AppRouteChildren = {
   AppAgentsRoute: AppAgentsRoute,
   AppChecksRoute: AppChecksRoute,
+  AppConductorRoute: AppConductorRoute,
   AppDispatchRoute: AppDispatchRoute,
   AppFoundryRoute: AppFoundryRoute,
   AppJourneyRoute: AppJourneyRoute,

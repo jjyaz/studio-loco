@@ -429,6 +429,9 @@ export function JourneyBoard({ initial = {} }: { initial?: z.infer<typeof Search
               <Link to="/app/foundry" className={btn({ variant: "line" })}>
                 Open Foundry <ArrowRight size={15} />
               </Link>
+              <Link to="/app/conductor" search={selected ? { journey: selected } : {}} className={btn({ variant: "line" })}>
+                Liquidity Missions <ArrowRight size={15} />
+              </Link>
             </div>
             <p className="station-code mt-6 text-[10px] text-cream/50">
               MAINNET DLMM · READ-ONLY OBSERVATION · DEVICE HISTORY

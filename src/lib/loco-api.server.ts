@@ -33,6 +33,8 @@ export const LOCO_CAPABILITIES = CapabilitiesSchema.parse({
     "local-blueprint-inspection",
     "read-only-protocol-adapters",
     "local-recorder-export-analysis",
+    "local-conductor-policy-preview",
+    "local-mission-export-analysis",
     "hosted-mcp",
     "stdio-mcp",
   ],

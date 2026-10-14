@@ -1,7 +1,7 @@
 {
   "name": "@studio-loco/sdk",
-  "version": "0.4.0",
-  "description": "Read-only Loco client, liquidity blueprints, Journey and prospective Switchyard evidence analysis, protocol adapters and MCP server",
+  "version": "0.5.0",
+  "description": "Read-only Loco client, Conductor liquidity missions, local policy preview, evidence analysis and MCP server",
   "type": "module",
   "sideEffects": false,
   "license": "MIT",

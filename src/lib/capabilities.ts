@@ -18,6 +18,14 @@ export interface CapabilityEntry {
 
 export const CAPABILITIES: CapabilityEntry[] = [
   {
+    id: "conductor",
+    area: "Observatory",
+    name: "The Conductor · liquidity missions and local policy preview",
+    status: "live",
+    notes:
+      "One ordinary mainnet DLMM pool per mission. Up to three independent exact-input probes in each direction, two loaded bin arrays per direction; verified program/discriminator/pool/mint/bin PDA and one <=9-account quote read context. Standard SPL Token only; unsupported Token-2022 transfer effects refused. Full input consumption required; coverage failures remain unknown, never zero. Integer Q64 fee-exclusive average deviation separated from total LP+protocol trading fees. Owner SOL/canonical ATA balances and optional Journey LP inventory use disclosed separate contexts. Unsigned immutable policy revisions with SHA-256 digests, per-operation top-up caps, SOL reserve, action families, expiry and cooldown; deterministic arithmetic preview never grants execution authority. Durable CAS journal (20 missions, 20 policies, 120 observations), explicit gaps, retained history, collision-safe Recorder repair and supplied-only export analysis in SDK 0.5/local opt-in MCP. Selected visible-page monitoring only. Existing Planner/Foundry require their own fresh reviews and do not enforce Conductor policy yet. No cumulative reservation, hosted mission observer, autonomous signing, PnL, Zap, wider-range execution or Pro integration.",
+  },
+  {
     id: "switchyard",
     area: "Observatory",
     name: "The Switchyard · prospective shadow range policies",

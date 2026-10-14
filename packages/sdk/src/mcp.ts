@@ -7,6 +7,7 @@ import { analyzeRecorderExport } from "./evidence.js";
 import { inspectBlueprint, protocolAdapters } from "./blueprint.js";
 import { analyzeContinuityExport } from "./continuity.js";
 import { analyzeSwitchyardExport } from "./switchyard.js";
+import { analyzeMissionExport } from "./conductor.js";
 
 export type LocoReaders = Pick<
   LocoClient,
@@ -199,6 +200,18 @@ export function createLocoMcpServer(
     () => safe(protocolAdapters),
   );
   if (options.localEvidence) {
+    server.registerTool(
+      "loco_analyze_mission_export",
+      {
+        description:
+          "Opt-in local stdio only. Validate a supplied Conductor v1 bundle, recompute policy digests and sampled liquidity-mission outcomes at recorded times. No file access, upload, chain authentication, signing, hosted private-history access, execution authority or profit claims.",
+        inputSchema: schema<{ bundle: Record<string, unknown> }>({ bundle: { type: "object" } }, [
+          "bundle",
+        ]),
+        annotations: { ...annotations, openWorldHint: false },
+      },
+      (args) => safe(() => analyzeMissionExport(args.bundle)),
+    );
     server.registerTool(
       "loco_analyze_recorder_export",
       {

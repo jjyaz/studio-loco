@@ -8,6 +8,7 @@ import { LOCO_OPENAPI } from "./loco-openapi";
 import release from "./loco-sdk-release.json";
 import foundryRelease from "./loco-sdk-0.2.0.json";
 import continuityRelease from "./loco-sdk-0.3.0.json";
+import switchyardRelease from "./loco-sdk-0.4.0.json";
 import initialRelease from "./loco-sdk-0.1.0.json";
 import previousRelease from "./loco-sdk-0.1.1.json";
 
@@ -100,6 +101,7 @@ export async function handleLocoRequest(request: Request): Promise<Response> {
     }
     const artifact = [
       release,
+      switchyardRelease,
       continuityRelease,
       foundryRelease,
       previousRelease,

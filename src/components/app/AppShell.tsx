@@ -27,6 +27,7 @@ const TABS = [
   { to: "/app/foundry", label: "Foundry" },
   { to: "/app/journey", label: "Journey" },
   { to: "/app/switchyard", label: "Switchyard" },
+  { to: "/app/conductor", label: "Conductor" },
   { to: "/app/signal-box", label: "Signal Box" },
   { to: "/app/recorder", label: "Recorder" },
   { to: "/app/replay", label: "Replay" },

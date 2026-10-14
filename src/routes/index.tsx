@@ -130,6 +130,7 @@ function RouteIndex() {
             ))}
           </ol>
           <p className="mt-10 text-cream/80">New: <Link to="/app/agents" className="underline hover:text-amber">Liquidity Agents · The Observatory</Link> — arm rules on your real positions; the agent proposes, your wallet approves.</p>
+          <p className="mt-3 text-cream/80"><Link to="/app/conductor" className="underline hover:text-amber">The Conductor · Liquidity Missions</Link> — measure two-way market depth, seal a local policy and keep the evidence.</p>
         </div>
       </div>
     </section>

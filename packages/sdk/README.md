@@ -1,11 +1,11 @@
-# Studio Loco SDK · v0.4.0
+# Studio Loco SDK · v0.5.0
 
 A read-only TypeScript/ESM client for [Studio Loco](https://studioloco.cfd/developers), with range geometry, local Flight Recorder analysis and a genuine MCP server. Browser `fetch` or Node 20+; typed runtime validation, 15-second end-to-end timeout, bounded responses and cancellation. No private keys, signing, transaction submission or private cloud access.
 
 ## Install
 
 ```sh
-npm install https://studioloco.cfd/api/public/loco/v1/sdk/0.4.0.tgz
+npm install https://studioloco.cfd/api/public/loco/v1/sdk/0.5.0.tgz
 ```
 
 This is a versioned downloadable npm package, **not a release on the npm registry**. Check the SHA-256 download header or Developer Station. Only the original code in this package is MIT licensed; dependencies retain their licenses.
@@ -62,7 +62,7 @@ For stdio hosts:
       "args": [
         "--yes",
         "--package",
-        "https://studioloco.cfd/api/public/loco/v1/sdk/0.4.0.tgz",
+        "https://studioloco.cfd/api/public/loco/v1/sdk/0.5.0.tgz",
         "loco-mcp"
       ]
     }
@@ -70,7 +70,7 @@ For stdio hosts:
 }
 ```
 
-Add `--local-evidence` to explicitly enable three **local-only** tools: `loco_analyze_recorder_export`, `loco_analyze_continuity_export` and `loco_analyze_switchyard_export`. It accepts an exported bundle as input, uses memory only, and never uploads it or reads arbitrary files. The hosted server does not register it. Stdout is reserved for JSON-RPC. `loco-mcp --help` explains configuration; `--base-url` accepts HTTPS or localhost for development.
+Add `--local-evidence` to explicitly enable four **local-only** tools: `loco_analyze_recorder_export`, `loco_analyze_continuity_export` `loco_analyze_switchyard_export` and `loco_analyze_mission_export`. It accepts an exported bundle as input, uses memory only, and never uploads it or reads arbitrary files. The hosted server does not register it. Stdout is reserved for JSON-RPC. `loco-mcp --help` explains configuration; `--base-url` accepts HTTPS or localhost for development.
 
 ## API
 
@@ -127,3 +127,26 @@ console.log(report.experiments[0]?.scorecards);
 Coverage is a fraction of observed samples, not time in range. A sample is scored against the range that existed before its policy decision. Hypothetical actions assume immediate settlement after recording; token inventory, swaps, latency, slippage, earned fees and PnL are not modeled. Read failures and pauses reset the gap baseline. The app seals policy v1, retains 360 scored inputs per experiment and reports omitted history. Supplied files cannot authenticate source accounts, timestamps or chain history.
 
 Opt-in local stdio adds `loco_analyze_switchyard_export`; no arbitrary file reads, upload or wallet access. The public HTTP MCP stays at seven tools. Direct SDK downloads 0.1.0, 0.1.1, 0.2.0 and 0.3.0 remain immutable. SDK 0.4.0 is downloadable from Loco, not published to the npm registry.
+
+## v0.5.0 · The Conductor
+
+`MissionPolicy`, `MissionScope`, `MissionSnapshot`, `MissionIntent` and `ConductorBundle` are runtime-validated shared contracts for the app's read-only liquidity missions.
+
+```js
+import { evaluateMission, previewMissionAction, analyzeMissionExport } from '@studio-loco/sdk';
+const health = evaluateMission(policy, snapshot); // met | unmet | unknown
+const preview = previewMissionAction(policy, snapshot, declaredIntent);
+console.log(preview.executable); // always false
+const report = await analyzeMissionExport(exportedMission);
+console.log(report.sampledOutcomes, report.independentlyVerified); // supplied only, false
+```
+
+The ordinary-DLMM browser adapter verifies program/discriminators, mint identity, bin PDA/pool binding and one <=9-key quote snapshot context. It loads at most two bin arrays per direction, supports standard SPL Token mints, and requires full exact-input consumption. Missing coverage is unknown, never zero. Each ladder row is an independent quote, not a sequence of swaps. The price reference is the active-bin raw Q64 price. Fee-exclusive average execution deviation uses integer cross-products and rounds up to whole bps; total trading fees include both SDK LP and protocol portions and use the actual input/output fee currency. Token-2022 transfer effects are not modeled by this adapter. SDK dynamic-fee calculation uses the read's wall-clock window with a 60-second Solana-clock skew check.
+
+Owner SOL/canonical ATA balances and optional Journey position inventory have separate read contexts. Canonical ATAs are not the whole wallet. Pool capacity includes other providers and native limit orders; it is never assigned to the tracked LP. A largest passing configured input is a sampled lower bound, not maximum depth, continuous service, future fills or profitability.
+
+Policies are locally sealed, unsigned and versioned with canonical SHA-256 digests. Top-up caps are per operation, not total deployed inventory or a cumulative reservation. The pure preview checks declared scope/action/caps/expiry/cooldown and known declared SOL costs. Unknown costs or incomplete cooldown evidence require fresh evidence. Supplied operation figures are not instruction verification, native simulation, recipient checking or wallet authority. Conductor policy is not yet enforced in existing Planner/Foundry execution flows.
+
+Mission export analysis is structural, digest and arithmetic validation. It recomputes outcomes at recorded times and never authenticates supplied chain observations or Recorder links. The opt-in **local stdio** tool `loco_analyze_mission_export` runs this analyzer in memory. Hosted HTTP MCP still has exactly seven public read-only tools, no private mission histories and no wallet access.
+
+Device journal bounds: 20 missions, 20 immutable policy revisions and 120 retained observations per mission. Earlier omitted observations are disclosed. Visible-page monitoring samples only the selected mission; hidden tabs and read failures are gaps, not continuous monitoring. Hosted missions, cumulative reservations, operation enforcement, wider native adapters, Zap and Pro are future work. Prior SDK 0.1.0/0.1.1/0.2.0/0.3.0/0.4.0 download bytes remain immutable. Direct versioned distribution only; not published to npm.

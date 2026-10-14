@@ -296,6 +296,9 @@ describe("Public API boundaries and genuine MCP", () => {
     expect(list.result.tools.map((t: { name: string }) => t.name)).not.toContain(
       "loco_analyze_switchyard_export",
     );
+    expect(list.result.tools.map((t: { name: string }) => t.name)).not.toContain(
+      "loco_analyze_mission_export",
+    );
     const call = await rpcJson(
       await handleLocoRequest(
         rpc("tools/call", {
