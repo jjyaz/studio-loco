@@ -27,11 +27,16 @@ export const OPERATION_STATES = [
 export type OperationState = (typeof OPERATION_STATES)[number];
 
 /** States whose reservation still counts as unresolved liability. */
-export const HOLDING_STATES: readonly OperationState[] = ["reserved", "signed", "submitted", "unknown"];
+export const HOLDING_STATES: readonly OperationState[] = [
+  "reserved",
+  "signed",
+  "submitted",
+  "unknown",
+];
 /** States that may never release a reservation without independent definitive evidence. */
 export const BROADCAST_STATES: readonly OperationState[] = ["submitted", "unknown"];
 
-const ALLOWED: Record<OperationState, readonly OperationState[]> = {
+export const OPERATION_TRANSITIONS: Record<OperationState, readonly OperationState[]> = {
   proposed: ["reviewed", "rejected", "expired"],
   reviewed: ["reserved", "rejected", "expired"],
   reserved: ["signed", "rejected", "expired"],
@@ -62,36 +67,47 @@ export const ExecutionBudget = z
     v: z.literal(1),
     kind: z.literal("cumulative-execution-budget"),
     scope: BudgetScope,
-    revision: z.number().int().min(1),
+    revision: z.number().int().min(1).safe(),
     policyDigest: hash,
     totalXRaw: MissionRaw,
     totalYRaw: MissionRaw,
     totalLamports: MissionRaw,
-    allowedActions: z.array(z.enum(MISSION_ACTIONS)).min(1).max(3),
+    allowedActions: z
+      .array(z.enum(MISSION_ACTIONS))
+      .min(1)
+      .max(3)
+      .refine((a) => new Set(a).size === a.length),
     expiresAt: time,
   })
   .strict();
 export type ExecutionBudget = z.infer<typeof ExecutionBudget>;
 
-export const Spend = z.object({ xRaw: MissionRaw, yRaw: MissionRaw, lamports: MissionRaw }).strict();
+export const Spend = z
+  .object({ xRaw: MissionRaw, yRaw: MissionRaw, lamports: MissionRaw })
+  .strict();
 export type Spend = z.infer<typeof Spend>;
 
 export const Operation = z
   .object({
     id,
     scope: BudgetScope,
-    budgetRevision: z.number().int().min(1),
+    budgetRevision: z.number().int().min(1).safe(),
     policyDigest: hash,
     action: z.enum(MISSION_ACTIONS),
     state: z.enum(OPERATION_STATES),
     reserved: Spend,
     consumed: Spend.nullable(),
     messageHash: hash.nullable(),
+    /** Immutable reviewed instructions/fee payer; excludes the runner's fresh blockhash. */
+    instructionHash: hash.optional(),
     signature: z.string().max(100).nullable(),
     blockhash: z.string().max(60).nullable(),
     lastValidBlockHeight: z.number().int().nonnegative().nullable(),
     evidence: z.string().max(500).nullable(),
-    history: z.array(z.object({ state: z.enum(OPERATION_STATES), at: time }).strict()).min(1),
+    history: z
+      .array(z.object({ state: z.enum(OPERATION_STATES), at: time }).strict())
+      .min(1)
+      .max(10),
   })
   .strict();
 export type Operation = z.infer<typeof Operation>;
@@ -145,13 +161,7 @@ export function remaining(budget: ExecutionBudget, ops: readonly Operation[]): S
 }
 
 export type ReserveRefusal =
-  | "no-budget"
-  | "scope"
-  | "stale-revision"
-  | "digest"
-  | "expired"
-  | "action"
-  | "exceeds";
+  "no-budget" | "scope" | "stale-revision" | "digest" | "expired" | "action" | "exceeds";
 
 /** Fails closed. `latestRevision` must come from the same atomic read as `ops`. */
 export function checkReservation(
@@ -189,20 +199,47 @@ export interface TransitionEvidence {
   evidence?: string;
 }
 
-export function transition(op: Operation, next: OperationState, at: number, ev: TransitionEvidence = {}): Operation {
-  if (!ALLOWED[op.state].includes(next))
+export function transition(
+  op: Operation,
+  next: OperationState,
+  at: number,
+  ev: TransitionEvidence = {},
+): Operation {
+  if (!Number.isSafeInteger(at) || at < op.history.at(-1)!.at)
+    throw new Error("Operation time moved backwards");
+  if (!OPERATION_TRANSITIONS[op.state].includes(next))
     throw new Error(`Illegal operation transition ${op.state} → ${next}`);
   const wasBroadcast = BROADCAST_STATES.includes(op.state);
   if (wasBroadcast && (next === "failed" || next === "expired") && !ev.independentlyVerified)
-    throw new Error("A broadcast operation releases only on independently verified failure or expiry");
-  if (next === "signed" && (!ev.signature || !ev.blockhash || !ev.messageHash))
+    throw new Error(
+      "A broadcast operation releases only on independently verified failure or expiry",
+    );
+  if (
+    next === "signed" &&
+    (!ev.signature ||
+      !ev.blockhash ||
+      !ev.messageHash ||
+      ev.lastValidBlockHeight === undefined ||
+      !Number.isSafeInteger(ev.lastValidBlockHeight) ||
+      ev.lastValidBlockHeight < 0)
+  )
     throw new Error("Signature, blockhash and message hash must persist before broadcast");
   if (wasBroadcast && next === "failed" && !ev.consumed)
-    throw new Error("A broadcast failure must record its verified charged cost (zero if it never landed)");
+    throw new Error(
+      "A broadcast failure must record its verified charged cost (zero if it never landed)",
+    );
   if (next === "confirmed" && (!ev.consumed || !ev.independentlyVerified))
     throw new Error("Confirmation needs independently verified spend");
   if (op.messageHash && ev.messageHash && ev.messageHash !== op.messageHash)
     throw new Error("Message hash changed after signing");
+  if (
+    (op.signature && ev.signature && op.signature !== ev.signature) ||
+    (op.blockhash && ev.blockhash && op.blockhash !== ev.blockhash) ||
+    (op.lastValidBlockHeight !== null &&
+      ev.lastValidBlockHeight !== undefined &&
+      op.lastValidBlockHeight !== ev.lastValidBlockHeight)
+  )
+    throw new Error("Signed transaction identity cannot change");
   return Operation.parse({
     ...op,
     state: next,
@@ -210,7 +247,8 @@ export function transition(op: Operation, next: OperationState, at: number, ev: 
     blockhash: ev.blockhash ?? op.blockhash,
     lastValidBlockHeight: ev.lastValidBlockHeight ?? op.lastValidBlockHeight,
     messageHash: ev.messageHash ?? op.messageHash,
-    consumed: next === "confirmed" || next === "failed" ? (ev.consumed ?? op.consumed) : op.consumed,
+    consumed:
+      next === "confirmed" || next === "failed" ? (ev.consumed ?? op.consumed) : op.consumed,
     evidence: ev.evidence ?? op.evidence,
     history: [...op.history, { state: next, at }],
   });

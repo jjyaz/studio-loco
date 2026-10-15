@@ -20,6 +20,8 @@ import {
 } from "./signal-box";
 import type { OutRun } from "./agents";
 import type { OrderBaseline } from "./journey-signals";
+import type { MissionObserverCursor } from "./conductor-hosted";
+import { JobTimeout } from "./job-control";
 
 const PUBLICNODE = "https://solana-rpc.publicnode.com";
 
@@ -87,7 +89,7 @@ export interface TickDeps {
     w: WatchRow,
     lastProposed: Record<string, number>,
     budgetMs: number,
-  ) => Promise<TickOutcome<OutRun | OrderBaseline>>;
+  ) => Promise<TickOutcome<OutRun | OrderBaseline | MissionObserverCursor>>;
 }
 
 export async function runTick(
@@ -166,19 +168,42 @@ export async function runTick(
         w.last_proposed && typeof w.last_proposed === "object" ? w.last_proposed : {}
       ) as Record<string, number>;
       const budget = remaining - 5_000;
-      let out: TickOutcome<OutRun | OrderBaseline>;
+      let out: TickOutcome<OutRun | OrderBaseline | MissionObserverCursor>;
+      let stopAfterCommit = false;
       try {
         const work = deps.observe
           ? deps.observe(w, lastProposed, budget)
-          : w.kind === "position"
-            ? positionWatch(connection!, w, lastProposed, budget)
-            : w.kind === "order"
-              ? orderWatch(connection!, w, lastProposed, budget)
-              : w.kind === "arb" ? arbWatch(connection!, w, lastProposed, budget)
-              : Promise.resolve(failedTick("Unknown watch kind.", lastProposed));
+          : w.kind === "mission"
+            ? (await import("./conductor-observer.server")).observeHostedMission(
+                connection!,
+                w.rule,
+                w.out_run,
+                budget,
+              )
+            : w.kind === "position"
+              ? positionWatch(connection!, w, lastProposed, budget)
+              : w.kind === "order"
+                ? orderWatch(connection!, w, lastProposed, budget)
+                : w.kind === "arb"
+                  ? arbWatch(connection!, w, lastProposed, budget)
+                  : Promise.resolve(failedTick("Unknown watch kind.", lastProposed));
         out = await withTimeout(work, budget, "Observation");
       } catch (e) {
-        out = failedTick(redact(e instanceof Error ? e.message : String(e)), lastProposed);
+        if (w.kind === "mission") {
+          const { missionObservationFailure } = await import("./conductor-observer.server");
+          try {
+            out = missionObservationFailure(
+              w.rule,
+              w.out_run,
+              redact(e instanceof Error ? e.message : String(e)),
+            );
+          } catch {
+            errors++;
+            note = "invalid hosted mission configuration; refused";
+            break;
+          }
+          stopAfterCommit = e instanceof JobTimeout || /timed out|deadline/i.test(String(e));
+        } else out = failedTick(redact(e instanceof Error ? e.message : String(e)), lastProposed);
       }
       processed++;
       // No late results: past the deadline the result is dropped, not committed.
@@ -188,7 +213,12 @@ export async function runTick(
       }
       if (!out.ok) errors++;
       const { data: res, error: ce } = await bounded(
-        admin.rpc("signal_commit", {
+        (
+          admin.rpc as (
+            name: string,
+            args: Record<string, unknown>,
+          ) => PromiseLike<{ data: unknown; error: { message: string } | null }>
+        )(w.kind === "mission" ? "conductor_observer_commit" : "signal_commit", {
           _holder: holder,
           _watch: w.id,
           _revision: w.revision,
@@ -204,6 +234,10 @@ export async function runTick(
       );
       if (ce) {
         errors++;
+        if (stopAfterCommit) {
+          note = "mission timeout and persistence error; tick stopped";
+          break;
+        }
         continue;
       }
       const r = res as { committed: boolean; reason?: string; alert_id?: string | null };
@@ -211,6 +245,10 @@ export async function runTick(
         discarded++;
         if (r.reason === "lease lost") {
           note = "lease lost; tick stopped";
+          break;
+        }
+        if (stopAfterCommit) {
+          note = "mission timeout; stale result discarded and tick stopped";
           break;
         }
         continue;
@@ -226,6 +264,10 @@ export async function runTick(
         } catch {
           note = "notification delivery unavailable; alert retained in inbox";
         }
+      }
+      if (stopAfterCommit) {
+        note = "mission read timed out; remaining work stopped to preserve drain boundary";
+        break;
       }
     }
     return { tick: tick ?? undefined, processed, errors, alerts, discarded, late };
@@ -270,21 +312,52 @@ export async function runTick(
   }
 }
 
-async function orderWatch(connection: import("@solana/web3.js").Connection, w: WatchRow,
-  lastProposed: Record<string, number>, budgetMs: number): Promise<TickOutcome<OutRun | OrderBaseline>> {
+async function orderWatch(
+  connection: import("@solana/web3.js").Connection,
+  w: WatchRow,
+  lastProposed: Record<string, number>,
+  budgetMs: number,
+): Promise<TickOutcome<OutRun | OrderBaseline>> {
   const { StoredOrderRule, OrderBaseline, orderTick } = await import("./journey-signals");
   const stored = StoredOrderRule.parse(w.rule);
-  if (!w.position || !w.pool || !w.owner) return failedTick("Order watch identity is incomplete.", lastProposed);
+  if (!w.position || !w.pool || !w.owner)
+    return failedTick("Order watch identity is incomplete.", lastProposed);
   const { JobControl } = await import("./job-control");
   const { readJourneySnapshot } = await import("./journey-chain");
-  const ctl = new JobControl(), job = ctl.begin()!;
+  const ctl = new JobControl(),
+    job = ctl.begin()!;
   try {
     const prev = OrderBaseline.safeParse(w.out_run);
-    const s = await readJourneySnapshot(connection, { kind: "order", account: w.position, pool: w.pool, owner: w.owner }, job, "server", undefined, prev.success ? prev.data.slot : 0, Math.max(1, budgetMs - 1000));
-    if (s.kind !== "order" || s.mintX !== stored.mintX || s.mintY !== stored.mintY || s.binStep !== stored.binStep) return failedTick("Order pool identity changed.", lastProposed);
-    return orderTick({ watchId: w.id, revision: w.revision, owner: w.owner, account: w.position,
-      pool: w.pool, snapshot: s, previous: w.out_run, lastProposed });
-  } finally { ctl.unmount(); ctl.end(job); }
+    const s = await readJourneySnapshot(
+      connection,
+      { kind: "order", account: w.position, pool: w.pool, owner: w.owner },
+      job,
+      "server",
+      undefined,
+      prev.success ? prev.data.slot : 0,
+      Math.max(1, budgetMs - 1000),
+    );
+    if (
+      s.kind !== "order" ||
+      s.mintX !== stored.mintX ||
+      s.mintY !== stored.mintY ||
+      s.binStep !== stored.binStep
+    )
+      return failedTick("Order pool identity changed.", lastProposed);
+    return orderTick({
+      watchId: w.id,
+      revision: w.revision,
+      owner: w.owner,
+      account: w.position,
+      pool: w.pool,
+      snapshot: s,
+      previous: w.out_run,
+      lastProposed,
+    });
+  } finally {
+    ctl.unmount();
+    ctl.end(job);
+  }
 }
 
 async function positionWatch(

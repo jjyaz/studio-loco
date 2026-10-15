@@ -23,7 +23,23 @@ export const CAPABILITIES: CapabilityEntry[] = [
     name: "The Conductor · liquidity missions and local policy preview",
     status: "live",
     notes:
-      "One ordinary mainnet DLMM pool per mission. Up to three independent exact-input probes in each direction, two loaded bin arrays per direction; verified program/discriminator/pool/mint/bin PDA and one <=9-account quote read context. Standard SPL Token only; unsupported Token-2022 transfer effects refused. Full input consumption required; coverage failures remain unknown, never zero. Integer Q64 fee-exclusive average deviation separated from total LP+protocol trading fees. Owner SOL/canonical ATA balances and optional Journey LP inventory use disclosed separate contexts. Unsigned immutable policy revisions with SHA-256 digests, per-operation top-up caps, SOL reserve, action families, expiry and cooldown; deterministic arithmetic preview never grants execution authority. Durable CAS journal (20 missions, 20 policies, 120 observations), explicit gaps, retained history, collision-safe Recorder repair and supplied-only export analysis in SDK 0.5/local opt-in MCP. Selected visible-page monitoring only. Existing Planner/Foundry require their own fresh reviews and do not enforce Conductor policy yet. No cumulative reservation, hosted mission observer, autonomous signing, PnL, Zap, wider-range execution or Pro integration.",
+      "One ordinary-mainnet DLMM pool per mission. Independent exact-input probes, bounded coherent account reads and verified program/mints/bin PDAs; unsupported or stale coverage stays unknown. Exact fee-exclusive Q64 deviation is separate from total LP+protocol fees. Owner/LP inventory uses disclosed separate contexts; pool depth is not credited to the owner. Immutable unsigned v1 policies retain per-operation top-up semantics and a non-executable arithmetic preview. Durable mission journal, retained gaps, Recorder evidence and supplied-only SDK analysis. Visible-page monitoring remains available; private hosted copies and opt-in native execution are separate explicit controls below.",
+  },
+  {
+    id: "conductor-operations",
+    area: "Observatory",
+    name: "Conductor operation ledger and enforced device budgets",
+    status: "live",
+    notes:
+      "Separate cumulative execution budgets, atomic cross-tab IndexedDB reservations and immutable operation lifecycles share the mission database. Consumed and unresolved liabilities survive policy/budget revisions; active owner/network operations serialize and deletion cannot orphan obligations. Native one-position fee claims, single-range withdrawals and atomic zero-top-up rebalances without reward pools use installed-IDL account/recipient checks. Fresh exact simulation, cost/reserve, cooldown, expiry, policy and reservation checks run before signing and after wallet approval. Signature/message/blockhash persist before broadcast. Reconciliation verifies receipt message and gross funding/fees; unknown holds are not auto-released or resent. Limits: 20 budgets, 200 operations; no silent financial truncation. Policies apply to supported Conductor actions on this device, not other clients/stations or on-chain delegated authority. SDK 0.6/local-only MCP inspects supplied exports without authentication. Signed funded-wallet acceptance remains user-run; no Pro, Zap, token top-up or multi-stage adapter.",
+  },
+  {
+    id: "conductor-hosted",
+    area: "Observatory",
+    name: "Private hosted mission observation",
+    status: "live",
+    notes:
+      "Explicit account consent copies a mission policy into RLS-private Signal Box storage. Existing five-minute cron and global unexpired lease drive bounded verified mainnet reads; server source resolution checks positions independently rather than reading browser storage. Atomic owner/revision/status/expiry/digest-bound commits, retained read gaps and monotonic attempt counters; 60 retained samples and omitted counts. Five shared watches per account. Pause/resume/newer-policy copy/remove controls; a policy may become stale between ticks. No worker signer, budget authority, autonomous execution or public private-history MCP.",
   },
   {
     id: "switchyard",

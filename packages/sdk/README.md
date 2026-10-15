@@ -1,11 +1,11 @@
-# Studio Loco SDK · v0.5.0
+# Studio Loco SDK · v0.6.0
 
 A read-only TypeScript/ESM client for [Studio Loco](https://studioloco.cfd/developers), with range geometry, local Flight Recorder analysis and a genuine MCP server. Browser `fetch` or Node 20+; typed runtime validation, 15-second end-to-end timeout, bounded responses and cancellation. No private keys, signing, transaction submission or private cloud access.
 
 ## Install
 
 ```sh
-npm install https://studioloco.cfd/api/public/loco/v1/sdk/0.5.0.tgz
+npm install https://studioloco.cfd/api/public/loco/v1/sdk/0.6.0.tgz
 ```
 
 This is a versioned downloadable npm package, **not a release on the npm registry**. Check the SHA-256 download header or Developer Station. Only the original code in this package is MIT licensed; dependencies retain their licenses.
@@ -62,7 +62,7 @@ For stdio hosts:
       "args": [
         "--yes",
         "--package",
-        "https://studioloco.cfd/api/public/loco/v1/sdk/0.5.0.tgz",
+        "https://studioloco.cfd/api/public/loco/v1/sdk/0.6.0.tgz",
         "loco-mcp"
       ]
     }
@@ -70,7 +70,7 @@ For stdio hosts:
 }
 ```
 
-Add `--local-evidence` to explicitly enable four **local-only** tools: `loco_analyze_recorder_export`, `loco_analyze_continuity_export` `loco_analyze_switchyard_export` and `loco_analyze_mission_export`. It accepts an exported bundle as input, uses memory only, and never uploads it or reads arbitrary files. The hosted server does not register it. Stdout is reserved for JSON-RPC. `loco-mcp --help` explains configuration; `--base-url` accepts HTTPS or localhost for development.
+Add `--local-evidence` to explicitly enable five **local-only** tools: `loco_analyze_recorder_export`, `loco_analyze_continuity_export` `loco_analyze_switchyard_export` `loco_analyze_mission_export` and `loco_analyze_operation_ledger`. It accepts an exported bundle as input, uses memory only, and never uploads it or reads arbitrary files. The hosted server does not register it. Stdout is reserved for JSON-RPC. `loco-mcp --help` explains configuration; `--base-url` accepts HTTPS or localhost for development.
 
 ## API
 
@@ -133,7 +133,7 @@ Opt-in local stdio adds `loco_analyze_switchyard_export`; no arbitrary file read
 `MissionPolicy`, `MissionScope`, `MissionSnapshot`, `MissionIntent` and `ConductorBundle` are runtime-validated shared contracts for the app's read-only liquidity missions.
 
 ```js
-import { evaluateMission, previewMissionAction, analyzeMissionExport } from '@studio-loco/sdk';
+import { evaluateMission, previewMissionAction, analyzeMissionExport } from "@studio-loco/sdk";
 const health = evaluateMission(policy, snapshot); // met | unmet | unknown
 const preview = previewMissionAction(policy, snapshot, declaredIntent);
 console.log(preview.executable); // always false
@@ -150,3 +150,13 @@ Policies are locally sealed, unsigned and versioned with canonical SHA-256 diges
 Mission export analysis is structural, digest and arithmetic validation. It recomputes outcomes at recorded times and never authenticates supplied chain observations or Recorder links. The opt-in **local stdio** tool `loco_analyze_mission_export` runs this analyzer in memory. Hosted HTTP MCP still has exactly seven public read-only tools, no private mission histories and no wallet access.
 
 Device journal bounds: 20 missions, 20 immutable policy revisions and 120 retained observations per mission. Earlier omitted observations are disclosed. Visible-page monitoring samples only the selected mission; hidden tabs and read failures are gaps, not continuous monitoring. Hosted missions, cumulative reservations, operation enforcement, wider native adapters, Zap and Pro are future work. Prior SDK 0.1.0/0.1.1/0.2.0/0.3.0/0.4.0 download bytes remain immutable. Direct versioned distribution only; not published to npm.
+
+## v0.6.0 · Operations, budgets and evidence
+
+`ExecutionBudget`, `BudgetScope`, `Operation`, `Spend`, `checkReservation`, `ledgerTotals`, `remaining` and `transition` are shared unsigned contracts. Per-operation mission token caps retain their original meaning. Cumulative budgets count spending and unresolved reservations across every budget revision. `exportOperationLedger` and `analyzeOperationLedger` validate supplied mission/budget/history bindings and recompute reported totals; `independentlyVerified` and `executable` remain false.
+
+Opt-in local stdio adds `loco_analyze_operation_ledger`; hosted HTTP MCP still registers exactly seven public tools. The SDK never creates reservations, accesses private cloud accounts, signs, broadcasts or authenticates supplied receipts. In the app, the durable device ledger and strict native decoder protect supported wallet-approved actions before signing and before broadcast. An opt-in private Signal Box copy observes mission configurations every five minutes without execution authority.
+
+The native app adapter supports one-position swap-fee claims, single range withdrawals with WSOL retained, and atomic zero-top-up rebalances without reward-harvesting pools. Staged/multiple transactions, arbitrary transfers, token approvals/closes, token top-ups, Zap and Pro refuse. Gross SOL funding plus charged fees consume budget; refunds do not replenish it automatically. Unknown signed actions stay held until independent reconciliation. Financial history is not silently truncated. Policies/budgets apply on this device and are not on-chain delegated permissions.
+
+Download archives 0.1.0 through 0.5.0 are immutable. SDK 0.6.0 is a direct versioned download, not an npm-registry publication.

@@ -11,6 +11,9 @@ const mocks = vi.hoisted(() => ({
   observe: vi.fn(),
   repair: vi.fn(),
 }));
+// This suite isolates the existing quote/policy workbench; operation and hosted panels have dedicated integration suites.
+vi.mock("@/components/app/ConductorOperations", () => ({ ConductorOperations: () => null }));
+vi.mock("@/components/app/ConductorHosted", () => ({ ConductorHosted: () => null }));
 vi.mock("@solana/wallet-adapter-react", () => ({
   useConnection: () => ({ connection: mocks.connection }),
   useWallet: () => ({ publicKey: null }),

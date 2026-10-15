@@ -1,0 +1,45 @@
+{
+  "at": "2026-10-15T00:58:56.759Z",
+  "signed": false,
+  "broadcast": false,
+  "actions": [
+    {
+      "action": "withdraw",
+      "status": "verified-unsigned",
+      "reason": null,
+      "slot": 457046328,
+      "instructions": [
+        "compute-unit-limit",
+        "create-owner-ata",
+        "create-owner-ata",
+        "remove_liquidity_by_range2"
+      ],
+      "instructionHash": "1b59235d7b2e05c49cbfd131a44c44dbdbdb05906e3550e39594bef30552d110"
+    },
+    {
+      "action": "rebalance",
+      "status": "verified-unsigned",
+      "reason": null,
+      "slot": 457046346,
+      "instructions": [
+        "compute-unit-limit",
+        "create-owner-ata",
+        "rebalance_liquidity"
+      ],
+      "instructionHash": "e4ae3509a58810a2a301bde1a8eb5d70938e2db01cf283350ea62368f1087343"
+    },
+    {
+      "action": "claim",
+      "status": "verified-unsigned",
+      "reason": null,
+      "slot": 457046422,
+      "instructions": [
+        "compute-unit-limit",
+        "create-owner-ata",
+        "create-owner-ata",
+        "claim_fee2"
+      ],
+      "instructionHash": "895e106b8c7fe7dec2ea35caf38509979f699220483a49a927b3da2d98a0953f"
+    }
+  ]
+}

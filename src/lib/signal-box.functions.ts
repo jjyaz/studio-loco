@@ -29,21 +29,30 @@ export const createWatch = createServerFn({ method: "POST" })
     const a = await admin();
     if (data.kind === "order") {
       const { JobControl } = await import("./job-control");
-      const ctl = new JobControl(), job = ctl.begin()!;
+      const ctl = new JobControl(),
+        job = ctl.begin()!;
       try {
         const { readJourneySnapshot } = await import("./journey-chain");
         const { orderBaseline } = await import("./journey-signals");
         const s = await readJourneySnapshot(await conn(), data, job, "server");
         if (s.kind !== "order") throw new Error("Native order verification failed.");
         const { error } = await a.from("signal_watches").insert({
-          user_id: context.userId, kind: "order", label: data.label || "Journey · native order",
-          position: data.account, pool: data.pool, owner: data.owner,
+          user_id: context.userId,
+          kind: "order",
+          label: data.label || "Journey · native order",
+          position: data.account,
+          pool: data.pool,
+          owner: data.owner,
           rule: { mintX: s.mintX, mintY: s.mintY, binStep: s.binStep } as never,
-          out_run: orderBaseline(s) as never, expires_at: ttl(),
+          out_run: orderBaseline(s) as never,
+          expires_at: ttl(),
         });
         return error ? { ok: false as const, error: error.message } : { ok: true as const };
-      } catch (e) { return { ok: false as const, error: redact(e instanceof Error ? e.message : String(e)) }; }
-      finally { ctl.end(job); }
+      } catch (e) {
+        return { ok: false as const, error: redact(e instanceof Error ? e.message : String(e)) };
+      } finally {
+        ctl.end(job);
+      }
     }
     if (data.kind === "arb") {
       const v = parseArbConfig(data.config);
@@ -93,12 +102,14 @@ export const setWatchStatus = createServerFn({ method: "POST" })
     const a = await admin();
     const { data: w, error: re } = await a
       .from("signal_watches")
-      .select("revision,status")
+      .select("revision,status,kind")
       .eq("id", data.id)
       .eq("user_id", context.userId)
       .maybeSingle();
     if (re) return { ok: false as const, error: "Could not read the watch. Nothing changed." };
     if (!w) return { ok: false as const, error: "Watch not found" };
+    if (w.kind === "mission")
+      return { ok: false as const, error: "Manage hosted mission revisions in Conductor." };
     if (w.status === data.status)
       return { ok: true as const, revision: w.revision, unchanged: true as const };
     const { data: rows, error } = await a
@@ -132,6 +143,7 @@ export const renewWatch = createServerFn({ method: "POST" })
       .update({ expires_at: ttl(), updated_at: new Date().toISOString() })
       .eq("id", data.id)
       .eq("user_id", context.userId)
+      .neq("kind", "mission")
       .select("expires_at");
     if (error)
       return { ok: false as const, error: "Could not renew the watch. Its expiry is unchanged." };
