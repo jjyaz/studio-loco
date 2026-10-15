@@ -12,6 +12,8 @@ import {
 } from "./conductor";
 const DB = "studio-loco-conductor",
   STORE = "missions";
+export const BUDGETS = "budgets",
+  OPERATIONS = "operations";
 let opening: Promise<IDBDatabase> | null = null,
   channel: BroadcastChannel | null = null;
 const listeners = new Set<() => void>();
@@ -41,13 +43,18 @@ function open() {
       reject(new Error("Persistent device storage is unavailable; no mission was saved."));
       return;
     }
-    const request = indexedDB.open(DB, 1);
+    const request = indexedDB.open(DB, 2);
     let settled = false;
     const timer = setTimeout(() => {
       settled = true;
       reject(new Error("Conductor storage timed out."));
     }, 3000);
-    request.onupgradeneeded = () => request.result.createObjectStore(STORE, { keyPath: "id" });
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE, { keyPath: "id" });
+      if (!db.objectStoreNames.contains(BUDGETS)) db.createObjectStore(BUDGETS, { keyPath: "key" });
+      if (!db.objectStoreNames.contains(OPERATIONS)) db.createObjectStore(OPERATIONS, { keyPath: "id" });
+    };
     request.onsuccess = () => {
       clearTimeout(timer);
       if (settled) request.result.close();
@@ -112,6 +119,51 @@ async function tx<T>(
     }
   });
 }
+/** One atomic readwrite/readonly transaction across several stores in the same database. */
+export async function ledgerTx<T>(
+  stores: string[],
+  mode: IDBTransactionMode,
+  body: (t: IDBTransaction, done: (v: T) => void, fail: (message: string) => void) => void,
+): Promise<T> {
+  const db = await open();
+  return new Promise<T>((resolve, reject) => {
+    let t: IDBTransaction;
+    try {
+      t = db.transaction(stores, mode);
+    } catch {
+      reject(new Error("Conductor ledger storage is unavailable."));
+      return;
+    }
+    let value: T,
+      reason = "Conductor ledger storage failed; nothing was reserved.";
+    const timer = setTimeout(() => {
+      reason = "Conductor ledger storage timed out; nothing was reserved.";
+      try {
+        t.abort();
+      } catch {}
+      reject(new Error(reason));
+    }, 3000);
+    t.oncomplete = () => {
+      clearTimeout(timer);
+      resolve(value);
+    };
+    t.onerror = t.onabort = () => {
+      clearTimeout(timer);
+      const e = t.error;
+      reject(new Error(e?.name === "QuotaExceededError" ? "Device storage is full; nothing was saved." : reason));
+    };
+    try {
+      body(t, (v) => (value = v), (m) => {
+        reason = m;
+        t.abort();
+      });
+    } catch (e) {
+      reason = e instanceof Error ? e.message : reason;
+      t.abort();
+    }
+  });
+}
+export const notifyConductor = changed;
 export const listMissions = () =>
   tx<ConductorMission[]>("readonly", (s, done, fail) => {
     const r = s.getAll();
@@ -313,15 +365,26 @@ export const acknowledgeMissionFact = (id: string, recordId: string) =>
     return { ...m, recorderLinks: [...m.recorderLinks, { recordId, savedAt: Date.now() }] };
   });
 export async function removeMission(id: string, revision: number) {
-  await tx<void>("readwrite", (s, done, fail) => {
-    const r = s.get(id);
+  await ledgerTx<void>([STORE, OPERATIONS], "readwrite", (t, done, fail) => {
+    const s = t.objectStore(STORE),
+      r = s.get(id);
     r.onsuccess = () => {
       if (!r.result || r.result.revision !== revision) {
         fail("Mission changed or was already removed. Reload before removing.");
         return;
       }
-      s.delete(id);
-      done(undefined);
+      const ops = t.objectStore(OPERATIONS).getAll();
+      ops.onsuccess = () => {
+        const pending = (ops.result as { missionId: string; op: { state: string } }[]).filter(
+          (o) => o.missionId === id && !["confirmed", "failed", "rejected", "expired"].includes(o.op.state),
+        );
+        if (pending.length) {
+          fail(`This mission has ${pending.length} unresolved operation(s). Reconcile them before removing it.`);
+          return;
+        }
+        s.delete(id);
+        done(undefined);
+      };
     };
   });
   changed();
