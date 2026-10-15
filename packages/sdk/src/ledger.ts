@@ -121,6 +121,8 @@ export function ledgerTotals(scope: BudgetScope, ops: readonly Operation[]) {
   for (const op of ops) {
     if (!sameScope(op.scope, scope)) continue;
     if (op.state === "confirmed") consumed = add(consumed, op.consumed ?? op.reserved);
+    // A landed-but-failed transaction still charged its verified network cost.
+    else if (op.state === "failed" && op.consumed) consumed = add(consumed, op.consumed);
     else if (HOLDING_STATES.includes(op.state)) {
       reserved = add(reserved, op.reserved);
       unresolved++;
@@ -195,6 +197,8 @@ export function transition(op: Operation, next: OperationState, at: number, ev: 
     throw new Error("A broadcast operation releases only on independently verified failure or expiry");
   if (next === "signed" && (!ev.signature || !ev.blockhash || !ev.messageHash))
     throw new Error("Signature, blockhash and message hash must persist before broadcast");
+  if (wasBroadcast && next === "failed" && !ev.consumed)
+    throw new Error("A broadcast failure must record its verified charged cost (zero if it never landed)");
   if (next === "confirmed" && (!ev.consumed || !ev.independentlyVerified))
     throw new Error("Confirmation needs independently verified spend");
   if (op.messageHash && ev.messageHash && ev.messageHash !== op.messageHash)
@@ -206,7 +210,7 @@ export function transition(op: Operation, next: OperationState, at: number, ev: 
     blockhash: ev.blockhash ?? op.blockhash,
     lastValidBlockHeight: ev.lastValidBlockHeight ?? op.lastValidBlockHeight,
     messageHash: ev.messageHash ?? op.messageHash,
-    consumed: next === "confirmed" ? ev.consumed! : op.consumed,
+    consumed: next === "confirmed" || next === "failed" ? (ev.consumed ?? op.consumed) : op.consumed,
     evidence: ev.evidence ?? op.evidence,
     history: [...op.history, { state: next, at }],
   });
