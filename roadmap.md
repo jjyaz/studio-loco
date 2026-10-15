@@ -11,3 +11,11 @@
 
 ### Journey Continuity
 Implemented local strategy lifecycle, prepared-intent/confirmed-receipt verification, named native account-role binding, non-atomic move recovery, strict supplied-evidence transfer and SDK/local MCP analysis. Funded origin/rebalance/move acceptance remains a user-wallet gate; no assistant signing, no Pro execution, no PnL or private-history public endpoint.
+
+### Conductor v2 (operation ledger / budgets / hosted observation)
+- [x] Pure SDK ledger contracts: states, cumulative budgets across revisions, fail-closed reservation checks, release rules (packages/sdk/src/ledger.ts + tests)
+- [ ] Durable cross-tab IndexedDB ledger store with atomic reserve-before-prompt
+- [ ] Instruction/recipient decoding + mission guard in shared runner (pre-sign and post-approval)
+- [ ] Conductor/Recorder/Journey UI: matrix, remaining/reserved/consumed, reconcile
+- [ ] Hosted mission observation (schema, RLS, worker reusing lease/cron)
+- [ ] SDK 0.6 release, local MCP analyzer, docs/capabilities/AGENTS
