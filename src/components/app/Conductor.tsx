@@ -52,6 +52,8 @@ import {
   type MissionScope,
 } from "@/lib/conductor";
 import hero from "@/assets/studio-loco-night-station.png.asset.json";
+import { ConductorOperations } from "./ConductorOperations";
+import { ConductorHosted } from "./ConductorHosted";
 
 const date = (n: number) => new Date(n).toLocaleString();
 const token = (mint: string, side: string) =>
@@ -405,7 +407,7 @@ export function Conductor({ initial = {} }: { initial?: { mission?: string; jour
           <div>
             <p className="station-code flex items-center gap-2 text-amber">
               <TrainFront size={16} /> Observatory · Platform 05{" "}
-              <span className="ml-2 border border-amber/40 px-2 py-1">Live reads · v1</span>
+              <span className="ml-2 border border-amber/40 px-2 py-1">Missions · operations</span>
             </p>
             <h1 className="display mt-5 text-5xl leading-[0.98] text-cream md:text-7xl">
               The Conductor<span className="text-amber">.</span>
@@ -415,7 +417,7 @@ export function Conductor({ initial = {} }: { initial?: { mission?: string; jour
             </p>
             <p className="mt-4 max-w-xl leading-7 text-cream/75">
               A control room for Meteora market depth. Set the objective, seal the rules and keep
-              evidence of every observation.
+              evidence of every observation and supported wallet action.
             </p>
             <div className="mt-7 flex flex-wrap gap-3">
               <Btn
@@ -432,6 +434,11 @@ export function Conductor({ initial = {} }: { initial?: { mission?: string; jour
               <Link to="/app/journey" className={btn({ variant: "line" })}>
                 Open Journey <ArrowRight size={16} />
               </Link>
+              {current && (
+                <a href="#conductor-operations" className={btn({ variant: "line" })}>
+                  Operation ledger <ShieldCheck size={16} />
+                </a>
+              )}
             </div>
           </div>
           <div className="self-end border border-amber/35 bg-midnight/90 p-5 backdrop-blur-sm">
@@ -465,7 +472,7 @@ export function Conductor({ initial = {} }: { initial?: { mission?: string; jour
         <div className="flex flex-wrap gap-x-6 gap-y-2 border-t border-line bg-midnight/80 px-6 py-3 station-code text-[0.65rem] text-cream/65 md:px-10">
           <span>Ordinary DLMM · mainnet</span>
           <span>Two arrays / direction</span>
-          <span>Watch-only · no signing</span>
+          <span>Watch-only reads · opt-in wallet reviews</span>
           <span>Local policy · fresh evidence</span>
         </div>
       </section>
@@ -1254,10 +1261,11 @@ export function Conductor({ initial = {} }: { initial?: { mission?: string; jour
             </div>
             <p className="mt-4 text-xs leading-5 text-cream/50">
               Historical states are recomputed at the recorded times. Exported observations are
-              supplied evidence, not authenticated transaction receipts. SDK 0.5 validates hashes
+              supplied evidence, not authenticated transaction receipts. SDK 0.6 validates hashes
               and recomputes the report locally; no private history is exposed over the public MCP.
             </p>
           </Panel>
+          <ConductorOperations key={current.id} mission={current} now={now} />
           <section className="grid gap-4 md:grid-cols-3">
             <StationLink
               icon={Waypoints}
@@ -1296,9 +1304,9 @@ export function Conductor({ initial = {} }: { initial?: { mission?: string; jour
           </section>
           <div className="flex flex-wrap items-center justify-between gap-4 border-t border-line pt-4">
             <p className="max-w-3xl text-xs leading-5 text-cream/45">
-              The Conductor v1 is a read-only mission workbench for ordinary DLMM. Hosted missions,
-              cumulative reservations, execution-policy enforcement, wider-range adapters, Zap and
-              DLMM Pro are separate future releases.
+              Conductor supports ordinary-DLMM observation and opt-in device budgets with verified,
+              wallet-approved native actions. Other stations retain their own reviews. Wider-range
+              recipes, Zap, DLMM Pro and delegated signing are outside this adapter.
             </p>
             {removing ? (
               <div className="flex gap-2">
@@ -1333,6 +1341,7 @@ export function Conductor({ initial = {} }: { initial?: { mission?: string; jour
           </div>
         </>
       )}
+      {ready && <ConductorHosted mission={current} now={now} />}
     </div>
   );
 }
@@ -1434,8 +1443,9 @@ function PolicyFields({
         </fieldset>
         <p className="mt-4 text-xs leading-6 text-cream/55">
           Zero token caps allow no declared token top-up. They do not cap existing deployed
-          inventory. This policy is stored locally and unsigned. No transaction builder consumes it
-          in v1; Planner and Foundry retain their own fresh wallet reviews.
+          inventory. This policy is stored locally and unsigned. Supported Conductor actions also
+          require an explicit cumulative budget and fresh owner-wallet review; other stations keep
+          their separate reviews.
         </p>
       </div>
     </div>

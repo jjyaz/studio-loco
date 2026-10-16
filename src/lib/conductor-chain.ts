@@ -8,6 +8,7 @@ import { assertCluster } from "./tx";
 import { JobCancelled, JobTimeout, type Job } from "./job-control";
 import { readJourneySnapshot } from "./journey-chain";
 import { listJourneys } from "./journey-store";
+import type { Journey } from "./journey";
 import { redact } from "./recorder";
 import {
   CONDUCTOR_ADAPTER,
@@ -33,6 +34,10 @@ export async function readConductorSnapshot(
   },
   caller: Job,
   rpcKind: "relay" | "custom" | "server",
+  /** Read-only server copies resolve their retained scope here; browser default still checks IndexedDB. */
+  sourceResolver?: () => Promise<
+    Pick<Journey, "id" | "kind" | "account" | "pool" | "owner" | "snapshots"> | undefined
+  >,
 ): Promise<MissionSnapshot> {
   const startedAt = Date.now(),
     deadline = startedAt + 90_000;
@@ -357,9 +362,11 @@ export async function readConductorSnapshot(
   if (input.position) {
     try {
       const assertSource = async () => {
-        const j = (await job.step(listJourneys(), 4000, "Source Journey")).find(
-          (j) => j.id === input.position!.journeyId,
-        );
+        const j = sourceResolver
+          ? await job.step(sourceResolver(), 4000, "Hosted source scope")
+          : (await job.step(listJourneys(), 4000, "Source Journey")).find(
+              (j) => j.id === input.position!.journeyId,
+            );
         if (
           !j ||
           j.kind !== "position" ||

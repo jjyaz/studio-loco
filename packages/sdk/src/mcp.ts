@@ -8,6 +8,7 @@ import { inspectBlueprint, protocolAdapters } from "./blueprint.js";
 import { analyzeContinuityExport } from "./continuity.js";
 import { analyzeSwitchyardExport } from "./switchyard.js";
 import { analyzeMissionExport } from "./conductor.js";
+import { analyzeOperationLedger } from "./ledger-evidence.js";
 
 export type LocoReaders = Pick<
   LocoClient,
@@ -200,6 +201,18 @@ export function createLocoMcpServer(
     () => safe(protocolAdapters),
   );
   if (options.localEvidence) {
+    server.registerTool(
+      "loco_analyze_operation_ledger",
+      {
+        description:
+          "Opt-in local stdio only. Inspect caller-supplied Conductor operation and cumulative budget evidence, bindings and reported liabilities. No file access, upload, chain authentication, signing or execution/reservation authority.",
+        inputSchema: schema<{ bundle: Record<string, unknown> }>({ bundle: { type: "object" } }, [
+          "bundle",
+        ]),
+        annotations: { ...annotations, openWorldHint: false },
+      },
+      (args) => safe(() => analyzeOperationLedger(args.bundle)),
+    );
     server.registerTool(
       "loco_analyze_mission_export",
       {

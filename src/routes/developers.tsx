@@ -32,7 +32,7 @@ export const Route = createFileRoute("/developers")({
   component: Developers,
 });
 const base = "https://studioloco.cfd/api/public/loco/v1";
-const install = `npm install ${base}/sdk/0.5.0.tgz`;
+const install = `npm install ${base}/sdk/0.6.0.tgz`;
 const example = `import { LocoClient } from '@studio-loco/sdk';\n\nconst loco = new LocoClient();\nconst { data, meta } = await loco.listPools({ perPage: 5 });\n\nconsole.log(meta.source, data.pools);\n// meteora-index · real mainnet pools`;
 function CopyCode({ text, label = "Copy" }: { text: string; label?: string }) {
   const [copied, setCopied] = useState(false),
@@ -123,7 +123,7 @@ function Developers() {
           <p className="station-code flex items-center gap-2 text-amber">
             <TrainFront size={17} /> DEV · Platform 01{" "}
             <span className="ml-3 rounded-full border border-amber/30 px-3 py-1 text-xs">
-              SDK v0.5.0
+              SDK v0.6.0
             </span>
           </p>
           <h1 className="display mt-5 max-w-3xl text-5xl leading-tight md:text-7xl">
@@ -191,11 +191,11 @@ function Developers() {
           </p>
           <CopyCode text={install} />
           <p className="mt-3 text-xs text-cream/60">
-            Downloadable npm package · ESM · v0.5.0 · not published to the npm registry.
+            Downloadable npm package · ESM · v0.6.0 · not published to the npm registry.
           </p>
           <a
             className="mt-4 inline-block text-sm text-amber underline"
-            href={`${base}/sdk/0.5.0.tgz`}
+            href={`${base}/sdk/0.6.0.tgz`}
           >
             Download package ↓
           </a>
@@ -278,7 +278,7 @@ function Developers() {
         </div>
       </section>
       <section className="mt-12 border border-amber/30 bg-[#101b3d] p-6 md:p-8" id="conductor">
-        <p className="station-code text-amber">The Conductor · SDK v0.5.0</p>
+        <p className="station-code text-amber">The Conductor · SDK v0.6.0</p>
         <h2 className="display mt-3 text-3xl">Give liquidity a measurable mission.</h2>
         <p className="mt-4 max-w-3xl leading-7 text-cream/75">
           Share one typed policy contract with Loco’s mission workbench. Evaluate independent quote
@@ -295,8 +295,10 @@ function Developers() {
         <p className="mt-4 text-sm leading-7 text-cream/60">
           Opt-in local stdio adds loco_analyze_mission_export with --local-evidence. It validates
           policy hashes and recomputes outcomes at their recorded times. It does not authenticate
-          supplied chain observations. Hosted MCP remains seven public read-only tools. Conductor v1
-          provides no signing, cumulative reservations or execution-policy enforcement.
+          supplied chain observations. Hosted MCP remains seven public read-only tools. SDK 0.6 also
+          adds cumulative budget/operation evidence analysis. The app supports explicit local
+          budgets and supported wallet-approved native actions; supplied exports never authorize
+          execution.
         </p>
         <a
           href="/app/conductor"
@@ -306,7 +308,7 @@ function Developers() {
         </a>
       </section>
       <section className="mt-12 border border-amber/30 bg-[#101b3d] p-6 md:p-8" id="switchyard">
-        <p className="station-code text-amber">The Switchyard · SDK v0.5.0</p>
+        <p className="station-code text-amber">The Switchyard · SDK v0.6.0</p>
         <h2 className="display mt-3 text-3xl">Compare decisions before outcomes.</h2>
         <p className="mt-4 max-w-3xl leading-7 text-cream/75">
           Inspect prospective range-policy exports: sealed rules, independently read account inputs,
@@ -334,7 +336,7 @@ function Developers() {
         </a>
       </section>
       <section className="mt-12 border border-amber/30 bg-[#101b3d] p-6 md:p-8" id="continuity">
-        <p className="station-code text-amber">Journey Continuity · SDK v0.5.0</p>
+        <p className="station-code text-amber">Journey Continuity · SDK v0.6.0</p>
         <h2 className="display mt-3 text-3xl">A strategy keeps its memory.</h2>
         <p className="mt-4 max-w-3xl leading-7 text-cream/75">
           Export a connected lifecycle from Journey: its original blueprint, account ancestry,
@@ -361,7 +363,7 @@ function Developers() {
         </a>
       </section>
       <section className="mt-12 border border-line bg-[#101b3d] p-6 md:p-8" id="blueprints">
-        <p className="station-code text-amber">Strategy Foundry · SDK v0.5.0</p>
+        <p className="station-code text-amber">Strategy Foundry · SDK v0.6.0</p>
         <h2 className="display mt-3 text-3xl">A strategy other tools can understand.</h2>
         <p className="mt-4 max-w-3xl leading-7 text-cream/75">
           Export a versioned blueprint from the Foundry. Inspect its strict schema, SHA-256 digest,
@@ -422,7 +424,7 @@ console.log(protocolAdapters()); // DLMM supported; Pro unverified`}
                 mcpServers: {
                   "studio-loco": {
                     command: "npx",
-                    args: ["--yes", "--package", `${base}/sdk/0.5.0.tgz`, "loco-mcp"],
+                    args: ["--yes", "--package", `${base}/sdk/0.6.0.tgz`, "loco-mcp"],
                   },
                 },
               },

@@ -11,6 +11,7 @@ import {
   TERMINAL_PHASES,
   type PendingTx,
   type TxStep,
+  type TxContext,
 } from "@/lib/tx";
 import { explorerTx, shortAddr } from "@/lib/format";
 import { useSettings, type Cluster } from "@/lib/settings";
@@ -146,10 +147,13 @@ export function useTxRunner() {
       asyncSemanticGuard?: () => Promise<string | null>;
       maxFeeLamports?: number;
       evidence?: Evidence;
+      policyGuard?: TxContext["policyGuard"];
     } = {},
   ): Promise<TxStep[]> {
     if (!wallet.publicKey) throw new Error("Connect a wallet first");
     if (!wallet.signTransaction) throw new Error(UNSUPPORTED_WALLET);
+    if (extra.policyGuard && list.length !== 1)
+      throw new Error("Mission execution requires one independently reviewed atomic transaction.");
     if (list.length === 0) {
       setSteps([]);
       return [];
@@ -173,10 +177,19 @@ export function useTxRunner() {
     });
     try {
       try {
-        if (start.cluster === "mainnet-beta" && list.some((s) => s.tx.instructions.some((ix) => ix.programId.toBase58() === DLMM_PROGRAM))) {
+        if (
+          start.cluster === "mainnet-beta" &&
+          list.some((s) => s.tx.instructions.some((ix) => ix.programId.toBase58() === DLMM_PROGRAM))
+        ) {
           const { prepareContinuityEvidence } = await import("@/lib/continuity-capture");
-          await prepareContinuityEvidence({ recordId: rec.id, owner: start.wallet, cluster: start.cluster,
-            route: typeof window !== "undefined" ? window.location.pathname : "", steps: list, evidence });
+          await prepareContinuityEvidence({
+            recordId: rec.id,
+            owner: start.wallet,
+            cluster: start.cluster,
+            route: typeof window !== "undefined" ? window.location.pathname : "",
+            steps: list,
+            evidence,
+          });
         }
       } catch (e) {
         await rec.noteContinuityError(e instanceof Error ? e.message : String(e));

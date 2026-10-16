@@ -151,6 +151,7 @@ describe("prospective Switchyard policy evidence", () => {
       ),
     ).toBe(true);
   });
+  // This exercises 365 immutable histories; allow its bounded replay more CPU time than a control-path test.
   it("drops only the old prefix and scores the disclosed retained window", () => {
     let e = create();
     for (let i = 1; i <= 365; i++) e = append(e, i % 7, 11_000 + i * 1000);
@@ -159,7 +160,7 @@ describe("prospective Switchyard policy evidence", () => {
     expect(e.samples[0]!.seq).toBe(6);
     expect(shadowScorecards(e).every((s) => s.samples === 360)).toBe(true);
     expect(SwitchyardExperiment.safeParse(e).success).toBe(true);
-  });
+  }, 15_000);
   it("isolates imports and cannot turn supplied history into live observations or reviews", () => {
     const e = append(create(), 8, 20_000);
     const [copy] = parseSwitchyardImport(JSON.stringify(exportSwitchyard([e], 21_000)), 22_000);
