@@ -1,0 +1,3 @@
+REVOKE ALL ON public.depot_agents, public.depot_nonces, public.depot_viewer_wallets, public.depot_images, public.depot_metadata, public.depot_reports FROM anon;
+REVOKE INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER ON public.depot_agents, public.depot_viewer_wallets, public.depot_metadata, public.depot_reports FROM authenticated;
+REVOKE ALL ON public.depot_nonces, public.depot_images FROM authenticated;

@@ -36,6 +36,13 @@
       "when": 1792522148915,
       "tag": "0004_depot_public_reports",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1792522457648,
+      "tag": "0005_depot_revoke_default_grants",
+      "breakpoints": true
     }
   ]
 }
