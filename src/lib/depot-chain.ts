@@ -29,6 +29,7 @@ export interface PreparedDepotAction {
   review: PreparedReview;
   tx: Transaction;
   signers: Signer[];
+  claimPosition?: { address: string; nftAccount: string };
   instructionKey: string;
   /** Digest of the public immutable metadata bytes; never a signed URL. */
   metadataHash?: string;
@@ -216,8 +217,8 @@ export async function prepareDepotDammClaim(connection: Connection, binding: Rev
   if (!owned || !life.target.dammPool) throw new Error("This wallet does not own that graduated position NFT");
   const [sdk, { PublicKey }] = await Promise.all([loadDepotDamm(), import("@solana/web3.js")]);
   const cp = new sdk.CpAmm(connection), pool = new PublicKey(life.target.dammPool), state = await cp.fetchPoolState(pool), owner = new PublicKey(binding.wallet);
-  const tx = await bounded(cp.claimPositionFee({ owner, receiver: owner, feePayer: owner, position: new PublicKey(position), positionNftAccount: new PublicKey(owned.nftAccount), pool, tokenAMint: state.tokenAMint, tokenBMint: state.tokenBMint, tokenAVault: state.tokenAVault, tokenBVault: state.tokenBVault, tokenAProgram: sdk.getTokenProgram(state.tokenAFlag), tokenBProgram: sdk.getTokenProgram(state.tokenBFlag) }), "DAMM fee claim");
-  return finishAction(connection, { kind: "claim-damm", label: "Claim DAMM v2 position fees", target: life.target, binding: structuredClone(binding), tx, signers: [], notes: ["Claim-only transaction to the connected NFT owner; locked liquidity stays locked. SOL-quoted fees arrive as WSOL; existing WSOL stays open."] });
+  const tx = await bounded(cp.claimPositionFee({ owner, receiver: owner, tempWSolAccount: owner, feePayer: owner, position: new PublicKey(position), positionNftAccount: new PublicKey(owned.nftAccount), pool, tokenAMint: state.tokenAMint, tokenBMint: state.tokenBMint, tokenAVault: state.tokenAVault, tokenBVault: state.tokenBVault, tokenAProgram: sdk.getTokenProgram(state.tokenAFlag), tokenBProgram: sdk.getTokenProgram(state.tokenBFlag) }), "DAMM fee claim");
+  return finishAction(connection, { kind: "claim-damm", label: "Claim DAMM v2 position fees", target: life.target, binding: structuredClone(binding), tx, signers: [], claimPosition: { address: owned.address, nftAccount: owned.nftAccount }, notes: [`Claim fees from position ${position} to the connected NFT owner; locked liquidity stays locked. SOL-quoted fees arrive as WSOL; existing WSOL stays open.`] });
 }
 
 /** Explicit SOL routing to an owner-selected reserve; never a hosted spending permission. */

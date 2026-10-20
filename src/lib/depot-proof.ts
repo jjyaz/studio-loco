@@ -47,7 +47,9 @@ export async function assertDepotInstructions(p: Omit<PreparedDepotAction, "revi
       token_base_program: spl.TOKEN_PROGRAM_ID.toBase58(), token_quote_program: spl.TOKEN_PROGRAM_ID.toBase58(),
       token_a_program: spl.TOKEN_PROGRAM_ID.toBase58(), token_b_program: spl.TOKEN_PROGRAM_ID.toBase58(),
       amm_program: DAMM_PROGRAM, program,
+      position: p.claimPosition?.address ?? "", position_nft_account: p.claimPosition?.nftAccount ?? "",
     };
+    if (p.kind === "claim-damm" && !p.claimPosition) throw new Error("Reviewed claim position is missing");
     // create_config has no pool account; initialize's mint signer is separately checked below.
     for (let i = 0; i < accounts.length; i++) {
       const a = accounts[i]!, key = ix.keys[i]!;
