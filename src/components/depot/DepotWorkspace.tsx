@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useDepotServerFn as useServerFn } from "./auth";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { Btn, Field, Notice, Panel, Segmented, Spinner, Stat } from "@/components/kit";
+import { MetadataPublisher } from "./MetadataPublisher";
 import { WalletButton } from "@/components/wallet/WalletButton";
 import { TxSteps, useTxRunner } from "@/components/app/useTx";
 import { useSettings } from "@/lib/settings";
@@ -19,7 +20,7 @@ import {
   type Recipient,
   type ReviewBinding,
 } from "@/lib/depot";
-import { GATE_MAX_AGE_S, IMAGE_MIMES, MAX_IMAGE_BYTES, isAddress32, type AgentDTO, type ScoutReportDTO, type TokenMetadataDTO } from "@/lib/depot-contracts";
+import { GATE_MAX_AGE_S, isAddress32, type AgentDTO, type ScoutReportDTO, type TokenMetadataDTO } from "@/lib/depot-contracts";
 import {
   createAgent,
   deleteAgent,
@@ -503,6 +504,10 @@ function LaunchPanel({ agent, refresh }: { agent: AgentDTO; refresh: () => void 
                   <span className="block font-mono text-xs text-cream/50">sha256 {m.digest}</span>
                 </span>
               </label>
+              {(m.website || m.xUrl) && <div className="mt-2 flex flex-wrap gap-4 px-3 text-sm text-amber">
+                {m.website && <a href={m.website} target="_blank" rel="noopener noreferrer" className="underline underline-offset-4">Website ↗</a>}
+                {m.xUrl && <a href={m.xUrl} target="_blank" rel="noopener noreferrer" className="underline underline-offset-4">X profile ↗</a>}
+              </div>}
             </li>
           ))}
         </ul>
@@ -559,85 +564,6 @@ function LaunchPanel({ agent, refresh }: { agent: AgentDTO; refresh: () => void 
       </Panel>
       <OperationsList agent={agent} ops={ops} refresh={refresh} />
     </div>
-  );
-}
-
-function MetadataPublisher({ agent, publish, onPublished }: { agent: AgentDTO; publish: ReturnType<typeof useServerFn<typeof publishTokenMetadata>>; onPublished: (digest: string) => void }) {
-  const [name, setName] = useState("");
-  const [symbol, setSymbol] = useState("");
-  const [description, setDescription] = useState("");
-  const [file, setFile] = useState<File | null>(null);
-  const [preview, setPreview] = useState<string | null>(null);
-  const [consent, setConsent] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState<{ tone: "info" | "error"; text: string } | null>(null);
-  useEffect(() => {
-    if (!file) { setPreview(null); return; }
-    const u = URL.createObjectURL(file);
-    setPreview(u);
-    return () => URL.revokeObjectURL(u);
-  }, [file]);
-  const nameBytes = new TextEncoder().encode(name).length;
-  const errs = [
-    !name.trim() || nameBytes > 32 ? `Name 1–32 bytes (${nameBytes})` : null,
-    !/^[A-Z0-9]{1,10}$/.test(symbol) ? "Symbol 1–10 uppercase letters/digits" : null,
-    description.length > 500 ? "Description ≤ 500 characters" : null,
-    !file ? "Choose an image" : !(IMAGE_MIMES as readonly string[]).includes(file.type) ? "PNG, JPEG or WebP only" : file.size > MAX_IMAGE_BYTES ? "Image ≤ 256 KB" : null,
-    !consent ? "Confirm immutability" : null,
-  ].filter(Boolean) as string[];
-  return (
-    <Panel>
-      <p className="station-code text-amber">Step 1 · Immutable token metadata</p>
-      {!agent.walletVerifiedAt && <p className="mt-2 text-sm text-cream/75">Prove the controller wallet in Passport first.</p>}
-      <form
-        className="mt-3 grid gap-3 md:grid-cols-[1fr_160px]"
-        onSubmit={async (e) => {
-          e.preventDefault();
-          if (errs.length || !file) return;
-          setBusy(true); setMsg(null);
-          try {
-            const buf = new Uint8Array(await file.arrayBuffer());
-            let bin = "";
-            for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode(...buf.subarray(i, i + 0x8000));
-            const r = await publish({ data: { agentId: agent.id, name, symbol, description, imageBase64: btoa(bin), imageMime: file.type as (typeof IMAGE_MIMES)[number], confirmImmutable: true } });
-            if (!r.ok) throw new Error(r.error);
-            setMsg({ tone: "info", text: r.reused ? `Identical content already published as v${r.version}.` : `Published v${r.version}.` });
-            void recordFact({ kind: "proposal", title: `Depot metadata v${r.version}`, route: "/app/depot", cluster: "mainnet-beta", context: { depotAgent: agent.id, metadataDigest: r.digest, metadataUri: r.uri } }).catch(() => {});
-            onPublished(r.digest);
-          } catch (x) {
-            setMsg({ tone: "error", text: x instanceof Error ? x.message : String(x) });
-          } finally { setBusy(false); }
-        }}
-      >
-        <div className="flex flex-col gap-3">
-          <Field label="Token name" value={name} onChange={(e) => setName(e.target.value)} hint={`${nameBytes}/32 bytes`} />
-          <Field label="Symbol" value={symbol} onChange={(e) => setSymbol(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 10))} />
-          <label className="flex flex-col gap-1.5">
-            <span className="station-code text-cream/80">Description ({description.length}/500)</span>
-            <textarea value={description} maxLength={500} rows={3} onChange={(e) => setDescription(e.target.value)} className="border border-input bg-midnight px-3 py-2 text-sm text-cream outline-none focus:border-amber" />
-          </label>
-          <label className="flex flex-col gap-1.5">
-            <span className="station-code text-cream/80">Image (PNG/JPEG/WebP, ≤256 KB)</span>
-            <input type="file" accept="image/png,image/jpeg,image/webp" onChange={(e) => setFile(e.target.files?.[0] ?? null)} className="text-sm text-cream file:mr-3 file:border file:border-cream/60 file:bg-transparent file:px-3 file:py-2 file:text-cream" />
-          </label>
-          <label className="flex items-start gap-2 text-sm">
-            <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} className="mt-1 accent-amber" />
-            <span>I understand this name, symbol, description and image become a permanent public, hash-addressed file that cannot be edited or deleted. Changes create a new version.</span>
-          </label>
-        </div>
-        <div className="flex flex-col items-center gap-2">
-          <div className="flex size-40 items-center justify-center border border-line bg-midnight">
-            {preview ? <img src={preview} alt="Selected token image preview" className="size-full object-cover" /> : <span className="station-code text-cream/50">No image</span>}
-          </div>
-        </div>
-        <div className="md:col-span-2 flex flex-col gap-2">
-          {errs.length > 0 && <p className="text-xs text-cream/65">{errs.join(" · ")}</p>}
-          <Btn type="submit" disabled={busy || errs.length > 0 || !agent.walletVerifiedAt}>{busy ? "Publishing…" : "Publish immutable metadata"}</Btn>
-          <p className="text-xs text-cream/60">Free to publish; no onchain cost until launch. Files use the permanent studioloco.cfd domain; this update must be published there before a launch can verify its metadata. Up to 20 versions/hour and 100 permanent versions/account.</p>
-          {msg && <Notice tone={msg.tone} title={msg.text} />}
-        </div>
-      </form>
-    </Panel>
   );
 }
 

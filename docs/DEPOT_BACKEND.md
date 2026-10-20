@@ -11,7 +11,7 @@ Wallet authenticated (`requireDepotWalletAuth`; explicit server-derived principa
 - `requestWalletChallenge({agentId, wallet, purpose:"controller"|"viewer"})` → `{challenge, message}` (5 min, 10 per 10 min, allowlisted host)
 - `verifyWalletChallenge({agentId, wallet, purpose, nonce, signature})` — ed25519 over exact UTF-8 message; atomic single-use `depot_consume_nonce`
 - `setPassportPublished({id, revision, publish})` — publishing requires verified controller wallet
-- `publishTokenMetadata({agentId, name, symbol, description, imageBase64, imageMime, confirmImmutable:true})` → `{digest, uri, version, immutable, cost}`
+- `publishTokenMetadata({agentId, name, symbol, description, imageBase64, imageMime, website?, xUrl?, confirmImmutable:true})` → `{digest, uri, version, immutable, cost}`. Images: PNG/JPEG/WebP (≤256 KB). Website: HTTPS without URL credentials. X: profile URL or handle, normalized to `https://x.com/<handle>`. JSON includes `website`, `twitter`, and `external_url` (website when supplied; otherwise the passport fallback). Links are part of the immutable content hash.
 - `runScoutReport({agentId, pool, probesX[], probesY[], withAi})` — real mainnet read via the Conductor adapter; 20/h, AI 5/h
 - `listMyReports({agentId})`, `listGatedReports({agentId, wallet})` — fresh server SPL balance of the caller's connected, recently proven viewer wallet; atomic revision/policy check at protected content delivery
 - `listMyTokenMetadata({agentId})` — immutable metadata versions for the owned agent

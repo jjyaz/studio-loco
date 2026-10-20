@@ -9,6 +9,8 @@ import {
   Address,
   ChallengeInput,
   MetadataInput,
+  MetadataWebsite,
+  MetadataXProfile,
   PROOF_TTL_MS,
   PublishInput,
   ScoutInput,
@@ -249,7 +251,7 @@ export const publishTokenMetadata = createServerFn({ method: "POST" })
       if (!agent.wallet_verified_at) return { ok: false as const, error: "Prove control of the agent wallet first." };
       const bytes = s.decodeImage(data.imageBase64, data.imageMime);
       const imageDigest = s.sha256Hex(bytes);
-      const { body, digest } = s.buildMetadataBody({ name: data.name, symbol: data.symbol, description: data.description, image: s.imageUri(domain, imageDigest), externalUrl: `https://${domain}/depot/${agent.id}` });
+      const { body, digest } = s.buildMetadataBody({ name: data.name, symbol: data.symbol, description: data.description, image: s.imageUri(domain, imageDigest), externalUrl: `https://${domain}/depot/${agent.id}`, website: data.website, xUrl: data.xUrl });
       const uri = s.metadataUri(domain, digest);
       if (new TextEncoder().encode(uri).length > 200) return { ok: false as const, error: "Metadata URI too long." };
       const a = await admin();
@@ -373,8 +375,10 @@ export const listMyTokenMetadata = createServerFn({ method: "GET" })
     for (const r of rows) {
       try {
         const u = launchUriFromMetadata({ digest: r.digest, user_id: context.userId, agent_id: r.agent_id, body: r.body });
-        const b = JSON.parse(r.body) as { description: string; image: string };
-        out.push({ digest: r.digest, version: r.version, publishedAt: r.published_at, uri: u.uri, imageUri: b.image, name: u.name, symbol: u.symbol, description: b.description, body: r.body });
+        const b = JSON.parse(r.body) as { description: string; image: string; website?: unknown; twitter?: unknown };
+        const website = MetadataWebsite.safeParse(b.website), xUrl = MetadataXProfile.safeParse(b.twitter);
+        out.push({ digest: r.digest, version: r.version, publishedAt: r.published_at, uri: u.uri, imageUri: b.image, name: u.name, symbol: u.symbol, description: b.description, body: r.body,
+          website: website.success ? website.data : undefined, xUrl: xUrl.success ? xUrl.data : undefined });
       } catch {
         /* integrity failure: never offered for launch */
       }
