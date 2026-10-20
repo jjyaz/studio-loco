@@ -560,6 +560,7 @@ export type Database = {
       }
       depot_public_metadata: { Args: { _digest: string }; Returns: string }
       depot_public_passport: { Args: { _id: string }; Returns: Json }
+      depot_public_reports: { Args: { _agent: string }; Returns: Json }
       signal_acquire_lease: {
         Args: { _holder: string; _ttl_seconds: number }
         Returns: boolean
