@@ -451,7 +451,6 @@ function useDepotAction(agent: AgentDTO, bindingRef: React.MutableRefObject<Revi
 
 /* ---------------- Token launch ---------------- */
 
-const SOL = 1_000_000_000n;
 
 function LaunchPanel({ agent, refresh }: { agent: AgentDTO; refresh: () => void }) {
   const listMeta = useServerFn(listMyTokenMetadata);
@@ -872,4 +871,3 @@ function ScoutPanel({ agent }: { agent: AgentDTO }) {
   );
 }
 
-export const _SOL = SOL;
