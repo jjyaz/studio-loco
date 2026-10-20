@@ -75,7 +75,7 @@ describe("metadata", () => {
 });
 
 describe("token gate (server decision)", () => {
-  const agent = { gate_mint: "M", gate_min_raw: "1000000", gate_max_age_s: 60 };
+  const agent = { gate_mint: "So11111111111111111111111111111111111111112", gate_min_raw: "1000000", gate_max_age_s: 60 };
   it("exact raw threshold", () => {
     expect(gateDecision(agent, { rawBalance: 1_000_000n, readAt: 0 }, true, 1).allowed).toBe(true);
     expect(gateDecision(agent, { rawBalance: 999_999n, readAt: 0 }, true, 1).allowed).toBe(false);

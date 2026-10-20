@@ -4,6 +4,7 @@
  * wallet-control challenge format, token-gate thresholds and AI-brief factuality checks.
  * Chain composition (DBC / DAMM v2 SDKs) is NOT implemented here and must stay separate.
  */
+import bs58 from "bs58";
 
 export const WSOL_MINT = "So11111111111111111111111111111111111111112";
 export const DEPOT_REVIEW_TTL_MS = 20_000;
@@ -17,11 +18,11 @@ export interface LaunchPreset {
   tokenDecimals: number;
   /** Whole-token fixed supply; raw supply = supply * 10^decimals. */
   totalSupplyTokens: bigint;
-  /** Basis points of supply sold on the curve; remainder seeds DAMM v2 at migration. */
+  /** Nominal curve allocation. Actual migration amounts are derived by the SDK. */
   curveSupplyBps: number;
   /** Migration threshold in raw quote units (lamports for SOL). */
   migrationQuoteThresholdRaw: bigint;
-  /** Trading fee bps charged by the curve, split creator vs platform. */
+  /** Total curve fee. Protocol takes 20%; creator share splits the remaining 80%. */
   tradingFeeBps: number;
   creatorFeeShareBps: number;
   /** Share of migrated LP that is permanently locked (bps). */
@@ -40,7 +41,7 @@ export const LAUNCH_PRESETS: readonly LaunchPreset[] = [
     curveSupplyBps: 8_000,
     migrationQuoteThresholdRaw: 85_000_000_000n,
     tradingFeeBps: 100,
-    creatorFeeShareBps: 5_000,
+    creatorFeeShareBps: 10_000,
     lockedLpBps: 10_000,
     migrationTarget: "damm-v2",
   },
@@ -54,11 +55,13 @@ export const LAUNCH_PRESETS: readonly LaunchPreset[] = [
     curveSupplyBps: 8_000,
     migrationQuoteThresholdRaw: 20_000_000_000n,
     tradingFeeBps: 100,
-    creatorFeeShareBps: 5_000,
+    creatorFeeShareBps: 10_000,
     lockedLpBps: 10_000,
     migrationTarget: "damm-v2",
   },
 ];
+for (const p of LAUNCH_PRESETS) Object.freeze(p);
+Object.freeze(LAUNCH_PRESETS);
 
 export function getPreset(id: string, version: number): LaunchPreset {
   const p = LAUNCH_PRESETS.find((x) => x.id === id && x.version === version);
@@ -73,28 +76,39 @@ export interface LaunchMath {
   curveRaw: bigint;
   migrationRaw: bigint;
   creatorFeeBps: number;
+  protocolFeeBps: number;
+  partnerFeeBps: number;
+  /** Compatibility name; this is the partner share, not a Studio Loco charge. */
   platformFeeBps: number;
   lockedLpBps: number;
   unlockedLpBps: number;
 }
 
-/** Exact integer launch math. Curve + migration allocations always sum to the raw supply. */
+/** Exact nominal supply allocation; fee percentages are rational, without flooring. */
 export function launchMath(p: LaunchPreset): LaunchMath {
-  if (!Number.isInteger(p.tokenDecimals) || p.tokenDecimals < 0 || p.tokenDecimals > 9)
-    throw new Error("Decimals must be an integer 0–9");
+  if (!Number.isInteger(p.tokenDecimals) || p.tokenDecimals < 6 || p.tokenDecimals > 9)
+    throw new Error("DBC decimals must be an integer 6–9");
   for (const b of [p.curveSupplyBps, p.creatorFeeShareBps, p.lockedLpBps, p.tradingFeeBps])
     if (!Number.isInteger(b) || b < 0 || b > 10_000) throw new Error("Basis points out of range");
   if (p.totalSupplyTokens <= 0n) throw new Error("Supply must be positive");
+  if (p.migrationQuoteThresholdRaw <= 0n || p.curveSupplyBps <= 0 || p.curveSupplyBps >= 10_000)
+    throw new Error("Migration needs a positive quote threshold and both token allocations");
+  if (p.migrationTarget !== "damm-v2" || p.quoteMint !== WSOL_MINT || p.lockedLpBps !== 10_000)
+    throw new Error("This release supports SOL-quoted DAMM v2 launches with permanently locked LP");
   const rawSupply = p.totalSupplyTokens * 10n ** BigInt(p.tokenDecimals);
   if (rawSupply > 18_446_744_073_709_551_615n) throw new Error("Raw supply exceeds u64");
   const curveRaw = (rawSupply * BigInt(p.curveSupplyBps)) / BPS;
-  const creatorFeeBps = Math.floor((p.tradingFeeBps * p.creatorFeeShareBps) / 10_000);
+  const protocolFeeBps = p.tradingFeeBps / 5;
+  const creatorFeeBps = (p.tradingFeeBps - protocolFeeBps) * p.creatorFeeShareBps / 10_000;
+  const partnerFeeBps = p.tradingFeeBps - protocolFeeBps - creatorFeeBps;
   return {
     rawSupply,
     curveRaw,
     migrationRaw: rawSupply - curveRaw,
     creatorFeeBps,
-    platformFeeBps: p.tradingFeeBps - creatorFeeBps,
+    protocolFeeBps,
+    partnerFeeBps,
+    platformFeeBps: partnerFeeBps,
     lockedLpBps: p.lockedLpBps,
     unlockedLpBps: 10_000 - p.lockedLpBps,
   };
@@ -124,9 +138,9 @@ export function validateMetadata(m: TokenMetadataDraft, allowedOrigin: string): 
     }
     if (!url || url.protocol !== "https:" || url.origin !== allowedOrigin)
       errs.push(`${k} must be a durable https URL on the project's public storage`);
-    else if (/[?&](token|X-Amz-|Expires|sig)=/i.test(url.search))
-      errs.push(`${k} looks like an expiring signed URL`);
-    if (u.length > 200) errs.push(`${k} max 200 characters`);
+    else if (url.search || url.hash || url.username || url.password)
+      errs.push(`${k} must have no credentials, query string or fragment`);
+    if (new TextEncoder().encode(u).length > 200) errs.push(`${k} max 200 bytes`);
   }
   return errs;
 }
@@ -147,11 +161,14 @@ export interface Recipient {
   address: string;
 }
 
-const B58 = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+export function isDepotAddress(s: string): boolean {
+  try { return bs58.decode(s).length === 32; } catch { return false; }
+}
 
 /** Every economic role must be explicit, valid base58, and creator-side roles must equal the owner wallet. */
 export function validateRecipients(owner: string, rs: Recipient[], m: LaunchMath): string[] {
   const errs: string[] = [];
+  if (!isDepotAddress(owner)) errs.push("Invalid owner wallet");
   const need: RecipientRole[] = ["payer", "creator", "fee-claimer", "leftover-receiver"];
   if (m.lockedLpBps > 0) need.push("locked-lp-owner");
   if (m.unlockedLpBps > 0) need.push("unlocked-lp-owner");
@@ -161,8 +178,8 @@ export function validateRecipients(owner: string, rs: Recipient[], m: LaunchMath
   for (const r of rs) {
     if (seen.has(r.role)) errs.push(`Duplicate recipient role: ${r.role}`);
     seen.add(r.role);
-    if (!B58.test(r.address)) errs.push(`Invalid address for ${r.role}`);
-    if (r.role !== "partner" && r.address !== owner)
+    if (!isDepotAddress(r.address)) errs.push(`Invalid address for ${r.role}`);
+    if (r.address !== owner)
       errs.push(`${r.role} must be the connected owner wallet`);
   }
   return errs;
@@ -172,11 +189,14 @@ export interface ReviewBinding {
   wallet: string;
   cluster: string;
   rpc: "relay" | "custom" | "public";
+  /** In-memory generation for the exact connection identity; never persist a secret RPC URL. */
+  rpcGeneration?: number;
   agentId: string;
   agentRevision: number;
   presetId: string;
   presetVersion: number;
   metadataUri: string;
+  metadataHash?: string;
   recipients: Recipient[];
   maxStageLamports: bigint;
   maxTotalLamports: bigint;
@@ -185,8 +205,8 @@ export interface ReviewBinding {
 export function bindingKey(b: ReviewBinding): string {
   const rs = [...b.recipients].sort((a, c) => a.role.localeCompare(c.role));
   return JSON.stringify([
-    b.wallet, b.cluster, b.rpc, b.agentId, b.agentRevision, b.presetId, b.presetVersion,
-    b.metadataUri, rs.map((r) => [r.role, r.address]),
+    b.wallet, b.cluster, b.rpc, b.rpcGeneration ?? 0, b.agentId, b.agentRevision, b.presetId, b.presetVersion,
+    b.metadataUri, b.metadataHash ?? "", rs.map((r) => [r.role, r.address]),
     b.maxStageLamports.toString(), b.maxTotalLamports.toString(),
   ]);
 }
@@ -199,12 +219,15 @@ export interface PreparedReview {
 
 /** Returns a refusal reason, or null when the review may proceed to signing. */
 export function reviewGuard(r: PreparedReview, current: ReviewBinding, now: number, b: ReviewBinding): string | null {
-  if (r.key !== bindingKey(current)) return "Launch inputs changed since review; prepare again.";
-  if (now - r.createdAt > DEPOT_REVIEW_TTL_MS) return "Review expired; prepare again.";
+  if (r.key !== bindingKey(current) || bindingKey(current) !== bindingKey(b)) return "Launch inputs changed since review; prepare again.";
+  if (!Number.isSafeInteger(now) || !Number.isSafeInteger(r.createdAt) || now < r.createdAt || now - r.createdAt > DEPOT_REVIEW_TTL_MS) return "Review expired; prepare again.";
+  if (current.maxStageLamports <= 0n || current.maxTotalLamports <= 0n || !r.stages.length)
+    return "Positive cost caps and a prepared stage are required.";
   let total = 0n;
   for (const s of r.stages) {
     if (s.feeLamports === null || s.rentLamports === null)
       return `Cost unknown for ${s.label}; nothing will be signed.`;
+    if (s.feeLamports < 0n || s.rentLamports < 0n) return "Invalid negative cost.";
     const c = s.feeLamports + s.rentLamports;
     if (c > b.maxStageLamports) return `${s.label} costs ${c} lamports, above the stage cap.`;
     total += c;
@@ -258,10 +281,12 @@ export function tokenGate(
   now: number,
 ): { allowed: boolean; reason: string } {
   if (policy.mode === "public") return { allowed: true, reason: "Public report" };
+  if (!isDepotAddress(policy.mint) || policy.minRaw <= 0n || !Number.isSafeInteger(policy.maxAgeMs) || policy.maxAgeMs <= 0 || policy.maxAgeMs > 60_000)
+    return { allowed: false, reason: "Invalid holder policy" };
   if (!read) return { allowed: false, reason: "Balance unavailable" };
   if (!read.walletVerified) return { allowed: false, reason: "Wallet control not verified" };
   if (read.mint !== policy.mint) return { allowed: false, reason: "Wrong mint" };
-  if (now - read.readAt > policy.maxAgeMs) return { allowed: false, reason: "Balance read is stale" };
+  if (!Number.isSafeInteger(read.readAt) || read.readAt > now || now - read.readAt > policy.maxAgeMs || read.rawBalance < 0n) return { allowed: false, reason: "Balance read is stale" };
   if (read.rawBalance < policy.minRaw) return { allowed: false, reason: "Below holder threshold" };
   return { allowed: true, reason: "Holder threshold met" };
 }
