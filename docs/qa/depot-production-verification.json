@@ -1,0 +1,74 @@
+{
+  "checkedAt": "2026-10-20T20:10:33.313470+00:00",
+  "deployedSource": "678ba45b5eaa294e3452f451444b0c5112498ecb",
+  "results": [
+    {
+      "path": "/app/depot",
+      "status": 200,
+      "url": "https://studioloco.cfd/app/depot",
+      "type": "text/html; charset=utf-8",
+      "cache": "no-cache, must-revalidate, max-age=0",
+      "depot": true,
+      "holderDocs": false
+    },
+    {
+      "path": "/docs",
+      "status": 200,
+      "url": "https://studioloco.cfd/docs",
+      "type": "text/html; charset=utf-8",
+      "cache": "no-cache, must-revalidate, max-age=0",
+      "depot": true,
+      "holderDocs": true
+    },
+    {
+      "path": "/api/public/depot/metadata/not-a-digest",
+      "status": 404,
+      "body": "Not found",
+      "cache": "no-store"
+    },
+    {
+      "path": "/api/public/depot/metadata/0000000000000000000000000000000000000000000000000000000000000000",
+      "status": 404,
+      "body": "Not found",
+      "cache": "no-store"
+    },
+    {
+      "path": "/api/public/depot/image/0000000000000000000000000000000000000000000000000000000000000000",
+      "status": 404,
+      "body": "Not found",
+      "cache": "no-store"
+    },
+    {
+      "path": "/api/public/loco/v1/capabilities",
+      "status": 200,
+      "url": "https://studioloco.cfd/api/public/loco/v1/capabilities",
+      "type": "application/json",
+      "cache": "no-store",
+      "depot": false,
+      "holderDocs": false
+    }
+  ],
+  "deploymentId": "ca18573a-58d3-4d35-ad16-a441ef2151b8",
+  "unitSuite": {
+    "filesPassed": 66,
+    "testsPassed": 612
+  },
+  "typescript": "passed",
+  "productionBuild": "passed",
+  "browser": {
+    "url": "https://studioloco.cfd/app/depot",
+    "signedOutRender": "passed",
+    "firstPartyErrors": [],
+    "extensionErrorsExcluded": true,
+    "walletOrAccountSignInPerformed": false
+  },
+  "unsignedMainnetLaunchSimulation": "passed; no financial signatures or broadcast",
+  "database": "Atomic acceptance assertions passed with forced rollback; zero retained QA agents",
+  "ownerAcceptancePending": [
+    "real browser-wallet proof",
+    "real metadata publication",
+    "funded launch and verified receipt linkage",
+    "graduation and claims",
+    "real-holder report access"
+  ]
+}
