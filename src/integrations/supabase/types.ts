@@ -551,6 +551,18 @@ export type Database = {
         }
         Returns: boolean
       }
+      depot_holder_reports: {
+        Args: {
+          _agent: string
+          _balance: string
+          _mint: string
+          _read_at: string
+          _revision: number
+          _user: string
+          _wallet: string
+        }
+        Returns: Json
+      }
       depot_link_launch: {
         Args: {
           _agent: string
@@ -572,6 +584,18 @@ export type Database = {
       depot_public_metadata: { Args: { _digest: string }; Returns: string }
       depot_public_passport: { Args: { _id: string }; Returns: Json }
       depot_public_reports: { Args: { _agent: string }; Returns: Json }
+      depot_publish_metadata: {
+        Args: {
+          _agent: string
+          _body: string
+          _digest: string
+          _image_digest: string
+          _image_hex: string
+          _image_mime: string
+          _user: string
+        }
+        Returns: Json
+      }
       signal_acquire_lease: {
         Args: { _holder: string; _ttl_seconds: number }
         Returns: boolean
