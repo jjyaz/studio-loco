@@ -15,6 +15,9 @@ import {
   VerifyInput,
   proofMessage,
   sanitizePassport,
+  parseLaunch,
+  RecordLaunchInput,
+  type TokenMetadataDTO,
   type AgentDTO,
   type ProofChallenge,
   type ScoutReportDTO,
@@ -36,7 +39,7 @@ function toDTO(r: AgentRow): AgentDTO {
     visibility: r.visibility as AgentDTO["visibility"], publishedAt: r.published_at,
     reportPolicy: r.report_policy as AgentDTO["reportPolicy"],
     gateMint: r.gate_mint, gateMinRaw: r.gate_min_raw, gateMaxAgeS: r.gate_max_age_s,
-    launch: null, createdAt: r.created_at, updatedAt: r.updated_at,
+    launch: parseLaunch(r.launch), createdAt: r.created_at, updatedAt: r.updated_at,
   };
 }
 /** Server-side ownership check through the caller's RLS-scoped client. */
@@ -355,4 +358,54 @@ export const listGatedReports = createServerFn({ method: "POST" })
       ok: true as const, balanceRaw: read.rawBalance.toString(), slot: read.slot, wallet: viewer.wallet,
       reports: rows.map((r) => ({ id: r.id, agentId: r.agent_id, createdAt: r.created_at, facts: r.facts, ai: r.ai }) as unknown as ScoutReportDTO),
     };
+  });
+
+/* ---------------- verified launch + metadata listing ---------------- */
+
+export const listMyTokenMetadata = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ agentId: Uuid }).strict().parse(d))
+  .handler(async ({ data, context }) => {
+    const { data: rows, error } = await context.supabase
+      .from("depot_metadata").select("digest,version,published_at,body,agent_id").eq("agent_id", data.agentId).order("version", { ascending: false }).limit(20);
+    if (error) return { ok: false as const, error: error.message };
+    const { launchUriFromMetadata } = await import("./depot-launch.server");
+    const out: TokenMetadataDTO[] = [];
+    for (const r of rows) {
+      try {
+        const u = launchUriFromMetadata({ digest: r.digest, user_id: context.userId, agent_id: r.agent_id, body: r.body });
+        const b = JSON.parse(r.body) as { description: string; image: string };
+        out.push({ digest: r.digest, version: r.version, publishedAt: r.published_at, uri: u.uri, imageUri: b.image, name: u.name, symbol: u.symbol, description: b.description, body: r.body });
+      } catch {
+        /* integrity failure: never offered for launch */
+      }
+    }
+    return { ok: true as const, metadata: out };
+  });
+
+export const recordVerifiedLaunch = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => RecordLaunchInput.parse(d))
+  .handler(async ({ data, context }) => {
+    try {
+      const a = await admin();
+      const connection = await mainnet();
+      const { verifyAndLinkLaunch } = await import("./depot-launch.server");
+      const { readDepotLifecycle } = await import("./depot-chain");
+      const r = await verifyAndLinkLaunch(data, {
+        connection,
+        userId: context.userId,
+        getAgent: async (id) => (await a.from("depot_agents").select("id,user_id,revision,wallet,wallet_verified_at,launch").eq("id", id).maybeSingle()).data,
+        getMetadata: async (digest) => (await a.from("depot_metadata").select("digest,user_id,agent_id,body").eq("digest", digest).maybeSingle()).data,
+        readLifecycle: (target, owner) => readDepotLifecycle(connection, target, owner, "mainnet-beta"),
+        link: async ({ agent, revision, wallet, digest, launch }) => {
+          const { data: out, error } = await a.rpc("depot_link_launch", { _user: context.userId, _agent: agent, _revision: revision, _wallet: wallet, _digest: digest, _launch: launch as never });
+          if (error) throw new Error(error.message);
+          return out as { status: string; revision: number };
+        },
+      });
+      return { ok: true as const, ...r };
+    } catch (e) {
+      return { ok: false as const, error: err(e) };
+    }
   });

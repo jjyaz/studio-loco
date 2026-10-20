@@ -43,6 +43,13 @@
       "when": 1792522457648,
       "tag": "0005_depot_revoke_default_grants",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1792523069730,
+      "tag": "0006_depot_verified_launch_link",
+      "breakpoints": true
     }
   ]
 }

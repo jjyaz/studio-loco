@@ -22,6 +22,7 @@ const TABS = [
   { to: "/app/studio", label: "Studio" },
   { to: "/app/signals", label: "Signals" },
   { to: "/app/launch", label: "Launch" },
+  { to: "/app/depot", label: "Depot" },
   { to: "/app/dispatch", label: "Dispatch" },
   { to: "/app/agents", label: "Agents" },
   { to: "/app/foundry", label: "Foundry" },
