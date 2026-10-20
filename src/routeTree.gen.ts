@@ -20,6 +20,7 @@ import { Route as AppIndexRouteImport } from './routes/app.index'
 import { Route as AppAgentsRouteImport } from './routes/app.agents'
 import { Route as AppChecksRouteImport } from './routes/app.checks'
 import { Route as AppConductorRouteImport } from './routes/app.conductor'
+import { Route as AppDepotRouteImport } from './routes/app.depot'
 import { Route as AppDispatchRouteImport } from './routes/app.dispatch'
 import { Route as AppFoundryRouteImport } from './routes/app.foundry'
 import { Route as AppJourneyRouteImport } from './routes/app.journey'
@@ -31,6 +32,7 @@ import { Route as AppSignalBoxRouteImport } from './routes/app.signal-box'
 import { Route as AppSignalsRouteImport } from './routes/app.signals'
 import { Route as AppStudioRouteImport } from './routes/app.studio'
 import { Route as AppSwitchyardRouteImport } from './routes/app.switchyard'
+import { Route as DepotIdRouteImport } from './routes/depot.$id'
 import { Route as JournalIndexRouteImport } from './routes/journal.index'
 import { Route as JournalSlugRouteImport } from './routes/journal.$slug'
 import { Route as LabIndexRouteImport } from './routes/lab.index'
@@ -97,6 +99,11 @@ const AppConductorRoute = AppConductorRouteImport.update({
   path: '/conductor',
   getParentRoute: () => AppRoute,
 } as any)
+const AppDepotRoute = AppDepotRouteImport.update({
+  id: '/depot',
+  path: '/depot',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppDispatchRoute = AppDispatchRouteImport.update({
   id: '/dispatch',
   path: '/dispatch',
@@ -151,6 +158,11 @@ const AppSwitchyardRoute = AppSwitchyardRouteImport.update({
   id: '/switchyard',
   path: '/switchyard',
   getParentRoute: () => AppRoute,
+} as any)
+const DepotIdRoute = DepotIdRouteImport.update({
+  id: '/depot/$id',
+  path: '/depot/$id',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const JournalIndexRoute = JournalIndexRouteImport.update({
   id: '/journal/',
@@ -217,6 +229,7 @@ export interface FileRoutesByFullPath {
   '/app/agents': typeof AppAgentsRoute
   '/app/checks': typeof AppChecksRoute
   '/app/conductor': typeof AppConductorRoute
+  '/app/depot': typeof AppDepotRoute
   '/app/dispatch': typeof AppDispatchRoute
   '/app/foundry': typeof AppFoundryRoute
   '/app/journey': typeof AppJourneyRoute
@@ -228,6 +241,7 @@ export interface FileRoutesByFullPath {
   '/app/signals': typeof AppSignalsRoute
   '/app/studio': typeof AppStudioRoute
   '/app/switchyard': typeof AppSwitchyardRoute
+  '/depot/$id': typeof DepotIdRoute
   '/journal/$slug': typeof JournalSlugRoute
   '/lab/architecture': typeof LabArchitectureRoute
   '/app/': typeof AppIndexRoute
@@ -250,6 +264,7 @@ export interface FileRoutesByTo {
   '/app/agents': typeof AppAgentsRoute
   '/app/checks': typeof AppChecksRoute
   '/app/conductor': typeof AppConductorRoute
+  '/app/depot': typeof AppDepotRoute
   '/app/dispatch': typeof AppDispatchRoute
   '/app/foundry': typeof AppFoundryRoute
   '/app/journey': typeof AppJourneyRoute
@@ -261,6 +276,7 @@ export interface FileRoutesByTo {
   '/app/signals': typeof AppSignalsRoute
   '/app/studio': typeof AppStudioRoute
   '/app/switchyard': typeof AppSwitchyardRoute
+  '/depot/$id': typeof DepotIdRoute
   '/journal/$slug': typeof JournalSlugRoute
   '/lab/architecture': typeof LabArchitectureRoute
   '/app': typeof AppIndexRoute
@@ -285,6 +301,7 @@ export interface FileRoutesById {
   '/app/agents': typeof AppAgentsRoute
   '/app/checks': typeof AppChecksRoute
   '/app/conductor': typeof AppConductorRoute
+  '/app/depot': typeof AppDepotRoute
   '/app/dispatch': typeof AppDispatchRoute
   '/app/foundry': typeof AppFoundryRoute
   '/app/journey': typeof AppJourneyRoute
@@ -296,6 +313,7 @@ export interface FileRoutesById {
   '/app/signals': typeof AppSignalsRoute
   '/app/studio': typeof AppStudioRoute
   '/app/switchyard': typeof AppSwitchyardRoute
+  '/depot/$id': typeof DepotIdRoute
   '/journal/$slug': typeof JournalSlugRoute
   '/lab/architecture': typeof LabArchitectureRoute
   '/app/': typeof AppIndexRoute
@@ -321,6 +339,7 @@ export interface FileRouteTypes {
     | '/app/agents'
     | '/app/checks'
     | '/app/conductor'
+    | '/app/depot'
     | '/app/dispatch'
     | '/app/foundry'
     | '/app/journey'
@@ -332,6 +351,7 @@ export interface FileRouteTypes {
     | '/app/signals'
     | '/app/studio'
     | '/app/switchyard'
+    | '/depot/$id'
     | '/journal/$slug'
     | '/lab/architecture'
     | '/app/'
@@ -354,6 +374,7 @@ export interface FileRouteTypes {
     | '/app/agents'
     | '/app/checks'
     | '/app/conductor'
+    | '/app/depot'
     | '/app/dispatch'
     | '/app/foundry'
     | '/app/journey'
@@ -365,6 +386,7 @@ export interface FileRouteTypes {
     | '/app/signals'
     | '/app/studio'
     | '/app/switchyard'
+    | '/depot/$id'
     | '/journal/$slug'
     | '/lab/architecture'
     | '/app'
@@ -388,6 +410,7 @@ export interface FileRouteTypes {
     | '/app/agents'
     | '/app/checks'
     | '/app/conductor'
+    | '/app/depot'
     | '/app/dispatch'
     | '/app/foundry'
     | '/app/journey'
@@ -399,6 +422,7 @@ export interface FileRouteTypes {
     | '/app/signals'
     | '/app/studio'
     | '/app/switchyard'
+    | '/depot/$id'
     | '/journal/$slug'
     | '/lab/architecture'
     | '/app/'
@@ -420,6 +444,7 @@ export interface RootRouteChildren {
   GovernanceRoute: typeof GovernanceRoute
   NetworkRoute: typeof NetworkRoute
   TokenRoute: typeof TokenRoute
+  DepotIdRoute: typeof DepotIdRoute
   JournalSlugRoute: typeof JournalSlugRoute
   LabArchitectureRoute: typeof LabArchitectureRoute
   JournalIndexRoute: typeof JournalIndexRoute
@@ -510,6 +535,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppConductorRouteImport
       parentRoute: typeof AppRoute
     }
+    '/app/depot': {
+      id: '/app/depot'
+      path: '/depot'
+      fullPath: '/app/depot'
+      preLoaderRoute: typeof AppDepotRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/app/dispatch': {
       id: '/app/dispatch'
       path: '/dispatch'
@@ -586,6 +618,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/app/switchyard'
       preLoaderRoute: typeof AppSwitchyardRouteImport
       parentRoute: typeof AppRoute
+    }
+    '/depot/$id': {
+      id: '/depot/$id'
+      path: '/depot/$id'
+      fullPath: '/depot/$id'
+      preLoaderRoute: typeof DepotIdRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/journal/': {
       id: '/journal/'
@@ -664,6 +703,7 @@ interface AppRouteChildren {
   AppAgentsRoute: typeof AppAgentsRoute
   AppChecksRoute: typeof AppChecksRoute
   AppConductorRoute: typeof AppConductorRoute
+  AppDepotRoute: typeof AppDepotRoute
   AppDispatchRoute: typeof AppDispatchRoute
   AppFoundryRoute: typeof AppFoundryRoute
   AppJourneyRoute: typeof AppJourneyRoute
@@ -683,6 +723,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppAgentsRoute: AppAgentsRoute,
   AppChecksRoute: AppChecksRoute,
   AppConductorRoute: AppConductorRoute,
+  AppDepotRoute: AppDepotRoute,
   AppDispatchRoute: AppDispatchRoute,
   AppFoundryRoute: AppFoundryRoute,
   AppJourneyRoute: AppJourneyRoute,
@@ -708,6 +749,7 @@ const rootRouteChildren: RootRouteChildren = {
   GovernanceRoute: GovernanceRoute,
   NetworkRoute: NetworkRoute,
   TokenRoute: TokenRoute,
+  DepotIdRoute: DepotIdRoute,
   JournalSlugRoute: JournalSlugRoute,
   LabArchitectureRoute: LabArchitectureRoute,
   JournalIndexRoute: JournalIndexRoute,
