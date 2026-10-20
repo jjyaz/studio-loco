@@ -19,3 +19,11 @@ Implemented local strategy lifecycle, prepared-intent/confirmed-receipt verifica
 - [ ] Conductor/Recorder/Journey UI: matrix, remaining/reserved/consumed, reconcile
 - [ ] Hosted mission observation (schema, RLS, worker reusing lease/cron)
 - [ ] SDK 0.6 release, local MCP analyzer, docs/capabilities/AGENTS
+
+### The Depot (DBC launch / agent passports / Scout / fee desk)
+- [x] Pure deterministic core: presets, exact raw launch math, explicit recipients, review binding/expiry/SOL caps, wallet-control challenge + nonce replay, token gate, AI-brief factuality (src/lib/depot.ts + 19 tests)
+- [ ] Install/inspect pinned DBC 1.5.11 + cp-amm 1.4.5 SDKs; lazy loader; unsigned config/pool builders through tx.ts
+- [ ] Cloud schema: passports, nonces, publication, metadata storage (RLS/CAS) + signature-verifying server functions
+- [ ] Scout report + gated AI brief server function
+- [ ] Lifecycle/migration reader, creator fee desk, Depot operation store, Recorder links
+- [ ] Depot UI routes/nav, capabilities/docs, release verification doc
