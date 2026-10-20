@@ -129,6 +129,14 @@ export function factLines(f: ScoutFacts): string[] {
   return l;
 }
 
+/** Every number in the brief must appear verbatim in the facts; forbidden claims/actions rejected. */
+export function factualityIssues(brief: string, facts: string[]): string[] {
+  const corpus = facts.join(" ");
+  const nums = (brief.match(/\d+(?:[.,]\d+)*/g) ?? []).map((n) => n.replace(/[.,]+$/, ""));
+  const issues = nums.filter((n) => !corpus.includes(n) && !corpus.includes(n.replace(/,/g, ""))).map((n) => `Unsupported number: ${n}`);
+  return [...issues, ...briefFactualityIssues(brief.replace(/\d[\d,.]*/g, ""), [])];
+}
+
 export const AI_MODEL = "openai/gpt-6-astra";
 
 /** Streams a structured brief from the Lovable AI Gateway, then enforces factuality. Never throws. */
@@ -192,7 +200,7 @@ export async function scoutBrief(f: ScoutFacts, apiKey: string | undefined, fetc
     } catch {
       return { status: "failed", model: AI_MODEL, brief: null, reason: "AI returned malformed output." };
     }
-    const issues = briefFactualityIssues(brief, facts);
+    const issues = factualityIssues(brief, facts);
     if (!brief || issues.length)
       return { status: "rejected", model: AI_MODEL, brief: null, reason: `Brief withheld: ${issues.join("; ").slice(0, 280) || "empty"}` };
     return { status: "ok", model: AI_MODEL, brief, reason: null };
