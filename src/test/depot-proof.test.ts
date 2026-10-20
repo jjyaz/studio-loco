@@ -38,9 +38,12 @@ describe("Depot installed SDK/IDL proof", () => {
     const d = await loadDepotDbc(), connection = new Connection("https://invalid.example");
     const client = new d.DynamicBondingCurveClient(connection, "confirmed");
     const poolState = { config: new PublicKey(a.target.config), baseMint: new PublicKey(a.target.mint), creator: new PublicKey(a.binding.wallet), baseVault: Keypair.generate().publicKey, quoteVault: Keypair.generate().publicKey };
+    // The public namespaces retain their own protected state service internally.
+    // This test injects read fixtures at that boundary; builders/IDL remain real.
     for (const service of [client.migration, client.creator]) {
-      service.state.getPool = async () => ({ poolState }) as never;
-      service.state.getPoolConfig = async () => ({ quoteMint: new PublicKey(WSOL_MINT), tokenType: 0, quoteTokenFlag: 0 }) as never;
+      const state = (service as unknown as { state: typeof client.state }).state;
+      state.getPool = async () => ({ poolState }) as never;
+      state.getPoolConfig = async () => ({ quoteMint: new PublicKey(WSOL_MINT), tokenType: 0, quoteTokenFlag: 0 }) as never;
     }
     const cfg = d.DAMM_V2_MIGRATION_FEE_ADDRESS[2]!;
     const migrated = await client.migration.migrateToDammV2({ payer: new PublicKey(a.binding.wallet), pool: new PublicKey(a.target.pool), dammConfig: cfg });

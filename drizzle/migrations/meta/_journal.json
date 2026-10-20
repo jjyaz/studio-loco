@@ -22,6 +22,27 @@
       "when": 1791462218324,
       "tag": "0002_recorder_evidence_monotonic",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1792522092856,
+      "tag": "0003_depot_passports_proofs_metadata_reports",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1792522148915,
+      "tag": "0004_depot_public_reports",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1792522457648,
+      "tag": "0005_depot_revoke_default_grants",
+      "breakpoints": true
     }
   ]
 }
