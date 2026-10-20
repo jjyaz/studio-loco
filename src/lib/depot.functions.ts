@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { getRequestHeader } from "@tanstack/react-start/server";
 import { z } from "zod";
-import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { requireDepotWalletAuth } from "./depot-auth.middleware";
 import type { Database } from "@/integrations/supabase/types";
 import {
   AgentDraftInput,
@@ -43,9 +43,9 @@ function toDTO(r: AgentRow): AgentDTO {
     launch: parseLaunch(r.launch), createdAt: r.created_at, updatedAt: r.updated_at,
   };
 }
-/** Server-side ownership check through the caller's RLS-scoped client. */
-async function ownAgent(supabase: { from: (t: "depot_agents") => any }, id: string): Promise<AgentRow> {
-  const { data, error } = await supabase.from("depot_agents").select("*").eq("id", id).maybeSingle();
+/** Explicit principal filter: wallet sessions use a server-only client; never rely on implicit RLS here. */
+async function ownAgent(supabase: { from: (t: "depot_agents") => any }, id: string, userId: string): Promise<AgentRow> {
+  const { data, error } = await supabase.from("depot_agents").select("*").eq("id", id).eq("user_id", userId).maybeSingle();
   if (error) throw new Error(error.message);
   if (!data) throw new Error("Agent not found.");
   return data as AgentRow;
@@ -73,15 +73,15 @@ async function mainnet() {
 /* ---------------- agent CRUD ---------------- */
 
 export const listMyAgents = createServerFn({ method: "GET" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireDepotWalletAuth])
   .handler(async ({ context }) => {
-    const { data, error } = await context.supabase.from("depot_agents").select("*").order("created_at", { ascending: false }).limit(50);
+    const { data, error } = await context.supabase.from("depot_agents").select("*").eq("user_id", context.userId).order("created_at", { ascending: false }).limit(50);
     if (error) return { ok: false as const, error: error.message };
     return { ok: true as const, agents: (data as AgentRow[]).map(toDTO) };
   });
 
 export const createAgent = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireDepotWalletAuth])
   .inputValidator((d: unknown) => AgentDraftInput.parse(d))
   .handler(async ({ data, context }) => {
     const a = await admin();
@@ -96,11 +96,11 @@ export const createAgent = createServerFn({ method: "POST" })
   });
 
 export const updateAgent = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireDepotWalletAuth])
   .inputValidator((d: unknown) => AgentUpdateInput.parse(d))
   .handler(async ({ data, context }) => {
     try {
-      const cur = await ownAgent(context.supabase, data.id);
+      const cur = await ownAgent(context.supabase, data.id, context.userId);
       const next = {
         name: data.name ?? cur.name,
         description: data.description ?? cur.description,
@@ -126,7 +126,7 @@ export const updateAgent = createServerFn({ method: "POST" })
 
 /** Deletes the draft/passport and its reports. Published token metadata stays immutable and resolvable. */
 export const deleteAgent = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireDepotWalletAuth])
   .inputValidator((d: unknown) => z.object({ id: Uuid, revision: z.number().int().min(1) }).strict().parse(d))
   .handler(async ({ data, context }) => {
     const { data: rows, error } = await (await admin())
@@ -138,16 +138,17 @@ export const deleteAgent = createServerFn({ method: "POST" })
 /* ---------------- wallet proof ---------------- */
 
 export const requestWalletChallenge = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireDepotWalletAuth])
   .inputValidator((d: unknown) => ChallengeInput.parse(d))
   .handler(async ({ data, context }) => {
+    if (data.wallet !== context.authWallet) return { ok: false as const, error: "Use the wallet signed in to this Depot workspace." };
     const s = await srv();
     const domain = s.proofDomain(getRequestHeader("host"));
     if (!domain) return { ok: false as const, error: "This site address is not allowed to request wallet proofs." };
     const a = await admin();
     if (data.purpose === "controller") {
       try {
-        await ownAgent(context.supabase, data.agentId);
+        await ownAgent(context.supabase, data.agentId, context.userId);
       } catch (e) {
         return { ok: false as const, error: err(e) };
       }
@@ -173,9 +174,10 @@ export const requestWalletChallenge = createServerFn({ method: "POST" })
   });
 
 export const verifyWalletChallenge = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireDepotWalletAuth])
   .inputValidator((d: unknown) => VerifyInput.parse(d))
   .handler(async ({ data, context }) => {
+    if (data.wallet !== context.authWallet) return { ok: false as const, error: "Use the wallet signed in to this Depot workspace." };
     const s = await srv();
     const domain = s.proofDomain(getRequestHeader("host"));
     if (!domain) return { ok: false as const, error: "Wrong site address for this proof." };
@@ -201,11 +203,11 @@ export const verifyWalletChallenge = createServerFn({ method: "POST" })
 /* ---------------- publication ---------------- */
 
 export const setPassportPublished = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireDepotWalletAuth])
   .inputValidator((d: unknown) => PublishInput.parse(d))
   .handler(async ({ data, context }) => {
     try {
-      const cur = await ownAgent(context.supabase, data.id);
+      const cur = await ownAgent(context.supabase, data.id, context.userId);
       if (data.publish && !cur.wallet_verified_at) return { ok: false as const, error: "Prove control of the agent wallet before publishing." };
       const { data: rows, error } = await (await admin())
         .from("depot_agents")
@@ -235,7 +237,7 @@ export const getPublicPassport = createServerFn({ method: "GET" })
 /* ---------------- metadata ---------------- */
 
 export const publishTokenMetadata = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireDepotWalletAuth])
   .inputValidator((d: unknown) => MetadataInput.parse(d))
   .handler(async ({ data, context }) => {
     const s = await srv();
@@ -243,7 +245,7 @@ export const publishTokenMetadata = createServerFn({ method: "POST" })
     if (!requestDomain || requestDomain.startsWith("localhost")) return { ok: false as const, error: "Metadata can only be published from the public HTTPS site." };
     const domain = "studioloco.cfd";
     try {
-      const agent = await ownAgent(context.supabase, data.agentId);
+      const agent = await ownAgent(context.supabase, data.agentId, context.userId);
       if (!agent.wallet_verified_at) return { ok: false as const, error: "Prove control of the agent wallet first." };
       const bytes = s.decodeImage(data.imageBase64, data.imageMime);
       const imageDigest = s.sha256Hex(bytes);
@@ -263,13 +265,13 @@ export const publishTokenMetadata = createServerFn({ method: "POST" })
 /* ---------------- Scout ---------------- */
 
 export const runScoutReport = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireDepotWalletAuth])
   .inputValidator((d: unknown) => ScoutInput.parse(d))
   .handler(async ({ data, context }) => {
     const a = await admin();
     let agent: AgentRow;
     try {
-      agent = await ownAgent(context.supabase, data.agentId);
+      agent = await ownAgent(context.supabase, data.agentId, context.userId);
     } catch (e) {
       return { ok: false as const, error: err(e) };
     }
@@ -309,10 +311,10 @@ export const runScoutReport = createServerFn({ method: "POST" })
   });
 
 export const listMyReports = createServerFn({ method: "GET" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireDepotWalletAuth])
   .inputValidator((d: unknown) => z.object({ agentId: Uuid }).strict().parse(d))
   .handler(async ({ data, context }) => {
-    const { data: rows, error } = await context.supabase.from("depot_reports").select("id,agent_id,created_at,facts,ai").eq("agent_id", data.agentId).order("created_at", { ascending: false }).limit(20);
+    const { data: rows, error } = await context.supabase.from("depot_reports").select("id,agent_id,created_at,facts,ai").eq("agent_id", data.agentId).eq("user_id", context.userId).order("created_at", { ascending: false }).limit(20);
     if (error) return { ok: false as const, error: error.message };
     return { ok: true as const, reports: rows.map((r) => ({ id: r.id, agentId: r.agent_id, createdAt: r.created_at, facts: r.facts, ai: r.ai }) as unknown as ScoutReportDTO) };
   });
@@ -328,14 +330,15 @@ export const listPublicReports = createServerFn({ method: "GET" })
 
 /** Holder-only reports: fresh server-side balance of the caller's PROVEN viewer wallet. */
 export const listGatedReports = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireDepotWalletAuth])
   .inputValidator((d: unknown) => z.object({ agentId: Uuid, wallet: Address }).strict().parse(d))
   .handler(async ({ data, context }) => {
+    if (data.wallet !== context.authWallet) return { ok: false as const, error: "The holder wallet must match the signed-in wallet." };
     const a = await admin();
     const { data: agent } = await a.from("depot_agents").select("*").eq("id", data.agentId).maybeSingle();
     if (!agent || agent.visibility !== "public" || agent.report_policy !== "token-holders")
       return { ok: false as const, error: "No holder-only reports for this agent." };
-    const { data: viewer } = await context.supabase.from("depot_viewer_wallets").select("wallet,verified_at").eq("agent_id", data.agentId).maybeSingle();
+    const { data: viewer } = await context.supabase.from("depot_viewer_wallets").select("wallet,verified_at").eq("agent_id", data.agentId).eq("user_id", context.userId).maybeSingle();
     if (!viewer || viewer.wallet !== data.wallet || Date.parse(viewer.verified_at) > Date.now() || Date.now() - Date.parse(viewer.verified_at) > PROOF_TTL_MS)
       return { ok: false as const, error: "Prove control of the connected holder wallet first. Access proofs last five minutes.", needsProof: true };
     const s = await srv();
@@ -359,11 +362,11 @@ export const listGatedReports = createServerFn({ method: "POST" })
 /* ---------------- verified launch + metadata listing ---------------- */
 
 export const listMyTokenMetadata = createServerFn({ method: "GET" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireDepotWalletAuth])
   .inputValidator((d: unknown) => z.object({ agentId: Uuid }).strict().parse(d))
   .handler(async ({ data, context }) => {
     const { data: rows, error } = await context.supabase
-      .from("depot_metadata").select("digest,version,published_at,body,agent_id").eq("agent_id", data.agentId).order("version", { ascending: false }).limit(20);
+      .from("depot_metadata").select("digest,version,published_at,body,agent_id").eq("agent_id", data.agentId).eq("user_id", context.userId).order("version", { ascending: false }).limit(20);
     if (error) return { ok: false as const, error: error.message };
     const { launchUriFromMetadata } = await import("./depot-launch.server");
     const out: TokenMetadataDTO[] = [];
@@ -380,7 +383,7 @@ export const listMyTokenMetadata = createServerFn({ method: "GET" })
   });
 
 export const recordVerifiedLaunch = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireDepotWalletAuth])
   .inputValidator((d: unknown) => RecordLaunchInput.parse(d))
   .handler(async ({ data, context }) => {
     try {
@@ -391,8 +394,8 @@ export const recordVerifiedLaunch = createServerFn({ method: "POST" })
       const r = await verifyAndLinkLaunch(data, {
         connection,
         userId: context.userId,
-        getAgent: async (id) => (await a.from("depot_agents").select("id,user_id,revision,wallet,wallet_verified_at,launch").eq("id", id).maybeSingle()).data,
-        getMetadata: async (digest) => (await a.from("depot_metadata").select("digest,user_id,agent_id,body").eq("digest", digest).maybeSingle()).data,
+        getAgent: async (id) => (await a.from("depot_agents").select("id,user_id,revision,wallet,wallet_verified_at,launch").eq("id", id).eq("user_id", context.userId).maybeSingle()).data,
+        getMetadata: async (digest) => (await a.from("depot_metadata").select("digest,user_id,agent_id,body").eq("digest", digest).eq("user_id", context.userId).maybeSingle()).data,
         readLifecycle: (target, owner) => readDepotLifecycle(connection, target, owner, "mainnet-beta"),
         link: async ({ agent, revision, wallet, digest, launch }) => {
           const { data: out, error } = await a.rpc("depot_link_launch", { _user: context.userId, _agent: agent, _revision: revision, _wallet: wallet, _digest: digest, _launch: launch as never });

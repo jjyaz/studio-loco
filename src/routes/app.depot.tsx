@@ -1,6 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Btn, Cap, Notice, Panel, Spinner } from "@/components/kit";
-import { AccountPanel, signOut, useCloudSession } from "@/components/signal/account";
+import { DepotWalletSignIn as AccountPanel, signOutDepot, useDepotWalletSession as useCloudSession } from "@/components/depot/auth";
+import { shortAddr } from "@/lib/format";
+import { useState } from "react";
 import { DepotWorkspace } from "@/components/depot/DepotWorkspace";
 import hero from "@/assets/studio-loco-panoramic-hero.png.asset.json";
 
@@ -22,6 +24,7 @@ const STEPS = ["Create agent", "Prove wallet", "Publish metadata", "Review & sim
 
 function DepotPage() {
   const s = useCloudSession();
+  const [authError, setAuthError] = useState<string | null>(null);
   return (
     <div className="flex flex-col gap-8">
       <section className="relative -mx-4 overflow-hidden border-b border-line md:-mx-8" aria-labelledby="depot-title">
@@ -73,10 +76,11 @@ function DepotPage() {
       ) : (
         <>
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="station-code text-cream/70">Signed in as {s.email ?? "account"} · this login is not wallet control</p>
-            <Btn size="sm" variant="ghost" onClick={() => void signOut()}>Sign out</Btn>
+            <p className="station-code text-cream/70">Wallet {s.wallet ? shortAddr(s.wallet, 6) : "workspace"} · private Depot</p>
+            <Btn size="sm" variant="ghost" onClick={() => { setAuthError(null); void signOutDepot(s.wallet!).catch(() => setAuthError("Sign-out could not be confirmed. Please try again.")); }}>Sign out</Btn>
           </div>
-          <DepotWorkspace userId={s.userId} />
+          {authError && <Notice tone="error" title="Sign-out needs attention">{authError}</Notice>}
+          <DepotWorkspace key={`${s.userId}:${s.wallet}`} userId={s.userId} />
         </>
       )}
       <Notice title="Funded acceptance pending">

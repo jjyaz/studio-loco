@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const m = vi.hoisted(() => ({ list: vi.fn(), user: "owner-a" as string | null, wallet: "6mch5rCLBtZ9DCnM2mx18Ud1XXhXAip7otw9LkrTXwTD" as string | null }));
 vi.mock("@tanstack/react-start", () => ({ useServerFn: (f: unknown) => f }));
 vi.mock("@solana/wallet-adapter-react", () => ({ useWallet: () => ({ publicKey: m.wallet ? { toBase58: () => m.wallet } : null }) }));
-vi.mock("@/components/signal/account", () => ({ useCloudSession: () => ({ userId: m.user, ready: true }), AccountPanel: () => <div>Sign in for access</div> }));
+vi.mock("@/components/depot/auth", () => ({ useDepotWalletSession: () => ({ userId: m.user, ready: true }), useDepotServerFn: (f: unknown) => f, DepotWalletSignIn: () => <div>Sign in for access</div> }));
 vi.mock("@/components/wallet/WalletButton", () => ({ WalletButton: () => <button>Connect wallet</button> }));
 vi.mock("@/lib/depot.functions", () => ({ listGatedReports: m.list }));
 vi.mock("@/components/depot/shared", () => ({ ScoutReportView: ({ r }: { r: { id: string } }) => <div>{r.id}</div>, WalletProof: () => <div>Wallet proof control</div> }));

@@ -26,8 +26,16 @@ const csrfMiddleware = createCsrfMiddleware({
 
 // Attach the signed-in user's access token to server-function calls (Signal Box).
 // Browser-only: during SSR there is no session, and protected functions are never called from loaders.
-const attachAuth = createMiddleware({ type: "function" }).client(async ({ next }) => {
+const attachAuth = createMiddleware({ type: "function" }).client(async (options) => {
+  const { next } = options;
   if (typeof window === "undefined") return next();
+  // The Depot uses its own HttpOnly wallet session, checked by requireDepotWalletAuth.
+  // Other workspaces retain their existing authenticated Supabase flow.
+  const init = (options as typeof options & { headers?: HeadersInit }).headers;
+  const walletHeader = init && typeof (init as Headers).get === "function"
+    ? (init as Headers).get("x-loco-depot-wallet")
+    : new Headers(init).get("x-loco-depot-wallet");
+  if (walletHeader !== null) return next();
   const { supabase } = await import("./integrations/supabase/client");
   const { data } = await supabase.auth.getSession();
   const token = data.session?.access_token;
