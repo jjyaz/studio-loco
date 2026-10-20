@@ -66,8 +66,8 @@ export function imageUri(domain: string, digest: string) {
 }
 
 /** Canonical Metaplex-style JSON. Deterministic key order so the digest is reproducible. */
-export function buildMetadataBody(m: { name: string; symbol: string; description: string; image: string }) {
-  const body = JSON.stringify({ name: m.name, symbol: m.symbol, description: m.description, image: m.image });
+export function buildMetadataBody(m: { name: string; symbol: string; description: string; image: string; externalUrl?: string }) {
+  const body = JSON.stringify({ name: m.name, symbol: m.symbol, description: m.description, image: m.image, ...(m.externalUrl ? { external_url: m.externalUrl } : {}) });
   const bytes = new TextEncoder().encode(body);
   if (bytes.length > 4096) throw new Error("Metadata too large.");
   return { body, digest: sha256Hex(bytes) };
@@ -270,6 +270,8 @@ const TOKEN_PROGRAMS = ["TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA", "TokenzQd
 
 /** Fresh confirmed SPL balance (sum of all accounts for that mint). */
 export async function readTokenBalance(conn: Connection, wallet: string, mint: string) {
+  const { assertCluster } = await import("./tx");
+  await assertCluster(conn, "mainnet-beta");
   const { PublicKey } = await import("@solana/web3.js");
   const mintKey = new PublicKey(mint);
   const info = await conn.getAccountInfo(mintKey, "confirmed");
@@ -277,10 +279,13 @@ export async function readTokenBalance(conn: Connection, wallet: string, mint: s
   const res = await conn.getParsedTokenAccountsByOwner(new PublicKey(wallet), { mint: mintKey }, "confirmed");
   let raw = 0n;
   for (const a of res.value) {
-    const amt = (a.account.data as { parsed?: { info?: { tokenAmount?: { amount?: string } } } }).parsed?.info?.tokenAmount?.amount;
+    const info = (a.account.data as { parsed?: { info?: { mint?: string; owner?: string; tokenAmount?: { amount?: string } } } }).parsed?.info;
+    if (!TOKEN_PROGRAMS.includes(a.account.owner.toBase58()) || info?.mint !== mint || info?.owner !== wallet) throw new Error("Token ownership or mint did not match the requested gate");
+    const amt = info.tokenAmount?.amount;
     if (typeof amt !== "string" || !/^\d+$/.test(amt)) throw new Error("Unreadable token account.");
     raw += BigInt(amt);
   }
+  if (raw > 18_446_744_073_709_551_615n) throw new Error("Token balance exceeds SPL supply bounds");
   return { rawBalance: raw, slot: res.context.slot, readAt: Date.now() };
 }
 

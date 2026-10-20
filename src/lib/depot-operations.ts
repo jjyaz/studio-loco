@@ -15,6 +15,7 @@ export const DepotOperationSchema = z.object({
   state: z.enum(["reserved", "pending", "unknown", "confirmed", "verified", "failed", "expired", "cancelled"]),
   reviewKey: z.string(), instructionDigest: z.string(), signedMessageDigest: z.string().optional(),
   pending: Pending.optional(), slot: z.number().int().optional(), error: z.string().max(1000).optional(),
+  launchIntent: z.object({ metadataDigest: z.string().regex(/^[a-f0-9]{64}$/), presetId: z.string().min(1).max(40), presetVersion: z.number().int().positive() }).strict().optional(),
   verification: z.string().max(1000).optional(),
 }).strict();
 export type DepotOperation = z.infer<typeof DepotOperationSchema>;
@@ -72,7 +73,9 @@ export async function reserveDepotOperation(p: PreparedDepotAction): Promise<str
     const same = rows.filter(x => x.agentId === p.binding.agentId && x.cluster === p.binding.cluster);
     if (same.some(x => OPEN.has(x.state))) throw new Error("This agent has an unresolved action. Reconcile it before preparing another.");
     if (p.kind === "launch" && same.some(x => x.kind === "launch" && x.state === "verified")) throw new Error("This agent already has a verified token launch");
-    return { v: 1, id, agentId: p.binding.agentId, agentRevision: p.binding.agentRevision, wallet: p.binding.wallet, cluster: p.binding.cluster, kind: p.kind, target: p.target, label: p.label, createdAt: at, updatedAt: at, state: "reserved", reviewKey: p.review.key, instructionDigest };
+    return { v: 1, id, agentId: p.binding.agentId, agentRevision: p.binding.agentRevision, wallet: p.binding.wallet, cluster: p.binding.cluster, kind: p.kind, target: p.target, label: p.label, createdAt: at, updatedAt: at, state: "reserved", reviewKey: p.review.key, instructionDigest,
+      ...(p.kind === "launch" ? { launchIntent: { metadataDigest: p.binding.metadataHash ?? "", presetId: p.binding.presetId, presetVersion: p.binding.presetVersion } } : {}),
+    };
   });
   return id;
 }
@@ -96,6 +99,8 @@ export function depotPolicyGuard(options: { connection: Connection; prepared: Pr
     async beforeBroadcast(tx, bytes, pending) {
       verify(tx);
       if (!operationId) throw new Error("Depot reservation missing");
+      await checkDepotFreshCosts(options.connection, options.prepared, tx);
+      verify(tx);
       const digest = await hex(bytes);
       if (pending.wallet !== options.prepared.binding.wallet || pending.cluster !== options.prepared.binding.cluster) throw new Error("Pending identity changed");
       await update(operationId, row => {

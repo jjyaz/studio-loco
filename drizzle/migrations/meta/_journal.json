@@ -50,6 +50,13 @@
       "when": 1792523069730,
       "tag": "0006_depot_verified_launch_link",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1792525504521,
+      "tag": "0007_depot_atomic_publication_and_access",
+      "breakpoints": true
     }
   ]
 }

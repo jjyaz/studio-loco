@@ -6,6 +6,7 @@ import type { Database } from "@/integrations/supabase/types";
 import {
   AgentDraftInput,
   AgentUpdateInput,
+  Address,
   ChallengeInput,
   MetadataInput,
   PROOF_TTL_MS,
@@ -238,29 +239,22 @@ export const publishTokenMetadata = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => MetadataInput.parse(d))
   .handler(async ({ data, context }) => {
     const s = await srv();
-    const domain = s.proofDomain(getRequestHeader("host"));
-    if (!domain || domain.startsWith("localhost")) return { ok: false as const, error: "Metadata can only be published from the public HTTPS site." };
+    const requestDomain = s.proofDomain(getRequestHeader("host"));
+    if (!requestDomain || requestDomain.startsWith("localhost")) return { ok: false as const, error: "Metadata can only be published from the public HTTPS site." };
+    const domain = "studioloco.cfd";
     try {
       const agent = await ownAgent(context.supabase, data.agentId);
       if (!agent.wallet_verified_at) return { ok: false as const, error: "Prove control of the agent wallet first." };
       const bytes = s.decodeImage(data.imageBase64, data.imageMime);
       const imageDigest = s.sha256Hex(bytes);
-      const { body, digest } = s.buildMetadataBody({ name: data.name, symbol: data.symbol, description: data.description, image: s.imageUri(domain, imageDigest) });
+      const { body, digest } = s.buildMetadataBody({ name: data.name, symbol: data.symbol, description: data.description, image: s.imageUri(domain, imageDigest), externalUrl: `https://${domain}/depot/${agent.id}` });
       const uri = s.metadataUri(domain, digest);
       if (new TextEncoder().encode(uri).length > 200) return { ok: false as const, error: "Metadata URI too long." };
       const a = await admin();
-      const { error: ie } = await a.from("depot_images").upsert(
-        { digest: imageDigest, user_id: context.userId, mime: data.imageMime, bytes: `\\x${s.hex(bytes)}` as never },
-        { onConflict: "digest", ignoreDuplicates: true },
-      );
-      if (ie) return { ok: false as const, error: ie.message };
-      const { data: existing } = await a.from("depot_metadata").select("digest,version,published_at").eq("digest", digest).maybeSingle();
-      if (existing) return { ok: true as const, digest, uri, version: existing.version, publishedAt: existing.published_at, immutable: true, reused: true, cost: "free; no on-chain cost until a launch uses this URI" };
-      const { data: last } = await a.from("depot_metadata").select("version").eq("agent_id", agent.id).order("version", { ascending: false }).limit(1);
-      const version = (last?.[0]?.version ?? 0) + 1;
-      const { data: row, error } = await a.from("depot_metadata").insert({ digest, user_id: context.userId, agent_id: agent.id, version, body, image_digest: imageDigest }).select("published_at").single();
+      const { data: raw, error } = await a.rpc("depot_publish_metadata", { _user: context.userId, _agent: agent.id, _digest: digest, _body: body, _image_digest: imageDigest, _image_mime: data.imageMime, _image_hex: s.hex(bytes) });
       if (error) return { ok: false as const, error: error.message };
-      return { ok: true as const, digest, uri, version, publishedAt: row.published_at, immutable: true, reused: false, cost: "free; no on-chain cost until a launch uses this URI" };
+      const row = z.object({ digest: z.string(), version: z.number().int(), publishedAt: z.string(), reused: z.boolean() }).parse(raw);
+      return { ok: true as const, ...row, uri, immutable: true, cost: "free; no on-chain cost until a launch uses this URI" };
     } catch (e) {
       return { ok: false as const, error: err(e) };
     }
@@ -335,14 +329,15 @@ export const listPublicReports = createServerFn({ method: "GET" })
 /** Holder-only reports: fresh server-side balance of the caller's PROVEN viewer wallet. */
 export const listGatedReports = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: unknown) => z.object({ agentId: Uuid }).strict().parse(d))
+  .inputValidator((d: unknown) => z.object({ agentId: Uuid, wallet: Address }).strict().parse(d))
   .handler(async ({ data, context }) => {
     const a = await admin();
     const { data: agent } = await a.from("depot_agents").select("*").eq("id", data.agentId).maybeSingle();
     if (!agent || agent.visibility !== "public" || agent.report_policy !== "token-holders")
       return { ok: false as const, error: "No holder-only reports for this agent." };
-    const { data: viewer } = await context.supabase.from("depot_viewer_wallets").select("wallet").eq("agent_id", data.agentId).maybeSingle();
-    if (!viewer) return { ok: false as const, error: "Prove control of a holder wallet first.", needsProof: true };
+    const { data: viewer } = await context.supabase.from("depot_viewer_wallets").select("wallet,verified_at").eq("agent_id", data.agentId).maybeSingle();
+    if (!viewer || viewer.wallet !== data.wallet || Date.parse(viewer.verified_at) > Date.now() || Date.now() - Date.parse(viewer.verified_at) > PROOF_TTL_MS)
+      return { ok: false as const, error: "Prove control of the connected holder wallet first. Access proofs last five minutes.", needsProof: true };
     const s = await srv();
     let read = null;
     try {
@@ -352,11 +347,12 @@ export const listGatedReports = createServerFn({ method: "POST" })
     }
     const d = s.gateDecision(agent, read, true);
     if (!d.allowed) return { ok: false as const, error: d.reason, balanceRaw: read.rawBalance.toString(), slot: read.slot };
-    const { data: rows, error } = await a.from("depot_reports").select("id,agent_id,created_at,facts,ai").eq("agent_id", data.agentId).order("created_at", { ascending: false }).limit(20);
+    const { data: rows, error } = await a.rpc("depot_holder_reports", { _user: context.userId, _agent: agent.id, _revision: agent.revision, _wallet: viewer.wallet, _mint: agent.gate_mint!, _balance: read.rawBalance.toString(), _read_at: new Date(read.readAt).toISOString() });
     if (error) return { ok: false as const, error: error.message };
+    if (!Array.isArray(rows)) return { ok: false as const, error: "Access policy or wallet proof changed during the read. Check access again." };
     return {
       ok: true as const, balanceRaw: read.rawBalance.toString(), slot: read.slot, wallet: viewer.wallet,
-      reports: rows.map((r) => ({ id: r.id, agentId: r.agent_id, createdAt: r.created_at, facts: r.facts, ai: r.ai }) as unknown as ScoutReportDTO),
+      reports: rows as unknown as ScoutReportDTO[],
     };
   });
 

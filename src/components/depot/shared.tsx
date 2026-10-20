@@ -7,6 +7,7 @@ import { useSettings } from "@/lib/settings";
 import { formatUnits } from "@/lib/amount";
 import { requestWalletChallenge, verifyWalletChallenge } from "@/lib/depot.functions";
 import type { ScoutReportDTO } from "@/lib/depot-contracts";
+import { proofMessage } from "@/lib/depot-contracts";
 import { shortAddr } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -104,17 +105,25 @@ export function WalletProof({
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ tone: "info" | "error"; text: string } | null>(null);
   const pk = wallet.publicKey?.toBase58();
+  const live = useRef({ pk, agentId, purpose, epoch: 0 });
+  if (live.current.pk !== pk || live.current.agentId !== agentId || live.current.purpose !== purpose) live.current = { pk, agentId, purpose, epoch: live.current.epoch + 1 };
+  useEffect(() => () => { live.current.epoch++; }, []);
   async function go() {
     if (!pk || !wallet.signMessage) return;
     setBusy(true);
     setMsg(null);
+    const epoch = live.current.epoch;
+    const current = () => { if (live.current.epoch !== epoch || live.current.pk !== pk) throw new Error("Wallet or agent changed; request a new proof."); };
     try {
       const c = await ask({ data: { agentId, wallet: pk, purpose } });
       if (!c.ok) throw new Error(c.error);
-      if (wallet.publicKey?.toBase58() !== pk) throw new Error("Wallet changed; try again.");
+      current();
+      if (c.message !== proofMessage(c.challenge) || c.challenge.wallet !== pk || c.challenge.agentId !== agentId || c.challenge.purpose !== purpose || c.challenge.domain !== window.location.host) throw new Error("Wallet challenge does not match this site, agent and wallet.");
       const sig = await wallet.signMessage(new TextEncoder().encode(c.message));
+      current();
       const v = await verify({ data: { agentId, wallet: pk, purpose, nonce: c.challenge.nonce, signature: bs58.encode(sig) } });
       if (!v.ok) throw new Error(v.error);
+      current();
       setMsg({ tone: "info", text: `Wallet ${shortAddr(pk, 6)} proven.` });
       onVerified(pk);
     } catch (e) {

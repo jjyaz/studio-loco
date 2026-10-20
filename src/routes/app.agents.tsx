@@ -1469,6 +1469,9 @@ export function Agents({ handoffSearch }: { handoffSearch?: z.infer<typeof Hando
         </Notice>
       )}
       <div className="-mt-2 mb-6 flex flex-wrap gap-x-5 gap-y-3 text-sm text-cream/75">
+        <Link to="/app/depot" className="underline hover:text-amber">
+          Create a Scout agent and optional token in The Depot
+        </Link>
         <Link to="/app/foundry" className="underline hover:text-amber">
           Build a versioned strategy in the Foundry
         </Link>

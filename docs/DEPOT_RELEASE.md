@@ -1,4 +1,34 @@
-# The Depot — release matrix
+# The Depot release
+
+## Result
+
+`/app/depot` provides private Scout drafts, signed controller proof, explicit passport publication, immutable agent-specific token metadata, two versioned DBC launch presets, Scout reports and server-enforced holder access. `/depot/:id` is the public passport. Navigation includes The Depot, with entry points from Launch Station, Liquidity Agents, Docs and Developer Station.
+
+The workspace follows the existing night-train visual language: panoramic station imagery, cobalt and cream surfaces, amber signals, oversized editorial headings and a seven-stage workflow rail. Loading, empty, unavailable, refusal and recovery states are explicit. Public reports can be produced without creating a token.
+
+DBC config and pool creation is atomic, standard SPL/SOL only, using official SDK 1.5.11. DAMM v2 uses official SDK 1.4.5. The creator receives all non-protocol curve fees and the permanent migrated LP allocation. The separate 0.2% protocol liquidity migration charge is disclosed. Graduation, curve/DAMM claims and a SOL reserve transfer are separate wallet-reviewed actions. Existing WSOL remains open; claims do not silently unwrap or fund a reserve.
+
+Reviews bind financial form intent, wallet/network/connection generation, agent revision, immutable metadata, recipients and costs. Exact simulation/cost and server agent/metadata checks run on both sides of wallet approval. Durable IndexedDB reservations serialize across tabs; signed evidence and launch intent persist before broadcast. Unknown signatures cannot be resent or released on a timer. Successful receipt verification compares the exact signed message; launch attachment additionally reconstructs the original SDK transaction on the server and verifies protocol identity.
+
+Holder reports require a recently proven connected wallet and a fresh mainnet balance. Delivery rechecks the agent's current revision, visibility and gate in one SQL statement. Client state is scoped to account/wallet/agent epochs so late responses cannot cross wallet changes. No private reports or financial actions were added to the public SDK or MCP.
+
+## Validation
+
+- TypeScript source check and production client/Worker build passed.
+- 612 tests passed in 66 files, including seven new wallet/access UI interaction tests.
+- Live mainnet unsigned app-adapter simulation passed, with simulated post-state identity decoding, a 1,170-byte packet, 15,500-lamport network fee and 26,555,720-lamport new-account funding. These are observations for the tested preset, not a fixed future quote.
+- Deployed database migrations 0003–0007 are applied. Both rollback-only DB acceptance scripts passed, including current-policy delivery, immutable publication and launch identity boundaries. Test fixtures were not retained.
+- Earlier live read-only Scout and optional AI commentary checks passed. AI text is qualitative, fact-referenced and never execution permission.
+
+## Deployment and owner acceptance
+
+Source sync to Lovable is distinct from publishing the production site. Publishing uses Lovable after the combined source passes validation. Neither implementation nor publication signs, funds, buys or launches a token. Public metadata preparation verifies studioloco.cfd endpoints and refuses if that domain still serves an earlier release without the metadata routes.
+
+An owner-run acceptance pass is still needed after publishing: account sign-in, controller message proof, a real metadata publication, funded launch, unknown/confirmed receipt recovery and passport link, fee accrual/claims, DBC graduation and a real holder-wallet report read. The available preview browser hit a Lovable sign-in wall, so React DOM tests and compile checks do not constitute a full authenticated browser walkthrough.
+
+V1 has no hosted private key, delegated financial autonomy, automatic token purchase, automatic reinvestment or guaranteed operating income. A reserve transfer records a wallet-reviewed payment and does not prove ownership of the receiver or automatically authorize future spending.
+
+## Earlier Lovable verification matrix
 
 | Area | Implemented | Verified here | Still needs funded wallet acceptance |
 | --- | --- | --- | --- |

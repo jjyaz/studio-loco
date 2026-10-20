@@ -139,6 +139,9 @@ function Developers() {
             <a href="#quickstart" className={btn()}>
               Start building <ArrowUpRight size={16} />
             </a>
+            <a href="/app/depot" className={btn({ variant: "line" })}>
+              Scout agents · The Depot
+            </a>
             <a
               href={`${base}/openapi.json`}
               className={btn({ variant: "line" })}
@@ -148,6 +151,7 @@ function Developers() {
               OpenAPI specification
             </a>
           </div>
+          <p className="mt-4 max-w-2xl text-sm text-cream/65">The Depot is a separate authenticated app workflow for Scout reports, wallet-proven passports and optional DBC launches. Its private reports and financial actions are not exposed through the public SDK or MCP.</p>
           <div className="mt-10 grid gap-4 md:grid-cols-3">
             {[
               {

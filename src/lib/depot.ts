@@ -197,6 +197,8 @@ export interface ReviewBinding {
   presetVersion: number;
   metadataUri: string;
   metadataHash?: string;
+  /** Additional form scope (for example a reserve receiver and amount). */
+  operationIntent?: string;
   recipients: Recipient[];
   maxStageLamports: bigint;
   maxTotalLamports: bigint;
@@ -206,7 +208,7 @@ export function bindingKey(b: ReviewBinding): string {
   const rs = [...b.recipients].sort((a, c) => a.role.localeCompare(c.role));
   return JSON.stringify([
     b.wallet, b.cluster, b.rpc, b.rpcGeneration ?? 0, b.agentId, b.agentRevision, b.presetId, b.presetVersion,
-    b.metadataUri, b.metadataHash ?? "", rs.map((r) => [r.role, r.address]),
+    b.metadataUri, b.metadataHash ?? "", b.operationIntent ?? "", rs.map((r) => [r.role, r.address]),
     b.maxStageLamports.toString(), b.maxTotalLamports.toString(),
   ]);
 }

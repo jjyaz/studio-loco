@@ -236,7 +236,7 @@ function PassportPanel({ agent, refresh, onDeleted }: { agent: AgentDTO; refresh
         <p className="station-code text-amber">Publication</p>
         <p className="mt-2 text-sm text-cream/75">
           A published passport shows only name, mission, proven wallet, report policy, verified launch identity and metadata
-          versions. Private drafts are never readable by anyone else.
+          versions. If report access is Public, publishing also makes this agent's report history public. Choose Token holders first for restricted access.
         </p>
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <Btn
@@ -333,7 +333,7 @@ function useDepotOperations(agentId: string) {
   return { ops, err, blocking };
 }
 
-function useBinding(agent: AgentDTO, extra: { presetId: string; presetVersion: number; metadataUri: string; metadataHash?: string; maxStageLamports: bigint; maxTotalLamports: bigint }) {
+function useBinding(agent: AgentDTO, extra: { presetId: string; presetVersion: number; metadataUri: string; metadataHash?: string; operationIntent?: string; maxStageLamports: bigint; maxTotalLamports: bigint }) {
   const wallet = useWallet();
   const { settings } = useSettings();
   const gen = useRpcGeneration();
@@ -418,10 +418,12 @@ function useDepotAction(agent: AgentDTO, bindingRef: React.MutableRefObject<Revi
     const p = prepared;
     if (!p) return;
     setBusy(true); setError(null);
-    const { depotPolicyGuard, settleDepotOperation } = await import("@/lib/depot-operations");
     let opId: string | undefined;
     let out: TxStep[] | undefined;
+    let settle: typeof import("@/lib/depot-operations").settleDepotOperation | undefined;
     try {
+      const { depotPolicyGuard, settleDepotOperation } = await import("@/lib/depot-operations");
+      settle = settleDepotOperation;
       const guard = depotPolicyGuard({ connection, prepared: p, current: () => bindingRef.current, reserved: (id) => { opId = id; } });
       out = await tx.run([{ label: p.label, tx: p.tx, signers: p.signers }], {
         maxFeeLamports: Number(p.review.stages[0]!.feeLamports),
@@ -429,7 +431,7 @@ function useDepotAction(agent: AgentDTO, bindingRef: React.MutableRefObject<Revi
         semanticGuard: () => (bindingKey(bindingRef.current) !== p.review.key ? "Inputs changed since review." : Date.now() - p.review.createdAt > DEPOT_REVIEW_TTL_MS ? "Review expired; prepare again." : null),
         asyncSemanticGuard: async () => {
           const r = await list();
-          if (!r.ok) return "Could not re-read the agent; nothing signed.";
+          if (!r.ok) return "Could not re-read the agent; nothing will be sent.";
           const a = r.agents.find((x) => x.id === p.binding.agentId);
           if (!a || a.revision !== p.binding.agentRevision || a.wallet !== p.binding.wallet || !a.walletVerifiedAt) return "Agent revision or proven wallet changed. Prepare again.";
           return opts.recheck ? await opts.recheck(p) : null;
@@ -441,7 +443,7 @@ function useDepotAction(agent: AgentDTO, bindingRef: React.MutableRefObject<Revi
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
-      if (opId) await settleDepotOperation(opId, out?.[0]).catch((e) => setError(`Ledger update failed: ${e instanceof Error ? e.message : e}`));
+      if (opId && settle) await settle(opId, out?.[0]).catch((e) => setError(`Ledger update failed: ${e instanceof Error ? e.message : e}`));
       setPrepared(null);
       setBusy(false);
     }
@@ -480,7 +482,7 @@ function LaunchPanel({ agent, refresh }: { agent: AgentDTO; refresh: () => void 
       }
     },
   });
-  const disabled = blocker ?? (agent.launch ? "This agent already has a verified launch." : !chosen ? "Select or publish token metadata." : !cap.ok || capLamports <= 0n ? "Enter a positive SOL cap." : ops.blocking ? "Resolve the open Depot operation in Fee desk · ops first." : null);
+  const disabled = blocker ?? (ops.err ? "Durable operation storage is unavailable; signing is blocked." : !ops.ops ? "Checking operation storage…" : agent.launch ? "This agent already has a verified launch." : !chosen ? "Select or publish token metadata." : !cap.ok || capLamports <= 0n ? "Enter a positive SOL cap." : ops.blocking ? "Resolve the open Depot operation in Fee desk · ops first." : null);
   return (
     <div className="flex flex-col gap-6">
       <MetadataPublisher agent={agent} publish={publishMeta} onPublished={(d) => { void meta.refetch(); setDigest(d); }} />
@@ -513,10 +515,11 @@ function LaunchPanel({ agent, refresh }: { agent: AgentDTO; refresh: () => void 
           <Stat label="Nominal curve / migration" value="80% / 20%" sub="Nominal. Exact amounts derived by the Meteora SDK and migration rounding." />
           <Stat label="Graduation threshold" value={`${fmtRaw(preset.migrationQuoteThresholdRaw.toString(), 9)} SOL`} sub={`${preset.migrationQuoteThresholdRaw} lamports`} />
           <Stat label="Curve trading fee" value="1%" sub="Meteora protocol 20% · owner 80% · no Studio Loco fee" />
-          <Stat label="Migrated LP" value="100% permanently locked" sub="Owner position can still claim eligible DAMM fees" />
+          <Stat label="Creator LP allocation" value="100% permanently locked" sub="Owner position can still claim eligible DAMM fees" />
           <Stat label="After graduation" value="DAMM v2 · 1% tier" sub="Separate DAMM v2 fee schedule" />
         </div>
         <p className="mt-3 text-xs text-cream/65">Mint and freeze authority are removed (immutable fixed supply). No initial purchase, transfer tax or hidden recipient. Graduation is to DAMM v2 only — never DLMM or Pro.</p>
+        <p className="mt-2 text-xs text-cream/65">Graduation also applies Meteora's separate 0.2% protocol liquidity migration charge to deposited assets. Partner and creator migration charges are zero in these presets; the DAMM v2 trading fee is separate.</p>
         <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
           <Field label="Max SOL for this transaction (fee + new accounts)" value={capSol} onChange={(e) => setCapSol(e.target.value)} suffix="SOL" error={cap.ok ? null : cap.error} />
         </div>
@@ -544,17 +547,13 @@ function LaunchPanel({ agent, refresh }: { agent: AgentDTO; refresh: () => void 
             {action.busy && !action.prepared ? "Simulating…" : "Prepare fresh launch review"}
           </Btn>
           {action.prepared && (
-            <Btn variant="primary" disabled={action.busy || action.running || !!disabled} onClick={() => action.approve((opId, p) => {
-              const all = readLaunchMeta();
-              all[opId] = { metadataDigest: p.metadataHash!, presetId: p.binding.presetId, presetVersion: p.binding.presetVersion };
-              localStorage.setItem(LAUNCH_META_KEY, JSON.stringify(all));
-            })}>
+            <Btn variant="primary" disabled={action.busy || action.running || !!disabled} onClick={() => action.approve()}>
               Approve in wallet
             </Btn>
           )}
         </div>
         {action.prepared && <div className="mt-4"><ActionReview prepared={action.prepared} onExpire={() => { action.setPrepared(null); action.setError("Review expired after 20 seconds. Prepare again."); }} /></div>}
-        {action.error && <div className="mt-3"><Notice tone="error" title="Not signed">{action.error}</Notice></div>}
+        {action.error && <div className="mt-3"><Notice tone="error" title="Action needs attention">{action.error}</Notice></div>}
         {action.steps && <div className="mt-3"><TxSteps steps={action.steps} /></div>}
         <p className="mt-3 text-xs text-cream/60">Confirmation is not verification. After confirming, open Fee desk · ops to verify the receipt and link the launch to this passport.</p>
       </Panel>
@@ -634,7 +633,7 @@ function MetadataPublisher({ agent, publish, onPublished }: { agent: AgentDTO; p
         <div className="md:col-span-2 flex flex-col gap-2">
           {errs.length > 0 && <p className="text-xs text-cream/65">{errs.join(" · ")}</p>}
           <Btn type="submit" disabled={busy || errs.length > 0 || !agent.walletVerifiedAt}>{busy ? "Publishing…" : "Publish immutable metadata"}</Btn>
-          <p className="text-xs text-cream/60">Free to publish; no onchain cost until a launch uses the URI. Must be published from the public site (not localhost).</p>
+          <p className="text-xs text-cream/60">Free to publish; no onchain cost until launch. Files use the permanent studioloco.cfd domain; this update must be published there before a launch can verify its metadata. Up to 20 versions/hour and 100 permanent versions/account.</p>
           {msg && <Notice tone={msg.tone} title={msg.text} />}
         </div>
       </form>
@@ -684,7 +683,7 @@ function OperationsList({ agent, ops, refresh }: { agent: AgentDTO; ops: ReturnT
                   const m = await import("@/lib/depot-operations");
                   await m.verifyDepotOperation(connection, o);
                   if (o.kind === "launch") {
-                    const meta = readLaunchMeta()[o.id];
+                    const meta = o.launchIntent ?? readLaunchMeta()[o.id];
                     if (!meta) throw new Error("Receipt verified on this device, but the reviewed metadata/preset identifiers are missing here; cannot link.");
                     const r = await record({ data: { agentId: agent.id, revision: agent.revision, config: o.target.config, mint: o.target.mint, pool: o.target.pool, signature: o.pending!.signature, ...meta } });
                     if (!r.ok) throw new Error(`Receipt verified; linking failed: ${r.error}`);
@@ -697,7 +696,7 @@ function OperationsList({ agent, ops, refresh }: { agent: AgentDTO; ops: ReturnT
               )}
               {o.state === "verified" && o.kind === "launch" && !agent.launch && (
                 <Btn size="sm" variant="line" disabled={!!busy} onClick={() => act(o.id, async () => {
-                  const meta = readLaunchMeta()[o.id];
+                  const meta = o.launchIntent ?? readLaunchMeta()[o.id];
                   if (!meta) throw new Error("Reviewed metadata/preset identifiers are missing on this device.");
                   const r = await record({ data: { agentId: agent.id, revision: agent.revision, config: o.target.config, mint: o.target.mint, pool: o.target.pool, signature: o.pending!.signature, ...meta } });
                   if (!r.ok) throw new Error(r.error);
@@ -721,14 +720,14 @@ function FeeDesk({ agent, refresh }: { agent: AgentDTO; refresh: () => void }) {
   const cap = parseUnits(capSol, 9);
   const capLamports = cap.ok ? BigInt(cap.raw.toString()) : 0n;
   const launch = agent.launch;
-  const { ref, blocker } = useBinding(agent, { presetId: launch?.presetId ?? "standard-sol-85", presetVersion: launch?.presetVersion ?? 1, metadataUri: "", maxStageLamports: capLamports, maxTotalLamports: capLamports });
+  const [reserveTo, setReserveTo] = useState("");
+  const [reserveSol, setReserveSol] = useState("");
+  const { ref, blocker } = useBinding(agent, { presetId: launch?.presetId ?? "standard-sol-85", presetVersion: launch?.presetVersion ?? 1, metadataUri: "", operationIntent: JSON.stringify([reserveTo, reserveSol, launch?.mint ?? ""]), maxStageLamports: capLamports, maxTotalLamports: capLamports });
   const ops = useDepotOperations(agent.id);
   const action = useDepotAction(agent, ref);
   const [life, setLife] = useState<DepotLifecycle | null>(null);
   const [lifeErr, setLifeErr] = useState<string | null>(null);
   const [reading, setReading] = useState(false);
-  const [reserveTo, setReserveTo] = useState("");
-  const [reserveSol, setReserveSol] = useState("");
   const target: DepotTarget | null = launch ? { config: launch.config, mint: launch.mint, pool: launch.pool } : null;
   async function read() {
     if (!target || !agent.wallet) return;
@@ -737,7 +736,7 @@ function FeeDesk({ agent, refresh }: { agent: AgentDTO; refresh: () => void }) {
     catch (e) { setLife(null); setLifeErr(e instanceof Error ? e.message : String(e)); }
     finally { setReading(false); }
   }
-  const disabled = blocker ?? (!cap.ok || capLamports <= 0n ? "Enter a positive SOL cap." : ops.blocking ? "Resolve the open operation below first." : null);
+  const disabled = blocker ?? (ops.err ? "Durable operation storage is unavailable; signing is blocked." : !ops.ops ? "Checking operation storage…" : !cap.ok || capLamports <= 0n ? "Enter a positive SOL cap." : ops.blocking ? "Resolve the open operation below first." : null);
   const reserveAmt = parseUnits(reserveSol || "0", 9);
   const pct = life ? Number((BigInt(life.quoteReserveRaw) * 10000n) / (BigInt(life.thresholdRaw) || 1n)) / 100 : 0;
   return (
@@ -764,6 +763,8 @@ function FeeDesk({ agent, refresh }: { agent: AgentDTO; refresh: () => void }) {
                   <div className="h-full bg-amber" style={{ width: `${Math.min(100, pct)}%` }} />
                 </div>
                 <p className="mt-1 text-xs text-cream/60">Read at slot {life.slot}, {new Date(life.readAt).toLocaleTimeString()}. A snapshot, not continuous monitoring.</p>
+                <ul className="mt-1 text-xs text-cream/60">{life.readContexts.map(t => <li key={t}>{t}.</li>)}</ul>
+                <p className="mt-2 text-xs text-cream/75">Protocol liquidity migration charge: {life.protocolMigrationFeeBps / 100}% of migration deposits. Recorded migration charge: {fmtRaw(life.protocolMigrationBaseFeeRaw, 6)} token / {fmtRaw(life.protocolMigrationQuoteFeeRaw, 9)} SOL. This is separate from trading fees.</p>
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
                 <Stat label="Creator curve fees · token" value={fmtRaw(life.creatorBaseFeeRaw, 6)} sub={`${life.creatorBaseFeeRaw} raw`} />
@@ -774,7 +775,7 @@ function FeeDesk({ agent, refresh }: { agent: AgentDTO; refresh: () => void }) {
                 <div key={p.address} className="border border-line p-3 text-sm">
                   <p>Position <Addr a={p.address} label="position" /></p>
                   <p className="mt-1 font-mono text-xs">Locked liquidity {p.permanentLockedLiquidity} · unlocked {p.unlockedLiquidity}</p>
-                  <p className="font-mono text-xs">Pending fees: token {fmtRaw(p.feeARaw, 6)} · SOL {fmtRaw(p.feeBRaw, 9)}</p>
+                  <p className="font-mono text-xs">Pending fees: token {fmtRaw(p.feeARaw, 6)} · WSOL {fmtRaw(p.feeBRaw, 9)}</p>
                   <Btn size="sm" className="mt-2" disabled={!!disabled || action.busy} onClick={() => action.prepare(async () => (await import("@/lib/depot-chain")).prepareDepotDammClaim(connection, ref.current, target!, p.address))}>Prepare DAMM fee claim</Btn>
                 </div>
               ))}
@@ -807,7 +808,7 @@ function FeeDesk({ agent, refresh }: { agent: AgentDTO; refresh: () => void }) {
           </div>
         )}
         {action.busy && !action.prepared && <div className="mt-3"><Spinner label="Reading and simulating" /></div>}
-        {action.error && <div className="mt-3"><Notice tone="error" title="Not signed">{action.error}</Notice></div>}
+        {action.error && <div className="mt-3"><Notice tone="error" title="Action needs attention">{action.error}</Notice></div>}
         {action.steps && <div className="mt-3"><TxSteps steps={action.steps} /></div>}
       </Panel>
       <OperationsList agent={agent} ops={ops} refresh={refresh} />
@@ -864,6 +865,7 @@ function ScoutPanel({ agent }: { agent: AgentDTO }) {
       <Panel>
         <p className="station-code text-amber">Report history</p>
         {reports.isLoading && <Spinner label="Loading reports" />}
+        {(reports.isError || (reports.data && !reports.data.ok)) && <Notice tone="error" title="Report history unavailable">{reports.data && !reports.data.ok ? reports.data.error : "The service could not be reached."} <button className="underline" onClick={() => void reports.refetch()}>Try again</button>.</Notice>}
         {reports.data?.ok && history.length === 0 && <p className="mt-2 text-sm text-cream/70">No reports yet.</p>}
         <div className="mt-3 flex flex-col gap-3">{history.filter((r) => r.id !== latest?.id).slice(0, 5).map((r) => <ScoutReportView key={r.id} r={r} />)}</div>
       </Panel>
