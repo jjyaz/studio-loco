@@ -38,6 +38,8 @@ import { Route as LabArchitectureRouteImport } from './routes/lab.architecture'
 import { Route as AppPoolAddressRouteImport } from './routes/app.pool.$address'
 import { Route as ApiPublicHooksSignalTickRouteImport } from './routes/api/public/hooks/signal-tick'
 import { Route as ApiPublicRpcClusterRouteImport } from './routes/api/public/rpc.$cluster'
+import { Route as ApiPublicDepotImageDigestRouteImport } from './routes/api/public/depot/image.$digest'
+import { Route as ApiPublicDepotMetadataDigestRouteImport } from './routes/api/public/depot/metadata.$digest'
 import { Route as ApiPublicLocoV1SplatRouteImport } from './routes/api/public/loco/v1/$'
 
 const IndexRoute = IndexRouteImport.update({
@@ -186,6 +188,18 @@ const ApiPublicRpcClusterRoute = ApiPublicRpcClusterRouteImport.update({
   path: '/api/public/rpc/$cluster',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicDepotImageDigestRoute =
+  ApiPublicDepotImageDigestRouteImport.update({
+    id: '/api/public/depot/image/$digest',
+    path: '/api/public/depot/image/$digest',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiPublicDepotMetadataDigestRoute =
+  ApiPublicDepotMetadataDigestRouteImport.update({
+    id: '/api/public/depot/metadata/$digest',
+    path: '/api/public/depot/metadata/$digest',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiPublicLocoV1SplatRoute = ApiPublicLocoV1SplatRouteImport.update({
   id: '/api/public/loco/v1/$',
   path: '/api/public/loco/v1/$',
@@ -222,6 +236,8 @@ export interface FileRoutesByFullPath {
   '/app/pool/$address': typeof AppPoolAddressRoute
   '/api/public/hooks/signal-tick': typeof ApiPublicHooksSignalTickRoute
   '/api/public/rpc/$cluster': typeof ApiPublicRpcClusterRoute
+  '/api/public/depot/image/$digest': typeof ApiPublicDepotImageDigestRoute
+  '/api/public/depot/metadata/$digest': typeof ApiPublicDepotMetadataDigestRoute
   '/api/public/loco/v1/$': typeof ApiPublicLocoV1SplatRoute
 }
 export interface FileRoutesByTo {
@@ -253,6 +269,8 @@ export interface FileRoutesByTo {
   '/app/pool/$address': typeof AppPoolAddressRoute
   '/api/public/hooks/signal-tick': typeof ApiPublicHooksSignalTickRoute
   '/api/public/rpc/$cluster': typeof ApiPublicRpcClusterRoute
+  '/api/public/depot/image/$digest': typeof ApiPublicDepotImageDigestRoute
+  '/api/public/depot/metadata/$digest': typeof ApiPublicDepotMetadataDigestRoute
   '/api/public/loco/v1/$': typeof ApiPublicLocoV1SplatRoute
 }
 export interface FileRoutesById {
@@ -286,6 +304,8 @@ export interface FileRoutesById {
   '/app/pool/$address': typeof AppPoolAddressRoute
   '/api/public/hooks/signal-tick': typeof ApiPublicHooksSignalTickRoute
   '/api/public/rpc/$cluster': typeof ApiPublicRpcClusterRoute
+  '/api/public/depot/image/$digest': typeof ApiPublicDepotImageDigestRoute
+  '/api/public/depot/metadata/$digest': typeof ApiPublicDepotMetadataDigestRoute
   '/api/public/loco/v1/$': typeof ApiPublicLocoV1SplatRoute
 }
 export interface FileRouteTypes {
@@ -320,6 +340,8 @@ export interface FileRouteTypes {
     | '/app/pool/$address'
     | '/api/public/hooks/signal-tick'
     | '/api/public/rpc/$cluster'
+    | '/api/public/depot/image/$digest'
+    | '/api/public/depot/metadata/$digest'
     | '/api/public/loco/v1/$'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -351,6 +373,8 @@ export interface FileRouteTypes {
     | '/app/pool/$address'
     | '/api/public/hooks/signal-tick'
     | '/api/public/rpc/$cluster'
+    | '/api/public/depot/image/$digest'
+    | '/api/public/depot/metadata/$digest'
     | '/api/public/loco/v1/$'
   id:
     | '__root__'
@@ -383,6 +407,8 @@ export interface FileRouteTypes {
     | '/app/pool/$address'
     | '/api/public/hooks/signal-tick'
     | '/api/public/rpc/$cluster'
+    | '/api/public/depot/image/$digest'
+    | '/api/public/depot/metadata/$digest'
     | '/api/public/loco/v1/$'
   fileRoutesById: FileRoutesById
 }
@@ -400,6 +426,8 @@ export interface RootRouteChildren {
   LabIndexRoute: typeof LabIndexRoute
   ApiPublicHooksSignalTickRoute: typeof ApiPublicHooksSignalTickRoute
   ApiPublicRpcClusterRoute: typeof ApiPublicRpcClusterRoute
+  ApiPublicDepotImageDigestRoute: typeof ApiPublicDepotImageDigestRoute
+  ApiPublicDepotMetadataDigestRoute: typeof ApiPublicDepotMetadataDigestRoute
   ApiPublicLocoV1SplatRoute: typeof ApiPublicLocoV1SplatRoute
 }
 
@@ -608,6 +636,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicRpcClusterRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/depot/image/$digest': {
+      id: '/api/public/depot/image/$digest'
+      path: '/api/public/depot/image/$digest'
+      fullPath: '/api/public/depot/image/$digest'
+      preLoaderRoute: typeof ApiPublicDepotImageDigestRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/depot/metadata/$digest': {
+      id: '/api/public/depot/metadata/$digest'
+      path: '/api/public/depot/metadata/$digest'
+      fullPath: '/api/public/depot/metadata/$digest'
+      preLoaderRoute: typeof ApiPublicDepotMetadataDigestRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/loco/v1/$': {
       id: '/api/public/loco/v1/$'
       path: '/api/public/loco/v1/$'
@@ -672,6 +714,8 @@ const rootRouteChildren: RootRouteChildren = {
   LabIndexRoute: LabIndexRoute,
   ApiPublicHooksSignalTickRoute: ApiPublicHooksSignalTickRoute,
   ApiPublicRpcClusterRoute: ApiPublicRpcClusterRoute,
+  ApiPublicDepotImageDigestRoute: ApiPublicDepotImageDigestRoute,
+  ApiPublicDepotMetadataDigestRoute: ApiPublicDepotMetadataDigestRoute,
   ApiPublicLocoV1SplatRoute: ApiPublicLocoV1SplatRoute,
 }
 export const routeTree = rootRouteImport
