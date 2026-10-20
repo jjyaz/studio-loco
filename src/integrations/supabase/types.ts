@@ -269,6 +269,31 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      conductor_observer_change: {
+        Args: {
+          _action: string
+          _revision: number
+          _rule: Json
+          _user: string
+          _watch: string
+        }
+        Returns: Json
+      }
+      conductor_observer_commit: {
+        Args: {
+          _alert: Json
+          _error: string
+          _holder: string
+          _last_proposed: Json
+          _ok: boolean
+          _out_run: Json
+          _revision: number
+          _summary: Json
+          _tick: number
+          _watch: string
+        }
+        Returns: Json
+      }
       signal_acquire_lease: {
         Args: { _holder: string; _ttl_seconds: number }
         Returns: boolean
