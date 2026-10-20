@@ -1,7 +1,25 @@
 /** Depot transport contracts. Client-safe: no SDK, no secrets. All raw integers are decimal strings. */
 import { z } from "zod";
+import bs58 from "bs58";
 
-export const Address = z.string().regex(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/, "Invalid Solana address");
+/** Real base58 that decodes to exactly 32 bytes (a regex alone accepts invalid keys). */
+export function isAddress32(s: string): boolean {
+  if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(s)) return false;
+  try {
+    return bs58.decode(s).length === 32;
+  } catch {
+    return false;
+  }
+}
+export const Address = z.string().refine(isAddress32, "Invalid Solana address");
+export const Signature = z.string().refine((s) => {
+  try {
+    return /^[1-9A-HJ-NP-Za-km-z]{80,90}$/.test(s) && bs58.decode(s).length === 64;
+  } catch {
+    return false;
+  }
+}, "Invalid transaction signature");
+export const GATE_MAX_AGE_S = 60;
 export const RawAmount = z.string().regex(/^[1-9]\d{0,19}$/, "Positive raw integer").refine((s) => BigInt(s) <= 18_446_744_073_709_551_615n, "Exceeds u64");
 export const Uuid = z.string().uuid();
 
@@ -60,7 +78,7 @@ export const AgentUpdateInput = z
     reportPolicy: z.enum(["public", "token-holders"]).optional(),
     gateMint: Address.nullable().optional(),
     gateMinRaw: RawAmount.nullable().optional(),
-    gateMaxAgeS: z.number().int().min(10).max(300).optional(),
+    gateMaxAgeS: z.number().int().min(10).max(GATE_MAX_AGE_S).optional(),
   })
   .strict();
 
@@ -71,7 +89,7 @@ export const VerifyInput = z
     wallet: Address,
     purpose: z.enum(PROOF_PURPOSES),
     nonce: z.string().regex(/^[0-9a-f]{64}$/),
-    signature: z.string().regex(/^[1-9A-HJ-NP-Za-km-z]{80,90}$/),
+    signature: Signature,
   })
   .strict();
 
@@ -115,7 +133,7 @@ export interface AgentDTO {
   gateMint: string | null;
   gateMinRaw: string | null;
   gateMaxAgeS: number;
-  launch: null;
+  launch: LaunchDTO | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -133,9 +151,10 @@ export interface PublicPassportDTO {
   reportPolicy: "public" | "token-holders";
   gateMint: string | null;
   gateMinRaw: string | null;
+  launch: LaunchDTO | null;
   metadata: { digest: string; version: number; publishedAt: string }[];
 }
-const PUBLIC_KEYS = ["id", "name", "description", "mission", "wallet", "walletVerifiedAt", "publishedAt", "revision", "reportPolicy", "gateMint", "gateMinRaw", "metadata"] as const;
+const PUBLIC_KEYS = ["id", "name", "description", "mission", "wallet", "walletVerifiedAt", "publishedAt", "revision", "reportPolicy", "gateMint", "gateMinRaw", "launch", "metadata"] as const;
 export function sanitizePassport(raw: unknown): PublicPassportDTO | null {
   if (!raw || typeof raw !== "object") return null;
   const r = raw as Record<string, unknown>;
@@ -144,7 +163,54 @@ export function sanitizePassport(raw: unknown): PublicPassportDTO | null {
   out["metadata"] = Array.isArray(r["metadata"])
     ? (r["metadata"] as Record<string, unknown>[]).map((m) => ({ digest: m["digest"], version: m["version"], publishedAt: m["publishedAt"] }))
     : [];
+  out["launch"] = parseLaunch(r["launch"]);
   return out as unknown as PublicPassportDTO;
+}
+
+/** Server-verified launch identity. Only these fields are ever stored or published. */
+export const LaunchSchema = z
+  .object({
+    cluster: z.literal("mainnet-beta"),
+    config: Address,
+    mint: Address,
+    pool: Address,
+    signature: Signature,
+    slot: z.number().int().nonnegative(),
+    presetId: z.string().regex(/^[a-z0-9-]{1,40}$/),
+    presetVersion: z.number().int().min(1),
+    metadataDigest: z.string().regex(/^[0-9a-f]{64}$/),
+    verifiedAt: z.string().datetime({ offset: true }),
+  })
+  .strict();
+export type LaunchDTO = z.infer<typeof LaunchSchema>;
+export function parseLaunch(raw: unknown): LaunchDTO | null {
+  const r = LaunchSchema.safeParse(raw);
+  return r.success ? r.data : null;
+}
+export const RecordLaunchInput = z
+  .object({
+    agentId: Uuid,
+    revision: z.number().int().min(1),
+    config: Address,
+    mint: Address,
+    pool: Address,
+    signature: Signature,
+    metadataDigest: z.string().regex(/^[0-9a-f]{64}$/),
+    presetId: z.string().max(40),
+    presetVersion: z.number().int().min(1),
+  })
+  .strict();
+
+export interface TokenMetadataDTO {
+  digest: string;
+  version: number;
+  publishedAt: string;
+  uri: string;
+  imageUri: string;
+  name: string;
+  symbol: string;
+  description: string;
+  body: string;
 }
 
 export interface ScoutQuoteFact {
@@ -178,10 +244,16 @@ export interface ScoutFacts {
   quotes: ScoutQuoteFact[];
   gaps: string[];
 }
+/** AI output is qualitative commentary tied to known fact IDs; it carries no numbers and no authority. */
+export interface ScoutAiObservation {
+  factId: string;
+  note: string;
+}
 export interface ScoutAi {
   status: "ok" | "failed" | "rejected";
   model: string | null;
   brief: string | null;
+  observations?: ScoutAiObservation[];
   reason: string | null;
 }
 export interface ScoutReportDTO {
