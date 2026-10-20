@@ -1,6 +1,5 @@
 -- Rollback-only Depot DB acceptance. Run: psql -v ON_ERROR_STOP=1 -f scripts/qa/depot-database.acceptance.sql
 BEGIN;
-SET LOCAL ROLE service_role;
 \set u1 '''00000000-0000-4000-8000-0000000000b1'''
 \set u2 '''00000000-0000-4000-8000-0000000000b2'''
 \set ag '''00000000-0000-4000-8000-0000000000a1'''
@@ -38,7 +37,6 @@ DO $$ BEGIN
   BEGIN PERFORM public.depot_consume_nonce('x',null,null,'','',''); RAISE EXCEPTION 'FAIL anon consume'; EXCEPTION WHEN insufficient_privilege THEN NULL; END;
 END $$;
 RESET ROLE;
-SET LOCAL ROLE service_role;
 SET LOCAL ROLE authenticated;
 SELECT set_config('request.jwt.claims', '{"sub":"00000000-0000-4000-8000-0000000000b2","role":"authenticated"}', true);
 DO $$ BEGIN
@@ -47,6 +45,5 @@ DO $$ BEGIN
   BEGIN PERFORM 1 FROM public.depot_nonces; RAISE EXCEPTION 'FAIL nonce read'; EXCEPTION WHEN insufficient_privilege THEN NULL; END;
 END $$;
 RESET ROLE;
-SET LOCAL ROLE service_role;
 SELECT 'DEPOT DB ACCEPTANCE PASSED';
 ROLLBACK;
