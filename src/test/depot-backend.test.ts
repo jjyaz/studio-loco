@@ -104,16 +104,25 @@ describe("scout facts + AI boundary", () => {
     expect(f.gaps.some((g) => g.includes("unavailable"))).toBe(true);
     expect(f.gaps.some((g) => /TVL/.test(g))).toBe(true);
   });
-  const sse = (brief: string) =>
-    (async () => new Response(`data: ${JSON.stringify({ type: "response.output_text.delta", delta: JSON.stringify({ brief }) })}\n\ndata: [DONE]\n\n`, { status: 200 })) as unknown as typeof fetch;
-  it("accepts a brief using only observed numbers", async () => {
-    const r = await scoutBrief(f, "k", sse("Probe 1000000000 raw returned 150000000 raw at slot 300000000."));
+  const sse = (out: unknown, extra = "") =>
+    (async () => new Response(`data: ${JSON.stringify({ type: "response.output_text.delta", delta: JSON.stringify(out) })}\n\n${extra}data: ${JSON.stringify({ type: "response.completed" })}\n\n`, { status: 200 })) as unknown as typeof fetch;
+  it("accepts qualitative commentary citing known fact IDs", async () => {
+    const r = await scoutBrief(f, "k", sse({ summary: "Both probes were read; one direction lacked bin data.", observations: [{ factId: "quote-1", note: "This direction could not be quoted." }] }));
     expect(r.status).toBe("ok");
+    expect(r.observations?.[0]?.factId).toBe("quote-1");
   });
-  it("withholds invented metrics", async () => {
-    const r = await scoutBrief(f, "k", sse("TVL is 42,000,000 with 12% APY."));
-    expect(r.status).toBe("rejected");
-    expect(r.brief).toBeNull();
+  it("withholds numbers, unknown fact IDs and advice", async () => {
+    expect((await scoutBrief(f, "k", sse({ summary: "Liquidity is about 42 SOL.", observations: [{ factId: "pool", note: "ok" }] }))).status).toBe("rejected");
+    expect((await scoutBrief(f, "k", sse({ summary: "Healthy.", observations: [{ factId: "tvl", note: "ok" }] }))).status).toBe("rejected");
+    expect((await scoutBrief(f, "k", sse({ summary: "You should buy now.", observations: [{ factId: "pool", note: "ok" }] }))).status).toBe("rejected");
+  });
+  it("rejects refusal, error and malformed frames, and incomplete streams", async () => {
+    expect((await scoutBrief(f, "k", sse({ summary: "x", observations: [] }, `data: ${JSON.stringify({ type: "response.refusal.delta", delta: "no" })}\n\n`))).status).toBe("rejected");
+    expect((await scoutBrief(f, "k", sse({ summary: "x", observations: [] }, "data: {not json\n\n"))).reason).toMatch(/malformed/);
+    const cut = (async () => new Response(`data: ${JSON.stringify({ type: "response.output_text.delta", delta: "{" })}\n\n`)) as unknown as typeof fetch;
+    expect((await scoutBrief(f, "k", cut)).reason).toMatch(/before completion/);
+    const huge = (async () => new Response("data: " + "x".repeat(70_000) + "\n")) as unknown as typeof fetch;
+    expect((await scoutBrief(f, "k", huge)).reason).toMatch(/size limit/);
   });
   it("reports AI failure honestly, keeping deterministic facts", async () => {
     expect((await scoutBrief(f, undefined)).status).toBe("failed");
