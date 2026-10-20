@@ -4,7 +4,7 @@ import { readFile, readdir, writeFile } from "node:fs/promises";
 import assert from "node:assert/strict";
 import { ed25519 } from "@noble/curves/ed25519";
 import bs58 from "bs58";
-import { fromJSON, toJSONAsync } from "seroval";
+import { fromCrossJSON, toJSONAsync } from "seroval";
 
 const base = "https://studioloco.cfd", dir = new URL("../../.output/server/_ssr/", import.meta.url);
 const ids = {};
@@ -22,7 +22,11 @@ async function auth(w, action, data, cookie = w.cookie, origin = base) {
     headers: { "x-loco-depot-wallet": w.wallet, origin, ...(cookie ? { cookie } : {}), ...(data === undefined ? {} : { "Content-Type": "application/json" }) },
     ...(data === undefined ? {} : { body: JSON.stringify(data) }),
   });
-  return { status: r.status, cookie: r.headers.get("set-cookie")?.split(";")[0], body: await r.json() };
+  // Hosting may also set a Cloudflare cookie. Only the wallet-scoped application
+  // cookie proves a Depot login; never mistake an infrastructure cookie for it.
+  const cookieName = `__Host-loco-depot-session-${w.wallet}=`;
+  const sessionCookie = r.headers.getSetCookie().find(value => value.startsWith(cookieName));
+  return { status: r.status, cookie: sessionCookie?.split(";")[0], body: await r.json() };
 }
 async function fn(w, name, data) {
   const r = await fetch(`${base}/_serverFn/${ids[name]}`, {
@@ -31,7 +35,7 @@ async function fn(w, name, data) {
     ...(data === undefined ? {} : { body: JSON.stringify(await toJSONAsync({ data })) }),
   });
   check("protected function response is not cacheable", r.headers.get("cache-control")?.includes("no-store"));
-  const raw = await r.json(); const decoded = raw && typeof raw === "object" && "t" in raw ? fromJSON(raw) : raw;
+  const raw = await r.json(); const decoded = raw && typeof raw === "object" && "t" in raw ? fromCrossJSON(raw) : raw;
   if (decoded.error) throw new Error(decoded.error.message ?? "Protected function refused");
   return decoded.result ?? decoded;
 }
@@ -69,7 +73,7 @@ finally {
     w.key.fill(0);
   }
 }
-const report = { checkedAt: new Date().toISOString(), base, checks, passed: !failure, ...(failure ? { failure } : {}), accounts: wallets.filter(w => w.account).map(w => ({ id: w.account.id, wallet: w.wallet })), financialSignatures: 0, broadcasts: 0 };
+const report = { checkedAt: new Date().toISOString(), base, checks, passed: !failure, ...(failure ? { failure } : {}), testWallets: wallets.map(w => w.wallet), accounts: wallets.filter(w => w.account).map(w => ({ id: w.account.id, wallet: w.wallet })), financialSignatures: 0, broadcasts: 0 };
 await writeFile(new URL("../../.qa/depot-wallet-production.json", import.meta.url), JSON.stringify(report, null, 2));
 process.stdout.write(JSON.stringify(report, null, 2)+"\n");
 if (failure) process.exitCode = 1;
