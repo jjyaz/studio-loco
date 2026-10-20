@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useServerFn } from "@tanstack/react-start";
+import { useDepotServerFn as useServerFn } from "./auth";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { Btn, Field, Notice, Panel, Segmented, Spinner, Stat } from "@/components/kit";
 import { WalletButton } from "@/components/wallet/WalletButton";

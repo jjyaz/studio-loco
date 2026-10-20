@@ -515,6 +515,26 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      depot_auth_challenge: {
+        Args: { _nonce: string; _wallet: string; _domain: string; _issued_at: string; _expires_at: string; _ip_hash: string }
+        Returns: boolean
+      }
+      depot_auth_pending: {
+        Args: { _nonce: string; _wallet: string; _domain: string }
+        Returns: Json
+      }
+      depot_auth_complete: {
+        Args: { _nonce: string; _wallet: string; _domain: string; _token_hash: string }
+        Returns: Json
+      }
+      depot_auth_session: {
+        Args: { _token_hash: string; _domain: string; _wallet: string }
+        Returns: Json
+      }
+      depot_auth_logout: {
+        Args: { _token_hash: string; _domain: string; _wallet: string }
+        Returns: boolean
+      }
       conductor_observer_change: {
         Args: {
           _action: string

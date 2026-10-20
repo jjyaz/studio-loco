@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import bs58 from "bs58";
-import { useServerFn } from "@tanstack/react-start";
+import { useDepotServerFn as useServerFn } from "./auth";
 import { Btn, Notice } from "@/components/kit";
 import { useSettings } from "@/lib/settings";
 import { formatUnits } from "@/lib/amount";

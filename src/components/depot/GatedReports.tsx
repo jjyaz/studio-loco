@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { useServerFn } from "@tanstack/react-start";
+import { useDepotServerFn as useServerFn } from "./auth";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { Btn, Notice, Panel, Spinner } from "@/components/kit";
-import { AccountPanel, useCloudSession } from "@/components/signal/account";
+import { DepotWalletSignIn as AccountPanel, useDepotWalletSession as useCloudSession } from "./auth";
 import { WalletButton } from "@/components/wallet/WalletButton";
 import { listGatedReports } from "@/lib/depot.functions";
 import type { ScoutReportDTO } from "@/lib/depot-contracts";

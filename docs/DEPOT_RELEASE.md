@@ -24,7 +24,7 @@ Holder reports require a recently proven connected wallet and a fresh mainnet ba
 
 Source sync to Lovable is distinct from publishing the production site. Publishing uses Lovable after the combined source passes validation. Neither implementation nor publication signs, funds, buys or launches a token. Public metadata preparation verifies studioloco.cfd endpoints and refuses if that domain still serves an earlier release without the metadata routes.
 
-An owner-run acceptance pass is still needed after publishing: account sign-in, controller message proof, a real metadata publication, funded launch, unknown/confirmed receipt recovery and passport link, fee accrual/claims, DBC graduation and a real holder-wallet report read. The available preview browser hit a Lovable sign-in wall, so React DOM tests and compile checks do not constitute a full authenticated browser walkthrough.
+An owner-run acceptance pass is still needed after publishing: wallet sign-in, controller message proof, a real metadata publication, funded launch, unknown/confirmed receipt recovery and passport link, fee accrual/claims, DBC graduation and a real holder-wallet report read. The available preview browser hit a Lovable sign-in wall, so React DOM tests and compile checks do not constitute a full authenticated browser walkthrough.
 
 V1 has no hosted private key, delegated financial autonomy, automatic token purchase, automatic reinvestment or guaranteed operating income. A reserve transfer records a wallet-reviewed payment and does not prove ownership of the receiver or automatically authorize future spending.
 
@@ -46,3 +46,7 @@ V1 has no hosted private key, delegated financial autonomy, automatic token purc
 | UI `/app/depot`, `/depot/$id` | Passport, Token launch, Scout, Fee desk, operations ledger | Desktop + 390 px signed-out render, no overflow/errors | Signed-in workspace browser pass (no auth user for the QA session) |
 
 Not supported: Alpha Vault, custom curves, delegated autonomy, hosted signing, Pro graduation, token purchases.
+
+## Wallet sign-in update
+
+The Depot and holder-report access now use wallet-only sign-in with secure server sessions; no email/password form. Each protected request binds the session to the connected wallet and server-derived principal. See `DEPOT_WALLET_AUTH.md`. Financial wallet approval and the funded launch/graduation acceptance status are unchanged.
