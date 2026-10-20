@@ -68,7 +68,7 @@ export function AccountPanel({ purpose }: { purpose: string }) {
         const { data, error } = await supabase.auth.signUp({
           email,
           password: pw,
-          options: { emailRedirectTo: `${window.location.origin}/app/signal-box` },
+          options: { emailRedirectTo: `${window.location.origin}${window.location.pathname}` },
         });
         if (error) throw error;
         setMsg({
@@ -106,9 +106,9 @@ export function AccountPanel({ purpose }: { purpose: string }) {
       <p className="station-code text-amber">Private workspace</p>
       <h2 className="display mt-1 text-2xl">Sign in to {purpose}.</h2>
       <p className="mt-2 max-w-xl text-sm text-cream/80">
-        This account only stores your watch rules, alerts and optional recorder copy. It is not your
-        wallet: Studio Loco never asks for a seed phrase or private key, and nothing can sign on
-        your behalf.
+        This account stores your private Studio Loco workspace: agents, reports, watch rules,
+        alerts and Recorder copies you choose to sync. Your wallet stays separate. Studio Loco
+        never asks for a seed phrase or private key; you approve each transaction in your wallet.
       </p>
       <form onSubmit={submit} className="mt-4 grid max-w-md gap-3">
         <Field
