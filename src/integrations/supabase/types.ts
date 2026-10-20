@@ -551,6 +551,17 @@ export type Database = {
         }
         Returns: boolean
       }
+      depot_link_launch: {
+        Args: {
+          _agent: string
+          _digest: string
+          _launch: Json
+          _revision: number
+          _user: string
+          _wallet: string
+        }
+        Returns: Json
+      }
       depot_public_image: {
         Args: { _digest: string }
         Returns: {
