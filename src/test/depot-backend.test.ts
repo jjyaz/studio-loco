@@ -39,7 +39,7 @@ describe("public passport sanitization", () => {
   it("drops every non-whitelisted field", () => {
     const p = sanitizePassport({ id: "x", name: "n", user_id: "secret", launch: { k: 1 }, rpc: "https://k", metadata: [{ digest: "d", version: 1, publishedAt: "t", body: "x" }] }) as unknown as Record<string, unknown>;
     expect(p["user_id"]).toBeUndefined();
-    expect(p["launch"]).toBeUndefined();
+    expect(p["launch"]).toBeNull();
     expect(p["rpc"]).toBeUndefined();
     expect((p["metadata"] as Record<string, unknown>[])[0]!["body"]).toBeUndefined();
   });

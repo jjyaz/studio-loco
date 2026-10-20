@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import { Keypair, Connection } from "@solana/web3.js";
 import { installNodeGlobals } from "@/lib/polyfills";
