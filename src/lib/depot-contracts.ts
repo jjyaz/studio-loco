@@ -97,12 +97,47 @@ export const PublishInput = z.object({ id: Uuid, revision: z.number().int().min(
 
 export const IMAGE_MIMES = ["image/png", "image/jpeg", "image/webp"] as const;
 export const MAX_IMAGE_BYTES = 262_144;
+export const MetadataWebsite = z.string().trim().max(512).url("Use a complete HTTPS website URL")
+  .refine((value) => {
+    try {
+      const url = new URL(value);
+      return url.protocol === "https:" && !url.username && !url.password;
+    } catch { return false; }
+  }, "Use an HTTPS website URL without a username or password")
+  .transform((value) => new URL(value).href);
+
+/** Accept a handle or a profile URL, never an arbitrary site, post or redirect. */
+export function normalizeMetadataX(input: string): string | null {
+  const value = input.trim();
+  let handle: string;
+  if (/^@?[A-Za-z0-9_]{1,15}$/.test(value)) handle = value.replace(/^@/, "");
+  else {
+    try {
+      const url = new URL(/^(?:www\.)?(?:x|twitter)\.com\//i.test(value) ? `https://${value}` : value);
+      if (url.protocol !== "https:" || !["x.com", "www.x.com", "twitter.com", "www.twitter.com"].includes(url.hostname)
+        || url.username || url.password || url.port || url.search || url.hash) return null;
+      const match = /^\/([A-Za-z0-9_]{1,15})\/?$/.exec(url.pathname);
+      if (!match) return null;
+      handle = match[1]!;
+    } catch { return null; }
+  }
+  if (["home", "explore", "search", "messages", "notifications", "settings", "login", "logout", "signup", "intent", "share", "compose", "i"].includes(handle.toLowerCase())) return null;
+  return `https://x.com/${handle}`;
+}
+export const MetadataXProfile = z.string().trim().max(256).transform((value, ctx) => {
+  const url = normalizeMetadataX(value);
+  if (url) return url;
+  ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Use an X profile URL or @handle" });
+  return z.NEVER;
+});
 export const MetadataInput = z
   .object({
     agentId: Uuid,
     name: z.string().trim().min(1).max(32).refine((s) => new TextEncoder().encode(s).length <= 32, "Name max 32 bytes"),
     symbol: z.string().regex(/^[A-Z0-9]{1,10}$/, "Symbol 1–10 uppercase letters/digits"),
     description: z.string().trim().max(500),
+    website: MetadataWebsite.optional(),
+    xUrl: MetadataXProfile.optional(),
     imageBase64: z.string().min(8).max(Math.ceil((MAX_IMAGE_BYTES * 4) / 3) + 4),
     imageMime: z.enum(IMAGE_MIMES),
     confirmImmutable: z.literal(true),
@@ -211,6 +246,8 @@ export interface TokenMetadataDTO {
   symbol: string;
   description: string;
   body: string;
+  website?: string;
+  xUrl?: string;
 }
 
 export interface ScoutQuoteFact {

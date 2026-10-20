@@ -8,6 +8,8 @@ import { tokenGate } from "./depot";
 import {
   IMAGE_MIMES,
   MAX_IMAGE_BYTES,
+  MetadataWebsite,
+  MetadataXProfile,
   PROOF_DOMAINS,
   type ScoutAi,
   type ScoutFacts,
@@ -66,8 +68,16 @@ export function imageUri(domain: string, digest: string) {
 }
 
 /** Canonical Metaplex-style JSON. Deterministic key order so the digest is reproducible. */
-export function buildMetadataBody(m: { name: string; symbol: string; description: string; image: string; externalUrl?: string }) {
-  const body = JSON.stringify({ name: m.name, symbol: m.symbol, description: m.description, image: m.image, ...(m.externalUrl ? { external_url: m.externalUrl } : {}) });
+export function buildMetadataBody(m: { name: string; symbol: string; description: string; image: string; externalUrl?: string; website?: string; xUrl?: string }) {
+  const website = m.website === undefined ? undefined : MetadataWebsite.parse(m.website);
+  const xUrl = m.xUrl === undefined ? undefined : MetadataXProfile.parse(m.xUrl);
+  const externalUrl = website ?? m.externalUrl;
+  // website/twitter match Meteora Invent's metadata fields; external_url is the
+  // website when supplied, retaining the existing passport fallback otherwise.
+  const body = JSON.stringify({ name: m.name, symbol: m.symbol, description: m.description, image: m.image,
+    ...(externalUrl ? { external_url: externalUrl } : {}),
+    ...(website ? { website } : {}), ...(xUrl ? { twitter: xUrl } : {}),
+  });
   const bytes = new TextEncoder().encode(body);
   if (bytes.length > 4096) throw new Error("Metadata too large.");
   return { body, digest: sha256Hex(bytes) };

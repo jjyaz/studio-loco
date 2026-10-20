@@ -50,3 +50,7 @@ Not supported: Alpha Vault, custom curves, delegated autonomy, hosted signing, P
 ## Wallet sign-in update
 
 The Depot and holder-report access now use wallet-only sign-in with secure server sessions; no email/password form. Each protected request binds the session to the connected wallet and server-derived principal. See `DEPOT_WALLET_AUTH.md`. Financial wallet approval and the funded launch/graduation acceptance status are unchanged.
+
+## Metadata image and project links
+
+Token launch metadata supports an uploaded PNG/JPEG/WebP image (≤256 KB), optional HTTPS website and optional X profile/handle. The form previews the image and normalized links, blocks invalid URLs, and includes links in the permanent-public-file acknowledgement. Website and X links appear beside published versions. The server validates the links and includes them in the immutable JSON/hash; omitting links preserves existing metadata bytes and the passport fallback. No database schema or financial builder changes are required.

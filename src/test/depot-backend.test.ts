@@ -72,6 +72,32 @@ describe("metadata", () => {
     expect(img.headers.get("Content-Type")).toBe("image/png");
     expect((await serveImage(sha256Hex(png), async () => ({ data: [{ mime: "text/html", b64 }], error: null }))).status).toBe(404);
   });
+  const input = { agentId: ch.agentId, name: "Loco", symbol: "LOCO", description: "d", imageBase64: b64, imageMime: "image/png", confirmImmutable: true };
+  it("publishes image and normalized links together, with links bound into the hash", async () => {
+    const data = MetadataInput.parse({ ...input, website: " https://example.com ", xUrl: "@Loco_Scout" });
+    const args = { ...data, image: "https://studioloco.cfd/i", externalUrl: "https://studioloco.cfd/depot/agent" };
+    const a = buildMetadataBody(args);
+    const response = await serveMetadata(a.digest, async () => ({ data: a.body, error: null }));
+    expect(await response.json()).toMatchObject({ image: args.image, external_url: "https://example.com/", website: "https://example.com/", twitter: "https://x.com/Loco_Scout" });
+    expect(buildMetadataBody({ ...args, xUrl: "@Other_Scout" }).digest).not.toBe(a.digest);
+    expect(buildMetadataBody({ ...args, website: "https://other.example" }).digest).not.toBe(a.digest);
+  });
+  it("preserves legacy metadata bytes and the passport fallback when links are omitted", () => {
+    const a = buildMetadataBody({ name: "Loco", symbol: "LOCO", description: "d", image: "https://studioloco.cfd/i", externalUrl: "https://studioloco.cfd/depot/agent" });
+    expect(a.body).toBe('{"name":"Loco","symbol":"LOCO","description":"d","image":"https://studioloco.cfd/i","external_url":"https://studioloco.cfd/depot/agent"}');
+    expect(MetadataInput.parse(input)).not.toHaveProperty("website");
+  });
+  it("rejects unsafe website and X links at publication", () => {
+    for (const website of ["not a URL", "javascript:alert(1)", "data:text/html,x", "http://example.com", "https://me:secret@example.com"]) {
+      expect(MetadataInput.safeParse({ ...input, website }).success, website).toBe(false);
+    }
+    for (const xUrl of ["https://x.com.evil.example/loco", "https://example.com/loco", "https://x.com/loco/status/1", "https://x.com/intent", "https://x.com/loco?redirect=evil", "https://me:secret@x.com/loco", "https://x.com:444/loco"]) {
+      expect(MetadataInput.safeParse({ ...input, xUrl }).success, xUrl).toBe(false);
+    }
+    for (const xUrl of ["@Loco_Scout", "https://twitter.com/Loco_Scout/", "x.com/Loco_Scout"]) {
+      expect(MetadataInput.parse({ ...input, xUrl }).xUrl).toBe("https://x.com/Loco_Scout");
+    }
+  });
 });
 
 describe("token gate (server decision)", () => {
