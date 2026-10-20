@@ -46,7 +46,7 @@ describe("review guard", () => {
   it("refuses unknown cost", () =>
     expect(reviewGuard({ ...r, stages: [{ label: "pool", feeLamports: null, rentLamports: 1n }] }, b, 1, b)).toMatch(/unknown/));
   it("refuses over total cap", () =>
-    expect(reviewGuard({ ...r, stages: [r.stages[0]!, { label: "pool", feeLamports: 0n, rentLamports: 48_000_000n }] }, b, 1, b)).toMatch(/total cap/));
+    expect(reviewGuard({ ...r, stages: [r.stages[0]!, { label: "pool", feeLamports: 0n, rentLamports: 29_000_000n }, { label: "lock", feeLamports: 0n, rentLamports: 29_000_000n }] }, b, 1, b)).toMatch(/total cap/));
 });
 
 describe("wallet challenge", () => {
