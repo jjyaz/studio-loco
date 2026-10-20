@@ -14,6 +14,252 @@ export type Database = {
   }
   public: {
     Tables: {
+      depot_agents: {
+        Row: {
+          created_at: string
+          description: string
+          gate_max_age_s: number
+          gate_min_raw: string | null
+          gate_mint: string | null
+          id: string
+          launch: Json | null
+          mission: string
+          name: string
+          published_at: string | null
+          report_policy: string
+          revision: number
+          updated_at: string
+          user_id: string
+          visibility: string
+          wallet: string | null
+          wallet_verified_at: string | null
+        }
+        Insert: {
+          created_at?: string
+          description?: string
+          gate_max_age_s?: number
+          gate_min_raw?: string | null
+          gate_mint?: string | null
+          id?: string
+          launch?: Json | null
+          mission?: string
+          name: string
+          published_at?: string | null
+          report_policy?: string
+          revision?: number
+          updated_at?: string
+          user_id: string
+          visibility?: string
+          wallet?: string | null
+          wallet_verified_at?: string | null
+        }
+        Update: {
+          created_at?: string
+          description?: string
+          gate_max_age_s?: number
+          gate_min_raw?: string | null
+          gate_mint?: string | null
+          id?: string
+          launch?: Json | null
+          mission?: string
+          name?: string
+          published_at?: string | null
+          report_policy?: string
+          revision?: number
+          updated_at?: string
+          user_id?: string
+          visibility?: string
+          wallet?: string | null
+          wallet_verified_at?: string | null
+        }
+        Relationships: []
+      }
+      depot_images: {
+        Row: {
+          bytes: string
+          created_at: string
+          digest: string
+          mime: string
+          user_id: string
+        }
+        Insert: {
+          bytes: string
+          created_at?: string
+          digest: string
+          mime: string
+          user_id: string
+        }
+        Update: {
+          bytes?: string
+          created_at?: string
+          digest?: string
+          mime?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      depot_metadata: {
+        Row: {
+          agent_id: string | null
+          body: string
+          digest: string
+          image_digest: string
+          published_at: string
+          user_id: string
+          version: number
+        }
+        Insert: {
+          agent_id?: string | null
+          body: string
+          digest: string
+          image_digest: string
+          published_at?: string
+          user_id: string
+          version: number
+        }
+        Update: {
+          agent_id?: string | null
+          body?: string
+          digest?: string
+          image_digest?: string
+          published_at?: string
+          user_id?: string
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "depot_metadata_agent_id_fkey"
+            columns: ["agent_id"]
+            isOneToOne: false
+            referencedRelation: "depot_agents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "depot_metadata_image_digest_fkey"
+            columns: ["image_digest"]
+            isOneToOne: false
+            referencedRelation: "depot_images"
+            referencedColumns: ["digest"]
+          },
+        ]
+      }
+      depot_nonces: {
+        Row: {
+          agent_id: string
+          consumed_at: string | null
+          domain: string
+          expires_at: string
+          issued_at: string
+          nonce: string
+          purpose: string
+          user_id: string
+          wallet: string
+        }
+        Insert: {
+          agent_id: string
+          consumed_at?: string | null
+          domain: string
+          expires_at: string
+          issued_at?: string
+          nonce: string
+          purpose: string
+          user_id: string
+          wallet: string
+        }
+        Update: {
+          agent_id?: string
+          consumed_at?: string | null
+          domain?: string
+          expires_at?: string
+          issued_at?: string
+          nonce?: string
+          purpose?: string
+          user_id?: string
+          wallet?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "depot_nonces_agent_id_fkey"
+            columns: ["agent_id"]
+            isOneToOne: false
+            referencedRelation: "depot_agents"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      depot_reports: {
+        Row: {
+          agent_id: string
+          ai: Json | null
+          created_at: string
+          facts: Json
+          id: string
+          observed_at: string
+          pool: string
+          slot: number
+          user_id: string
+        }
+        Insert: {
+          agent_id: string
+          ai?: Json | null
+          created_at?: string
+          facts: Json
+          id?: string
+          observed_at: string
+          pool: string
+          slot: number
+          user_id: string
+        }
+        Update: {
+          agent_id?: string
+          ai?: Json | null
+          created_at?: string
+          facts?: Json
+          id?: string
+          observed_at?: string
+          pool?: string
+          slot?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "depot_reports_agent_id_fkey"
+            columns: ["agent_id"]
+            isOneToOne: false
+            referencedRelation: "depot_agents"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      depot_viewer_wallets: {
+        Row: {
+          agent_id: string
+          user_id: string
+          verified_at: string
+          wallet: string
+        }
+        Insert: {
+          agent_id: string
+          user_id: string
+          verified_at?: string
+          wallet: string
+        }
+        Update: {
+          agent_id?: string
+          user_id?: string
+          verified_at?: string
+          wallet?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "depot_viewer_wallets_agent_id_fkey"
+            columns: ["agent_id"]
+            isOneToOne: false
+            referencedRelation: "depot_agents"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       push_subscriptions: {
         Row: {
           auth: string
@@ -294,6 +540,26 @@ export type Database = {
         }
         Returns: Json
       }
+      depot_consume_nonce: {
+        Args: {
+          _agent: string
+          _domain: string
+          _nonce: string
+          _purpose: string
+          _user: string
+          _wallet: string
+        }
+        Returns: boolean
+      }
+      depot_public_image: {
+        Args: { _digest: string }
+        Returns: {
+          b64: string
+          mime: string
+        }[]
+      }
+      depot_public_metadata: { Args: { _digest: string }; Returns: string }
+      depot_public_passport: { Args: { _id: string }; Returns: Json }
       signal_acquire_lease: {
         Args: { _holder: string; _ttl_seconds: number }
         Returns: boolean
