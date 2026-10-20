@@ -1,12 +1,9 @@
 -- Rollback-only Depot DB acceptance. Run: psql -v ON_ERROR_STOP=1 -f scripts/qa/depot-database.acceptance.sql
 BEGIN;
-\set u1 '''00000000-0000-4000-8000-0000000000b1'''
-\set u2 '''00000000-0000-4000-8000-0000000000b2'''
-\set ag '''00000000-0000-4000-8000-0000000000a1'''
-INSERT INTO public.depot_agents(id,user_id,name) VALUES (:ag::uuid, :u1::uuid, 'QA');
+INSERT INTO public.depot_agents(id,user_id,name) VALUES ('00000000-0000-4000-8000-0000000000a1'::uuid, '00000000-0000-4000-8000-0000000000b1'::uuid, 'QA');
 INSERT INTO public.depot_nonces(nonce,user_id,agent_id,wallet,purpose,domain,expires_at)
-VALUES (repeat('a',64), :u1::uuid, :ag::uuid, '9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin','controller','studioloco.cfd', now()+interval '5 min'),
-       (repeat('b',64), :u1::uuid, :ag::uuid, '9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin','controller','studioloco.cfd', now()-interval '1 s');
+VALUES (repeat('a',64), '00000000-0000-4000-8000-0000000000b1'::uuid, '00000000-0000-4000-8000-0000000000a1'::uuid, '9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin','controller','studioloco.cfd', now()+interval '5 min'),
+       (repeat('b',64), '00000000-0000-4000-8000-0000000000b1'::uuid, '00000000-0000-4000-8000-0000000000a1'::uuid, '9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin','controller','studioloco.cfd', now()-interval '1 s');
 
 DO $$ DECLARE ok boolean; BEGIN
   -- private agent cannot be published without a verified wallet (constraint)
