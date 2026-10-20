@@ -248,11 +248,19 @@ export const CAPABILITIES: CapabilityEntry[] = [
     notes: "PresetParameter2 fetched onchain, duplicate check, simulation.",
   },
   {
+    id: "depot",
+    area: "Launch",
+    name: "The Depot · Scout agents, wallet-proven passports and DBC → DAMM v2 launches",
+    status: "live",
+    notes:
+      "Private cloud agent drafts; controller wallet proven by a single-use domain/agent/nonce-bound signed message (login is never wallet control); explicit publish/unpublish; anonymous passports expose only whitelisted fields. Immutable hash-addressed token metadata served from this site. Two fixed SPL/SOL DBC presets (official SDK 1.5.11) built, instruction-checked, simulated and costed in the browser, sent only through the shared runner with 20s review expiry, fee/stage caps, pre-sign and post-approval agent/metadata rechecks and a durable device ledger (unknown signatures block new actions; never resent). Launch linkage is server-verified by rebuilding the exact original message from the preset, owner recipients, keys and immutable metadata and comparing it byte-for-byte with the confirmed receipt, then reading DBC/mint/config ownership. Graduation to DAMM v2 (cp-amm 1.4.5), creator curve fee claims, DAMM position fee claims and an explicit SOL reserve transfer are separate reviewed actions. Scout reports use the verified Conductor read adapter on the server; optional AI commentary is qualitative, fact-ID-referenced and never authority. Holder-only report access is server-gated by a fresh confirmed SPL balance of a proven wallet. Funded browser-wallet launch/graduation/claim acceptance is not yet recorded. No delegated autonomy, hosted signer, custody, token purchases, Pro graduation or promised income.",
+  },
+  {
     id: "dbc",
     area: "Launch",
-    name: "DBC / DAMM v2 / Alpha Vault",
+    name: "Alpha Vault and custom DBC curves",
     status: "handoff",
-    notes: "Documented only.",
+    notes: "Documented handoff only; the Depot supports just its two reviewed presets.",
   },
   {
     id: "lab",
