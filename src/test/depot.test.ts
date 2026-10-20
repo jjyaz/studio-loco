@@ -4,7 +4,7 @@ import {
   tokenGate, validateMetadata, validateRecipients, type ReviewBinding,
 } from "@/lib/depot";
 
-const OWNER = "4SPWhu1111111111111111111111111111111111111";
+const OWNER = "6mch5rCLBtZ9DCnM2mx18Ud1XXhXAip7otw9LkrTXwTD";
 const PARTNER = "9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin";
 
 describe("depot launch math", () => {
@@ -13,16 +13,16 @@ describe("depot launch math", () => {
     expect(m.rawSupply).toBe(1_000_000_000_000_000n);
     expect(m.curveRaw + m.migrationRaw).toBe(m.rawSupply);
     expect(m.curveRaw).toBe(800_000_000_000_000n);
-    expect(m.creatorFeeBps + m.platformFeeBps).toBe(100);
+    expect(m.creatorFeeBps + m.platformFeeBps + m.protocolFeeBps).toBe(100);
   });
 });
 
 describe("recipients", () => {
-  const m = launchMath(getPreset("standard-sol-85", 1));
+  const m = launchMath({ ...getPreset("standard-sol-85", 1), creatorFeeShareBps: 5000 });
   const ok = [
     { role: "payer", address: OWNER }, { role: "creator", address: OWNER },
     { role: "fee-claimer", address: OWNER }, { role: "leftover-receiver", address: OWNER },
-    { role: "locked-lp-owner", address: OWNER }, { role: "partner", address: PARTNER },
+    { role: "locked-lp-owner", address: OWNER }, { role: "partner", address: OWNER },
   ] as const;
   it("accepts explicit owner recipients", () => expect(validateRecipients(OWNER, [...ok], m)).toEqual([]));
   it("rejects a silently swapped creator", () => {
@@ -59,15 +59,15 @@ describe("wallet challenge", () => {
 });
 
 describe("token gate", () => {
-  const p = { mode: "holders" as const, mint: "M", minRaw: 1_000_000n, maxAgeMs: 60_000 };
+  const p = { mode: "holders" as const, mint: "So11111111111111111111111111111111111111112", minRaw: 1_000_000n, maxAgeMs: 60_000 };
   it("allows at exact threshold", () =>
-    expect(tokenGate(p, { mint: "M", rawBalance: 1_000_000n, readAt: 0, walletVerified: true }, 1).allowed).toBe(true));
+    expect(tokenGate(p, { mint: "So11111111111111111111111111111111111111112", rawBalance: 1_000_000n, readAt: 0, walletVerified: true }, 1).allowed).toBe(true));
   it("denies one raw unit below", () =>
-    expect(tokenGate(p, { mint: "M", rawBalance: 999_999n, readAt: 0, walletVerified: true }, 1).allowed).toBe(false));
+    expect(tokenGate(p, { mint: "So11111111111111111111111111111111111111112", rawBalance: 999_999n, readAt: 0, walletVerified: true }, 1).allowed).toBe(false));
   it("denies unverified wallet", () =>
-    expect(tokenGate(p, { mint: "M", rawBalance: 5_000_000n, readAt: 0, walletVerified: false }, 1).allowed).toBe(false));
+    expect(tokenGate(p, { mint: "So11111111111111111111111111111111111111112", rawBalance: 5_000_000n, readAt: 0, walletVerified: false }, 1).allowed).toBe(false));
   it("denies stale read", () =>
-    expect(tokenGate(p, { mint: "M", rawBalance: 5_000_000n, readAt: 0, walletVerified: true }, 60_001).allowed).toBe(false));
+    expect(tokenGate(p, { mint: "So11111111111111111111111111111111111111112", rawBalance: 5_000_000n, readAt: 0, walletVerified: true }, 60_001).allowed).toBe(false));
 });
 
 describe("metadata + AI factuality", () => {
