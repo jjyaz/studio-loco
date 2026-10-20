@@ -54,12 +54,18 @@ const bounded = <T>(p: Promise<T>, what: string) => withTimeout(p, 15_000, what)
 
 /** Separately price the fee and newly allocated accounts; claim proceeds cannot hide rent. */
 export async function depotCosts(connection: Connection, tx: Transaction, wallet: string) {
-  const { VersionedTransaction, PublicKey } = await import("@solana/web3.js");
+  const { VersionedTransaction, PublicKey, SystemProgram, SystemInstruction } = await import("@solana/web3.js");
   if (tx.feePayer?.toBase58() !== wallet) throw new Error("Unexpected fee payer");
   const message = tx.compileMessage();
   const bytes = message.serialize().length + 1 + message.header.numRequiredSignatures * 64;
   if (bytes > 1232) throw new Error(`Launch transaction is ${bytes} bytes. Shorten the token name or metadata URI and prepare again.`);
   const addresses = [...new Set(tx.instructions.flatMap(i => i.keys.filter(k => k.isWritable).map(k => k.pubkey.toBase58())))].filter(k => k !== wallet);
+  const transferRecipients = new Set<string>();
+  for (const ix of tx.instructions) if (ix.programId.equals(SystemProgram.programId)) {
+    // A SOL reserve transfer can create its destination system account. Its principal is
+    // budgeted separately by finishAction, not counted a second time as account rent.
+    if (SystemInstruction.decodeInstructionType(ix) === "Transfer") transferRecipients.add(SystemInstruction.decodeTransfer(ix).toPubkey.toBase58());
+  }
   if (addresses.length > 40) throw new Error("Too many writable accounts to review safely");
   const [before, fee, simulation] = await Promise.all([
     bounded(connection.getMultipleAccountsInfo(addresses.map(a => new PublicKey(a)), "confirmed"), "Account costs"),
@@ -73,7 +79,7 @@ export async function depotCosts(connection: Connection, tx: Transaction, wallet
   let rent = 0n;
   for (let i = 0; i < addresses.length; i++) {
     const a = after[i];
-    if (a && !before[i]) {
+    if (a && !before[i] && !transferRecipients.has(addresses[i]!)) {
       if (!Number.isSafeInteger(a.lamports) || a.lamports < 0) throw new Error("Account cost exceeds exact numeric range");
       rent += BigInt(a.lamports);
     }
@@ -154,6 +160,10 @@ export interface DepotLifecycle {
   quoteReserveRaw: string; thresholdRaw: string;
   creatorBaseFeeRaw: string; creatorQuoteFeeRaw: string;
   partnerBaseFeeRaw: string; partnerQuoteFeeRaw: string;
+  protocolMigrationFeeBps: number;
+  protocolMigrationBaseFeeRaw: string;
+  protocolMigrationQuoteFeeRaw: string;
+  readContexts: string[];
   dammPositions: { address: string; nftAccount: string; unlockedLiquidity: string; permanentLockedLiquidity: string; feeARaw: string; feeBRaw: string }[];
 }
 
@@ -161,12 +171,14 @@ export interface DepotLifecycle {
 export async function readDepotLifecycle(connection: Connection, target: DepotTarget, owner: string, cluster: string): Promise<DepotLifecycle> {
   await assertCluster(connection, cluster);
   const [d, { PublicKey }] = await Promise.all([loadDepotDbc(), import("@solana/web3.js")]);
-  const client = new d.DynamicBondingCurveClient(connection, "confirmed");
   const keys = [target.pool, target.config, target.mint].map(a => new PublicKey(a));
   const accounts = await bounded(connection.getMultipleAccountsInfoAndContext(keys, "confirmed"), "Launch identity read");
   if (accounts.value[0]?.owner.toBase58() !== DBC_PROGRAM || accounts.value[1]?.owner.toBase58() !== DBC_PROGRAM || accounts.value[2]?.owner.toBase58() !== "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA") throw new Error("Launch accounts are absent or have unexpected program owners");
-  const [pool, config, fees] = await bounded(Promise.all([client.state.getPool(keys[0]!), client.state.getPoolConfig(keys[1]!), client.state.getPoolFeeBreakdown(keys[0]!)]), "DBC lifecycle");
-  if (!pool || !config) throw new Error("Pool or config unavailable");
+  // Decode the three independently owner-checked accounts from ONE RPC context. SDK helper
+  // methods fetch each separately and would incorrectly label a mixed read with this slot.
+  const { program } = d.createDbcProgram(connection, "confirmed");
+  const pool = program.coder.accounts.decode<import("@meteora-ag/dynamic-bonding-curve-sdk").VirtualPool>("virtualPool", accounts.value[0]!.data);
+  const config = program.coder.accounts.decode<import("@meteora-ag/dynamic-bonding-curve-sdk").PoolConfig>("poolConfig", accounts.value[1]!.data);
   const s = pool.poolState;
   if (s.config.toBase58() !== target.config || s.baseMint.toBase58() !== target.mint || s.creator.toBase58() !== owner || config.feeClaimer.toBase58() !== owner || config.leftoverReceiver.toBase58() !== owner || config.quoteMint.toBase58() !== WSOL_MINT || config.migrationOption !== d.MigrationOption.MET_DAMM_V2 || d.deriveDbcPoolAddress(config.quoteMint, s.baseMint, s.config).toBase58() !== target.pool) throw new Error("Launch is not bound to this owner, mint, config and SOL/DAMM v2 route");
   if (config.tokenType !== d.TokenType.SPLToken || config.creatorPermanentLockedLiquidityPercentage !== 100 || config.creatorLiquidityPercentage !== 0 || config.partnerLiquidityPercentage !== 0 || config.partnerPermanentLockedLiquidityPercentage !== 0 || config.creatorTradingFeePercentage !== 100) throw new Error("Launch ownership, fee share or permanent LP lock differs from Depot v1");
@@ -177,7 +189,7 @@ export async function readDepotLifecycle(connection: Connection, target: DepotTa
   if (!dammConfig) throw new Error("Unsupported DAMM v2 migration fee tier");
   const dammPool = d.deriveDammV2PoolAddress(dammConfig, s.baseMint, config.quoteMint).toBase58();
   if (target.dammPool && target.dammPool !== dammPool) throw new Error("DAMM pool identity mismatch");
-  const result: DepotLifecycle = { target: { ...target, dammPool }, owner, slot: accounts.context.slot, readAt: Date.now(), status: s.isMigrated ? "graduated" : s.quoteReserve.gte(config.migrationQuoteThreshold) ? "ready-to-graduate" : "bonding", quoteReserveRaw: s.quoteReserve.toString(), thresholdRaw: config.migrationQuoteThreshold.toString(), creatorBaseFeeRaw: fees.creator.unclaimedBaseFee.toString(), creatorQuoteFeeRaw: fees.creator.unclaimedQuoteFee.toString(), partnerBaseFeeRaw: fees.partner.unclaimedBaseFee.toString(), partnerQuoteFeeRaw: fees.partner.unclaimedQuoteFee.toString(), dammPositions: [] };
+  const result: DepotLifecycle = { target: { ...target, dammPool }, owner, slot: accounts.context.slot, readAt: Date.now(), status: s.isMigrated ? "graduated" : s.quoteReserve.gte(config.migrationQuoteThreshold) ? "ready-to-graduate" : "bonding", quoteReserveRaw: s.quoteReserve.toString(), thresholdRaw: config.migrationQuoteThreshold.toString(), creatorBaseFeeRaw: s.creatorBaseFee.toString(), creatorQuoteFeeRaw: s.creatorQuoteFee.toString(), partnerBaseFeeRaw: s.partnerBaseFee.toString(), partnerQuoteFeeRaw: s.partnerQuoteFee.toString(), protocolMigrationFeeBps: s.protocolLiquidityMigrationFeeBps, protocolMigrationBaseFeeRaw: s.protocolMigrationBaseFeeAmount.toString(), protocolMigrationQuoteFeeRaw: s.protocolMigrationQuoteFeeAmount.toString(), readContexts: ["DBC pool, config, mint and curve fees: one confirmed account context"], dammPositions: [] };
   if (s.isMigrated) {
     const cp = new (await loadDepotDamm()).CpAmm(connection);
     const info = await bounded(connection.getAccountInfo(new PublicKey(dammPool)), "DAMM owner");
@@ -186,6 +198,7 @@ export async function readDepotLifecycle(connection: Connection, target: DepotTa
     if (state.tokenAMint.toBase58() !== target.mint || state.tokenBMint.toBase58() !== WSOL_MINT) throw new Error("Graduated token pair mismatch");
     const positions = await bounded(cp.getUserPositionByPool(new PublicKey(dammPool), new PublicKey(owner)), "Owner position NFTs");
     result.dammPositions = positions.map(p => ({ address: p.position.toBase58(), nftAccount: p.positionNftAccount.toBase58(), unlockedLiquidity: p.positionState.unlockedLiquidity.toString(), permanentLockedLiquidity: p.positionState.permanentLockedLiquidity.toString(), feeARaw: p.positionState.feeAPending.toString(), feeBRaw: p.positionState.feeBPending.toString() }));
+    result.readContexts.push("DAMM pool and position NFTs: separate confirmed reads; not the DBC slot");
   }
   return result;
 }

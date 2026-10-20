@@ -170,11 +170,11 @@ function Launch() {
           <Panel>
             <h3 className="station-code text-amber">Other Meteora infrastructure</h3>
             <ul className="mt-3 flex flex-col gap-3 text-sm text-cream/80">
-              <li><strong className="text-cream">Dynamic Bonding Curve (DBC)</strong> — token launch curve that graduates to DAMM (not DLMM). Configure via Meteora's DBC SDK/config keys.</li>
-              <li><strong className="text-cream">DAMM v2</strong> — constant-product AMM with dynamic fees; separate program and SDK.</li>
+              <li><strong className="text-cream">The Depot · DBC → DAMM v2</strong> — create a Scout agent, prove its owner wallet, publish immutable token metadata and review a fixed launch preset. Track graduation and claim fees in the Fee desk. <Link to="/app/depot" className="text-amber underline">Open The Depot →</Link></li>
+              <li><strong className="text-cream">DAMM v2</strong> — constant-product AMM; The Depot supports its verified DBC graduation and position fee claims.</li>
               <li><strong className="text-cream">Alpha Vault</strong> — pre-activation deposit vault attached to a pool; needs its own configuration and permissioned pool settings.</li>
             </ul>
-            <p className="mt-3 text-xs text-cream/60">These are documented handoffs only — no adapters are implemented here. <a className="underline" href="https://docs.meteora.ag" target="_blank" rel="noreferrer">Meteora docs ↗</a></p>
+            <p className="mt-3 text-xs text-cream/60">Custom DBC curves and Alpha Vault remain documented handoffs. Each Depot financial action requires a fresh review and wallet approval. <a className="underline" href="https://docs.meteora.ag" target="_blank" rel="noreferrer">Meteora docs ↗</a></p>
             <div className="mt-3"><Cap kind="handoff" /></div>
           </Panel>
         </div>

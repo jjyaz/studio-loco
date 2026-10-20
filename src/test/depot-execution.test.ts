@@ -16,6 +16,7 @@ function prepared(): PreparedDepotAction {
 }
 beforeEach(() => {
   vi.resetModules();
+  vi.clearAllMocks();
   vi.stubGlobal("indexedDB", new IDBFactory());
   Object.defineProperty(globalThis, "crypto", { configurable: true, value: webcrypto });
 });
@@ -31,7 +32,7 @@ describe("Depot execution boundaries", () => {
   });
   it("binds endpoint generation, metadata digest and spend caps before/after signing", () => {
     const p = prepared();
-    for (const b of [{ ...p.binding, rpcGeneration: 5 }, { ...p.binding, metadataHash: "b".repeat(64) }, { ...p.binding, maxStageLamports: 200_000_000n }]) expect(depotActionGuard(p, b, p.tx)).toMatch(/changed/);
+    for (const b of [{ ...p.binding, rpcGeneration: 5 }, { ...p.binding, metadataHash: "b".repeat(64) }, { ...p.binding, maxStageLamports: 200_000_000n }, { ...p.binding, operationIntent: '{"reserveTo":"changed","reserveSol":"1"}' }]) expect(depotActionGuard(p, b, p.tx)).toMatch(/changed/);
     p.tx.instructions[0]!.keys[1]!.pubkey = new PublicKey(OWNER);
     expect(depotActionGuard(p, p.binding, p.tx)).toMatch(/instructions changed/);
   });
@@ -46,6 +47,16 @@ describe("Depot execution boundaries", () => {
     const p = { mode: "holders" as const, mint: OTHER, minRaw: 1n, maxAgeMs: 1000 };
     expect(tokenGate(p, { mint: OTHER, rawBalance: 2n, readAt: 10, walletVerified: true }, 9).allowed).toBe(false);
     expect(tokenGate({ ...p, minRaw: 0n }, { mint: OTHER, rawBalance: 2n, readAt: 9, walletVerified: true }, 9).allowed).toBe(false);
+  });
+  it("does not count a new reserve wallet's transferred principal twice as rent", async () => {
+    const { depotCosts } = await import("@/lib/depot-chain");
+    const p = prepared();
+    const result = await depotCosts({
+      getMultipleAccountsInfo: async () => [null],
+      getFeeForMessage: async () => ({ value: 5000 }),
+      simulateTransaction: async () => ({ context: { slot: 1 }, value: { err: null, accounts: [{ lamports: 5 }], unitsConsumed: 10 } }),
+    } as never, p.tx, OWNER);
+    expect(result).toMatchObject({ feeLamports: 5000n, rentLamports: 0n });
   });
 });
 
@@ -72,6 +83,7 @@ describe("Depot durable operation recovery", () => {
     expect(rows[0]?.state).toBe("unknown");
     expect(rows[0]?.pending?.signature).toBe("sig");
     expect(rows[0]?.signedMessageDigest).toMatch(/^[a-f0-9]{64}$/);
+    expect(rows[0]?.launchIntent).toEqual({ metadataDigest: "a".repeat(64), presetId: p.binding.presetId, presetVersion: p.binding.presetVersion });
     await expect(b.releaseUnsignedDepotOperation(id)).rejects.toThrow(/Signed evidence/);
     await expect(b.reserveDepotOperation(prepared())).rejects.toThrow(/unresolved/);
   });
@@ -81,6 +93,20 @@ describe("Depot durable operation recovery", () => {
     await a.releaseUnsignedDepotOperation(id);
     expect((await a.listDepotOperations())[0]?.state).toBe("cancelled");
     await expect(a.reserveDepotOperation(prepared())).resolves.toBeTypeOf("string");
+  });
+  it("rechecks fresh costs after wallet approval and refuses before recording broadcast permission", async () => {
+    const a = await import("@/lib/depot-operations");
+    const chain = await import("@/lib/depot-chain");
+    const p = prepared(); let id = "";
+    const guard = a.depotPolicyGuard({ connection: {} as never, prepared: p, current: () => p.binding, reserved: x => { id = x; } });
+    await guard.beforeSign(p.tx, p.tx.serializeMessage());
+    vi.mocked(chain.checkDepotFreshCosts).mockRejectedValueOnce(new Error("Costs increased"));
+    const pending = { signature: "sig", blockhash: OTHER, lastValidBlockHeight: 90, wallet: OWNER, cluster: "mainnet-beta", rpc: "public" as const, label: "Test", createdAt: Date.now() };
+    await expect(guard.beforeBroadcast(p.tx, p.tx.serializeMessage(), pending)).rejects.toThrow(/Costs increased/);
+    const row = (await a.listDepotOperations()).find(r => r.id === id)!;
+    expect(row.state).toBe("reserved");
+    expect(row.pending).toBeUndefined();
+    expect(chain.checkDepotFreshCosts).toHaveBeenCalledTimes(2);
   });
   it("refuses signing when durable storage is unavailable", async () => {
     vi.stubGlobal("indexedDB", undefined);

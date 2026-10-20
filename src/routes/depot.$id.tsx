@@ -1,14 +1,11 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { useState } from "react";
 import { SiteLayout } from "@/components/site/SiteChrome";
-import { Btn, Notice, Panel, Spinner } from "@/components/kit";
-import { AccountPanel, useCloudSession } from "@/components/signal/account";
-import { WalletButton } from "@/components/wallet/WalletButton";
-import { Addr, ScoutReportView, WalletProof } from "@/components/depot/shared";
-import { getPublicPassport, listGatedReports, listPublicReports } from "@/lib/depot.functions";
-import type { ScoutReportDTO } from "@/lib/depot-contracts";
+import { Notice, Panel, Spinner } from "@/components/kit";
+import { Addr, ScoutReportView } from "@/components/depot/shared";
+import { getPublicPassport, listPublicReports } from "@/lib/depot.functions";
+import { GatedReports } from "@/components/depot/GatedReports";
 import night from "@/assets/studio-loco-night-station.png.asset.json";
 
 export const Route = createFileRoute("/depot/$id")({
@@ -76,7 +73,7 @@ function PassportPage() {
                 <p className="mt-2 text-sm text-cream/75">No verified token launch is linked to this agent.</p>
               )}
             </Panel>
-            {p.reportPolicy === "public" ? <PublicReports id={p.id} /> : <GatedReports id={p.id} />}
+            {p.reportPolicy === "public" ? <PublicReports id={p.id} /> : <GatedReports key={`${p.id}:${p.revision}`} id={p.id} />}
           </>
         )}
       </div>
@@ -91,41 +88,10 @@ function PublicReports({ id }: { id: string }) {
     <Panel>
       <p className="station-code text-amber">Scout reports</p>
       {q.isLoading && <Spinner label="Loading reports" />}
+      {q.isError && <Notice tone="error" title="Reports unavailable">The report service could not be reached. <button className="underline" onClick={() => void q.refetch()}>Try again</button>.</Notice>}
       {q.data && !q.data.ok && <Notice tone="error" title="Reports unavailable">{q.data.error}</Notice>}
       {q.data?.ok && q.data.reports.length === 0 && <p className="mt-2 text-sm text-cream/70">No reports yet.</p>}
       <div className="mt-3 flex flex-col gap-3">{q.data?.ok && q.data.reports.map((r) => <ScoutReportView key={r.id} r={r} />)}</div>
-    </Panel>
-  );
-}
-
-function GatedReports({ id }: { id: string }) {
-  const s = useCloudSession();
-  const list = useServerFn(listGatedReports);
-  const [state, setState] = useState<{ error?: string; reports?: ScoutReportDTO[]; balance?: string; slot?: number } | null>(null);
-  const [busy, setBusy] = useState(false);
-  async function load() {
-    setBusy(true);
-    try {
-      const r = await list({ data: { agentId: id } });
-      setState(r.ok ? { reports: r.reports, balance: r.balanceRaw, slot: r.slot } : { error: r.error, balance: "balanceRaw" in r ? r.balanceRaw : undefined });
-    } finally { setBusy(false); }
-  }
-  return (
-    <Panel>
-      <p className="station-code text-amber">Holder-only reports</p>
-      <p className="mt-1 text-sm text-cream/75">Reports stay on the server until you prove a holder wallet by signature and its fresh confirmed balance meets the threshold.</p>
-      {!s.ready ? <Spinner /> : !s.userId ? (
-        <div className="mt-3"><AccountPanel purpose="request holder access" /></div>
-      ) : (
-        <div className="mt-3 flex flex-col gap-3">
-          <WalletButton />
-          <WalletProof agentId={id} purpose="viewer" onVerified={() => void load()} />
-          <Btn variant="line" disabled={busy} onClick={() => void load()}>{busy ? "Checking balance…" : "Check access with proven wallet"}</Btn>
-          {state?.error && <Notice tone="error" title="Access not granted">{state.error}{state.balance ? ` (balance ${state.balance} raw)` : ""}</Notice>}
-          {state?.reports && <Notice title={`Access granted · balance ${state.balance} raw at slot ${state.slot}`} />}
-          {state?.reports?.map((r) => <ScoutReportView key={r.id} r={r} />)}
-        </div>
-      )}
     </Panel>
   );
 }
