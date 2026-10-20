@@ -35,7 +35,7 @@ async function fn(w, name, data) {
     ...(data === undefined ? {} : { body: JSON.stringify(await toJSONAsync({ data })) }),
   });
   check("protected function response is not cacheable", r.headers.get("cache-control")?.includes("no-store"));
-  const raw = await r.json(); const decoded = raw && typeof raw === "object" && "t" in raw ? fromCrossJSON(raw) : raw;
+  const raw = await r.json(); const decoded = raw && typeof raw === "object" && "t" in raw ? fromCrossJSON(raw, { plugins: [], refs: new Map() }) : raw;
   if (decoded.error) throw new Error(decoded.error.message ?? "Protected function refused");
   return decoded.result ?? decoded;
 }
