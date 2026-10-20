@@ -141,13 +141,14 @@ export const requestWalletChallenge = createServerFn({ method: "POST" })
     const domain = s.proofDomain(getRequestHeader("host"));
     if (!domain) return { ok: false as const, error: "This site address is not allowed to request wallet proofs." };
     const a = await admin();
-    try {
-      const agent = await ownAgent(context.supabase, data.agentId);
-      if (data.purpose === "viewer" && agent.user_id === context.userId && false) void 0;
-      if (data.purpose === "controller" && agent.user_id !== context.userId) throw new Error("Agent not found.");
-    } catch (e) {
-      // Viewers prove a wallet for someone else's public agent.
-      if (data.purpose === "controller") return { ok: false as const, error: err(e) };
+    if (data.purpose === "controller") {
+      try {
+        await ownAgent(context.supabase, data.agentId);
+      } catch (e) {
+        return { ok: false as const, error: err(e) };
+      }
+    } else {
+      // Viewers prove a wallet for a published agent.
       const { data: pub } = await (await publicClient()).rpc("depot_public_passport", { _id: data.agentId });
       if (!pub) return { ok: false as const, error: "Agent not found." };
     }
