@@ -105,10 +105,10 @@ export async function verifyAndLinkLaunch(c: LaunchClaim, deps: LaunchDeps): Pro
   if (rebuilt.pool !== c.pool) throw new Error("Pool address does not derive from this config and mint.");
   if (!sameBytes(rebuilt.bytes, new Uint8Array(msg.serialize())))
     throw new Error("Confirmed message differs from the Depot launch rebuilt from this preset, owner, metadata and keys.");
-  const life = await deps.readLifecycle({ config: c.config, mint: c.mint, pool: c.pool }, owner);
+  await deps.readLifecycle({ config: c.config, mint: c.mint, pool: c.pool }, owner);
   const launch = LaunchSchema.parse({
     cluster: "mainnet-beta", config: c.config, mint: c.mint, pool: c.pool, signature: c.signature,
-    slot: Math.max(receipt.slot, life.slot), presetId: c.presetId, presetVersion: c.presetVersion,
+    slot: receipt.slot, presetId: c.presetId, presetVersion: c.presetVersion,
     metadataDigest: c.metadataDigest, verifiedAt: (deps.now?.() ?? new Date()).toISOString(),
   });
   const r = await deps.link({ agent: agent.id, revision: c.revision, wallet: owner, digest: c.metadataDigest, launch });
